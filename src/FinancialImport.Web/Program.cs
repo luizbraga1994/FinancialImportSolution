@@ -18,9 +18,10 @@ builder.Host.UseSerilog((context, services, configuration) =>
 builder.Services.AddControllersWithViews(options =>
     {
         options.Filters.Add<FinancialImport.Web.Filters.CompanyRequiredFilter>();
-    })
-    .AddFluentValidationAutoValidation()
-    .AddFluentValidationClientsideAdapters();
+    });
+
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddFluentValidationClientsideAdapters();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>

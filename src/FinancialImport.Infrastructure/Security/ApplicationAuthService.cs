@@ -4,6 +4,7 @@ using FinancialImport.Application.Models;
 using FinancialImport.Application.Security;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Shared.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinancialImport.Infrastructure.Security;

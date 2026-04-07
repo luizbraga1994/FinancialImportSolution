@@ -1,4 +1,6 @@
-﻿namespace FinancialImport.Tests;
+﻿using Xunit;
+
+namespace FinancialImport.Tests;
 
 public class UnitTest1
 {
