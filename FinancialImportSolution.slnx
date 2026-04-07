@@ -1,3 +1,10 @@
-<Solution>
-  <Project Path="FinancialImport.Web/FinancialImport.Web.csproj" />
+﻿<Solution>
+  <Project Path="src/FinancialImport.Web/FinancialImport.Web.csproj" />
+  <Project Path="src/FinancialImport.Domain/FinancialImport.Domain.csproj" />
+  <Project Path="src/FinancialImport.Application/FinancialImport.Application.csproj" />
+  <Project Path="src/FinancialImport.Infrastructure/FinancialImport.Infrastructure.csproj" />
+  <Project Path="src/FinancialImport.Integration.Sap/FinancialImport.Integration.Sap.csproj" />
+  <Project Path="src/FinancialImport.Integration.Hana/FinancialImport.Integration.Hana.csproj" />
+  <Project Path="src/FinancialImport.Shared/FinancialImport.Shared.csproj" />
+  <Project Path="tests/FinancialImport.Tests/FinancialImport.Tests.csproj" />
 </Solution>
