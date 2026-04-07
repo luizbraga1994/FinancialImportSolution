@@ -8,4 +8,5 @@ public sealed class ApplicationUserSession
     public IReadOnlyCollection<string> Profiles { get; init; } = Array.Empty<string>();
     public IReadOnlyCollection<string> Permissions { get; init; } = Array.Empty<string>();
     public IReadOnlyCollection<string> AllowedCompanies { get; init; } = Array.Empty<string>();
+    public bool IsGlobalAdmin { get; init; }
 }

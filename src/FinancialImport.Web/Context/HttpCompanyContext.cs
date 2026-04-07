@@ -1,20 +1,37 @@
-﻿using System.Security.Claims;
 using FinancialImport.Application.Abstractions;
+using FinancialImport.Application.Models;
+using FinancialImport.Application.Sap;
 
 namespace FinancialImport.Web.Context;
 
 public sealed class HttpCompanyContext : ICompanyContext
 {
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IUserContext _userContext;
+    private readonly ISapSessionStore _sessionStore;
+    private SapSessionContext? _session;
+    private bool _loaded;
 
-    public HttpCompanyContext(IHttpContextAccessor httpContextAccessor)
+    public HttpCompanyContext(IUserContext userContext, ISapSessionStore sessionStore)
     {
-        _httpContextAccessor = httpContextAccessor;
+        _userContext = userContext;
+        _sessionStore = sessionStore;
     }
 
-    public string? CompanyDb => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimConstants.CompanyDb);
+    public string? CompanyDb => GetSession()?.CompanyDb;
+    public string? CompanyName => GetSession()?.CompanyName;
+    public string? SapUserName => GetSession()?.SapUserName;
 
-    public string? CompanyName => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimConstants.CompanyName);
+    private SapSessionContext? GetSession()
+    {
+        if (_loaded) return _session;
+        _loaded = true;
 
-    public string? SapUserName => _httpContextAccessor.HttpContext?.User?.FindFirstValue(ClaimConstants.SapUserName);
+        var userId = _userContext.UserId;
+        if (userId == null) return null;
+
+        _session = _sessionStore.GetActiveSessionAsync(userId.Value, CancellationToken.None)
+            .ConfigureAwait(false).GetAwaiter().GetResult();
+
+        return _session;
+    }
 }
