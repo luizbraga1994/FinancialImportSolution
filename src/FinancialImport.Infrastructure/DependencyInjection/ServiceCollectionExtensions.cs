@@ -1,4 +1,4 @@
-﻿using FinancialImport.Application.Abstractions;
+using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Imports;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
@@ -19,21 +19,26 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<MySqlOptions>(configuration.GetSection("MySql"));
+        services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
+
         var connectionString = configuration.GetSection("MySql").GetValue<string>("ConnectionString");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            throw new InvalidOperationException("MySql:ConnectionString não configurado.");
+            throw new InvalidOperationException("MySql:ConnectionString nao configurado.");
         }
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
         services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<PasswordHasher>();
         services.AddScoped<IHashService, Sha256HashService>();
         services.AddScoped<IApplicationAuthService, ApplicationAuthService>();
         services.AddScoped<ISapSessionStore, SapSessionStore>();
         services.AddScoped<IImportRepository, ImportRepository>();
         services.AddScoped<IImportService, ImportService>();
+        services.AddSingleton<JwtTokenService>();
+        services.AddScoped<DatabaseSeeder>();
 
         return services;
     }

@@ -1,13 +1,16 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Imports;
 using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Models;
+using FinancialImport.Application.Sap;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Shared.Abstractions;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FinancialImport.Infrastructure.Imports;
 
@@ -19,7 +22,11 @@ public sealed class ImportService : IImportService
     private readonly IValidator<LancamentoContabilImportado> _validator;
     private readonly IUserContext _userContext;
     private readonly ICompanyContext _companyContext;
+    private readonly ISapSessionStore _sapSessionStore;
+    private readonly ISapJournalEntryService _sapJournalEntryService;
+    private readonly AppDbContext _dbContext;
     private readonly IClock _clock;
+    private readonly ILogger<ImportService> _logger;
 
     public ImportService(
         IImportRepository repository,
@@ -28,7 +35,11 @@ public sealed class ImportService : IImportService
         IValidator<LancamentoContabilImportado> validator,
         IUserContext userContext,
         ICompanyContext companyContext,
-        IClock clock)
+        ISapSessionStore sapSessionStore,
+        ISapJournalEntryService sapJournalEntryService,
+        AppDbContext dbContext,
+        IClock clock,
+        ILogger<ImportService> logger)
     {
         _repository = repository;
         _layoutResolver = layoutResolver;
@@ -36,20 +47,24 @@ public sealed class ImportService : IImportService
         _validator = validator;
         _userContext = userContext;
         _companyContext = companyContext;
+        _sapSessionStore = sapSessionStore;
+        _sapJournalEntryService = sapJournalEntryService;
+        _dbContext = dbContext;
         _clock = clock;
+        _logger = logger;
     }
 
     public async Task<ImportPreviewResult> PreviewAsync(ImportFileContext context, CancellationToken cancellationToken = default)
     {
-        var userId = _userContext.UserId ?? throw new InvalidOperationException("Usuário não autenticado.");
-        var companyDb = _companyContext.CompanyDb ?? throw new InvalidOperationException("Company não selecionada.");
+        var userId = _userContext.UserId ?? throw new InvalidOperationException("Usuario nao autenticado.");
+        var companyDb = _companyContext.CompanyDb ?? throw new InvalidOperationException("Company nao selecionada.");
 
         var fileHash = _hashService.ComputeHash(context.FileBytes);
         if (await _repository.ExistsFileHashAsync(companyDb, fileHash, cancellationToken))
         {
             return new ImportPreviewResult
             {
-                Errors = new[] { "Arquivo já importado para esta company." }
+                Errors = new[] { "Arquivo ja importado para esta company." }
             };
         }
 
@@ -90,6 +105,7 @@ public sealed class ImportService : IImportService
             {
                 status = ImportLineStatus.Duplicated;
             }
+
             var importLine = new ImportLine
             {
                 ImportFile = importFile,
@@ -134,17 +150,139 @@ public sealed class ImportService : IImportService
         };
     }
 
-    public Task<ImportProcessResult> ProcessAsync(long importFileId, CancellationToken cancellationToken = default)
+    public async Task<ImportProcessResult> ProcessAsync(long importFileId, CancellationToken cancellationToken = default)
     {
-        // Etapa de integração com SAP será implementada no próximo passo
-        return Task.FromResult(new ImportProcessResult
+        var userId = _userContext.UserId ?? throw new InvalidOperationException("Usuario nao autenticado.");
+
+        var importFile = await _repository.GetImportFileAsync(importFileId, cancellationToken);
+        if (importFile == null)
+            throw new KeyNotFoundException($"Arquivo de importacao {importFileId} nao encontrado.");
+
+        var sapSession = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+        if (sapSession == null)
+            throw new InvalidOperationException("Sessao SAP nao ativa. Faca login na company antes de processar.");
+
+        if (!sapSession.CompanyDb.Equals(importFile.CompanyDb, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Sessao SAP ativa para company diferente do arquivo.");
+
+        importFile.Status = ImportStatus.Processing;
+        await _repository.UpdateImportFileAsync(importFile, cancellationToken);
+
+        var validLines = importFile.Lines
+            .Where(l => l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError)
+            .ToList();
+
+        var branchMappings = await _dbContext.BranchMappings
+            .Where(b => b.CompanyDb == importFile.CompanyDb && b.IsActive)
+            .ToListAsync(cancellationToken);
+
+        int imported = 0, duplicated = 0, invalid = 0, sapErrors = 0;
+
+        foreach (var line in validLines)
+        {
+            try
+            {
+                int? bplId = ResolveBplId(line, importFile, branchMappings);
+
+                var journalEntry = new SapJournalEntry
+                {
+                    ReferenceDate = line.PostingDate,
+                    DueDate = line.DueDate,
+                    TaxDate = line.DocumentDate,
+                    Memo = line.Reference,
+                    Reference = line.Reference,
+                    BPLID = bplId,
+                    JournalEntryLines = new List<SapJournalEntryLine>
+                    {
+                        new()
+                        {
+                            AccountCode = line.AccountCode,
+                            Debit = line.DebitAmount ?? 0,
+                            Credit = line.CreditAmount ?? 0,
+                            LineMemo = line.LineMemo
+                        },
+                        new()
+                        {
+                            AccountCode = line.ContraAccountCode,
+                            Debit = line.CreditAmount ?? 0,
+                            Credit = line.DebitAmount ?? 0,
+                            LineMemo = line.LineMemo
+                        }
+                    }
+                };
+
+                var result = await _sapJournalEntryService.CreateJournalEntryAsync(sapSession, journalEntry, cancellationToken);
+
+                if (result.Success)
+                {
+                    line.Status = ImportLineStatus.Imported;
+                    line.SapReturnMessage = "OK";
+                    TryExtractDocEntry(result.RawResponse, line);
+                    imported++;
+                }
+                else
+                {
+                    line.Status = ImportLineStatus.SapError;
+                    line.SapReturnMessage = result.ErrorMessage;
+                    sapErrors++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Erro ao processar linha {LineId} do arquivo {FileId}", line.Id, importFileId);
+                line.Status = ImportLineStatus.SapError;
+                line.SapReturnMessage = ex.Message;
+                sapErrors++;
+            }
+        }
+
+        duplicated = importFile.Lines.Count(l => l.Status == ImportLineStatus.Duplicated);
+        invalid = importFile.Lines.Count(l => l.Status == ImportLineStatus.Invalid);
+
+        importFile.ImportedLines = imported;
+        importFile.LinesWithError = sapErrors;
+        importFile.DuplicatedLines = duplicated;
+        importFile.InvalidLines = invalid;
+        importFile.Status = sapErrors == 0 && invalid == 0 ? ImportStatus.Completed : ImportStatus.Failed;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return new ImportProcessResult
         {
             ImportFileId = importFileId,
-            Imported = 0,
-            Duplicated = 0,
-            Invalid = 0,
-            SapErrors = 0
-        });
+            Imported = imported,
+            Duplicated = duplicated,
+            Invalid = invalid,
+            SapErrors = sapErrors
+        };
+    }
+
+    private static int? ResolveBplId(ImportLine line, ImportFile importFile, List<BranchMapping> mappings)
+    {
+        var branchCode = importFile.UseBranchFromFile && !string.IsNullOrWhiteSpace(line.BranchCode)
+            ? line.BranchCode
+            : importFile.BranchDefault;
+
+        if (string.IsNullOrWhiteSpace(branchCode)) return null;
+
+        var mapping = mappings.FirstOrDefault(m =>
+            m.FileBranchCode.Equals(branchCode, StringComparison.OrdinalIgnoreCase));
+
+        return mapping?.BplId;
+    }
+
+    private static void TryExtractDocEntry(string? rawResponse, ImportLine line)
+    {
+        if (string.IsNullOrWhiteSpace(rawResponse)) return;
+        try
+        {
+            using var doc = JsonDocument.Parse(rawResponse);
+            if (doc.RootElement.TryGetProperty("DocEntry", out var docEntry))
+            {
+                line.SapDocEntry = docEntry.GetInt32();
+            }
+        }
+        catch { }
     }
 
     private static string BuildBusinessKey(string companyDb, LancamentoContabilImportado line)

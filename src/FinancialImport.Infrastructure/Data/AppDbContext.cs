@@ -1,4 +1,4 @@
-﻿using FinancialImport.Domain.Entities;
+using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,10 +40,12 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.PasswordSalt).HasColumnName("SenhaSalt").HasColumnType("varbinary(128)");
             entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
             entity.Property(e => e.IsBlocked).HasColumnName("Bloqueado").IsRequired();
+            entity.Property(e => e.IsGlobalAdmin).HasColumnName("AdminGlobal").IsRequired().HasDefaultValue(false);
             entity.Property(e => e.CreatedAt).HasColumnName("DataCriacao").IsRequired();
             entity.Property(e => e.LastLoginAt).HasColumnName("DataUltimoLogin");
             entity.Property(e => e.CreatedBy).HasColumnName("UsuarioCriacao").HasMaxLength(80).IsRequired();
             entity.HasIndex(e => e.Login).IsUnique();
+            entity.HasIndex(e => e.Email).IsUnique();
         });
 
         modelBuilder.Entity<Profile>(entity =>
@@ -77,6 +79,8 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("Id");
             entity.Property(e => e.UserId).HasColumnName("UsuarioId").IsRequired();
             entity.Property(e => e.ProfileId).HasColumnName("PerfilId").IsRequired();
+            entity.HasOne(e => e.User).WithMany(u => u.Profiles).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Profile).WithMany(p => p.Users).HasForeignKey(e => e.ProfileId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.UserId, e.ProfileId }).IsUnique();
         });
 
@@ -87,6 +91,8 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("Id");
             entity.Property(e => e.ProfileId).HasColumnName("PerfilId").IsRequired();
             entity.Property(e => e.PermissionId).HasColumnName("PermissaoId").IsRequired();
+            entity.HasOne(e => e.Profile).WithMany(p => p.Permissions).HasForeignKey(e => e.ProfileId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Permission).WithMany(p => p.Profiles).HasForeignKey(e => e.PermissionId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.ProfileId, e.PermissionId }).IsUnique();
         });
 
@@ -98,6 +104,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.UserId).HasColumnName("UsuarioId").IsRequired();
             entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
             entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
+            entity.HasOne(e => e.User).WithMany(u => u.AllowedCompanies).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.UserId, e.CompanyDb }).IsUnique();
         });
 
@@ -113,6 +120,8 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.UserAgent).HasColumnName("UserAgent").HasMaxLength(200);
             entity.Property(e => e.OccurredAt).HasColumnName("DataHora").IsRequired();
             entity.Property(e => e.FailureReason).HasColumnName("MotivoFalha").HasMaxLength(200);
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(e => e.OccurredAt);
         });
 
         modelBuilder.Entity<CompanyUserSession>(entity =>
@@ -129,6 +138,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.ExpiresAt).HasColumnName("ExpiraEm").IsRequired();
             entity.Property(e => e.IsActive).HasColumnName("Ativa").IsRequired();
             entity.Property(e => e.LoginAt).HasColumnName("DataLogin").IsRequired();
+            entity.HasOne(e => e.User).WithMany(u => u.CompanySessions).HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.CompanyDb);
         });
@@ -153,7 +163,10 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.DuplicatedLines).HasColumnName("QuantidadeDuplicadas").IsRequired();
             entity.Property(e => e.LinesWithError).HasColumnName("QuantidadeComErro").IsRequired();
             entity.Property(e => e.ImportedAt).HasColumnName("DataImportacao").IsRequired();
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.CompanyDb, e.FileHash }).IsUnique();
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.CompanyDb);
         });
 
         modelBuilder.Entity<ImportLine>(entity =>
@@ -182,7 +195,9 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.SapReturnMessage).HasColumnName("MensagemRetornoSap").HasMaxLength(400);
             entity.Property(e => e.SapDocEntry).HasColumnName("DocEntrySap");
             entity.Property(e => e.SourceJson).HasColumnName("JsonOrigem").HasColumnType("json");
+            entity.HasOne(e => e.ImportFile).WithMany(f => f.Lines).HasForeignKey(e => e.ImportFileId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.CompanyDb, e.BusinessKeyHash }).IsUnique();
+            entity.HasIndex(e => e.ImportFileId);
         });
 
         modelBuilder.Entity<SystemLog>(entity =>
@@ -237,6 +252,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.IsRequired).HasColumnName("Obrigatorio").IsRequired();
             entity.Property(e => e.DataType).HasColumnName("TipoDado").HasMaxLength(40).IsRequired();
             entity.Property(e => e.Order).HasColumnName("Ordem").IsRequired();
+            entity.HasOne(e => e.Layout).WithMany(l => l.Fields).HasForeignKey(e => e.LayoutId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Rule>(entity =>

@@ -1,7 +1,8 @@
-﻿using System.Security.Authentication;
+using System.Security.Authentication;
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Security;
+using FinancialImport.Domain.Constants;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Shared.Abstractions;
@@ -35,30 +36,30 @@ public sealed class ApplicationAuthService : IApplicationAuthService
                 .ThenInclude(up => up.Profile)
             .Include(u => u.Profiles)
                 .ThenInclude(up => up.Profile)
-                    .ThenInclude(p => p.Permissions)
+                    .ThenInclude(p => p!.Permissions)
                         .ThenInclude(pp => pp.Permission)
             .Include(u => u.AllowedCompanies)
             .SingleOrDefaultAsync(u => u.Login == login, cancellationToken);
 
         if (user == null)
         {
-            AddAudit(null, login, false, "Usuário não encontrado");
+            AddAudit(null, login, false, "Usuario nao encontrado");
             await _dbContext.SaveChangesAsync(cancellationToken);
-            throw new AuthenticationException("Usuário ou senha inválidos.");
+            throw new AuthenticationException("Usuario ou senha invalidos.");
         }
 
         if (!user.IsActive || user.IsBlocked)
         {
-            AddAudit(user.Id, login, false, "Usuário inativo ou bloqueado");
+            AddAudit(user.Id, login, false, "Usuario inativo ou bloqueado");
             await _dbContext.SaveChangesAsync(cancellationToken);
-            throw new AuthenticationException("Usuário inativo ou bloqueado.");
+            throw new AuthenticationException("Usuario inativo ou bloqueado.");
         }
 
         if (user.PasswordSalt == null || !_hasher.Verify(password, user.PasswordSalt, user.PasswordHash))
         {
-            AddAudit(user.Id, login, false, "Senha inválida");
+            AddAudit(user.Id, login, false, "Senha invalida");
             await _dbContext.SaveChangesAsync(cancellationToken);
-            throw new AuthenticationException("Usuário ou senha inválidos.");
+            throw new AuthenticationException("Usuario ou senha invalidos.");
         }
 
         user.LastLoginAt = _clock.Now;
@@ -72,13 +73,25 @@ public sealed class ApplicationAuthService : IApplicationAuthService
             .Distinct()
             .ToArray();
 
-        var permissions = user.Profiles
-            .SelectMany(p => p.Profile?.Permissions ?? new List<ProfilePermission>())
-            .Select(pp => pp.Permission?.Code)
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p!)
-            .Distinct()
-            .ToArray();
+        string[] permissions;
+        if (user.IsGlobalAdmin)
+        {
+            permissions = await _dbContext.Permissions
+                .Where(p => p.IsActive)
+                .Select(p => p.Code)
+                .Distinct()
+                .ToArrayAsync(cancellationToken);
+        }
+        else
+        {
+            permissions = user.Profiles
+                .SelectMany(p => p.Profile?.Permissions ?? new List<ProfilePermission>())
+                .Select(pp => pp.Permission?.Code)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Select(p => p!)
+                .Distinct()
+                .ToArray();
+        }
 
         var allowedCompanies = user.AllowedCompanies
             .Where(c => c.IsActive)
@@ -93,7 +106,8 @@ public sealed class ApplicationAuthService : IApplicationAuthService
             Name = user.Name,
             Profiles = profiles,
             Permissions = permissions,
-            AllowedCompanies = allowedCompanies
+            AllowedCompanies = allowedCompanies,
+            IsGlobalAdmin = user.IsGlobalAdmin
         };
     }
 

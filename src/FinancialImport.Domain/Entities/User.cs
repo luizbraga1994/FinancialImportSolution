@@ -10,6 +10,7 @@ public sealed class User
     public byte[]? PasswordSalt { get; set; }
     public bool IsActive { get; set; }
     public bool IsBlocked { get; set; }
+    public bool IsGlobalAdmin { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public string CreatedBy { get; set; } = string.Empty;
