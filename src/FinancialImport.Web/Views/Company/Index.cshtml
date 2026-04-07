@@ -1,0 +1,42 @@
+@model IEnumerable<FinancialImport.Application.Models.SapCompanyInfo>
+@{
+    ViewData["Title"] = "Selecionar Empresa";
+}
+
+<h2>Selecionar Empresa</h2>
+<p class="text-muted">Escolha uma empresa SAP para conectar.</p>
+
+@if (Model != null && Model.Any())
+{
+    <div class="row">
+        @foreach (var company in Model)
+        {
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">@company.CompanyName</h5>
+                        <p class="card-text text-muted">@company.CompanyDb</p>
+                        <span class="badge @(company.IsActive ? "bg-success" : "bg-secondary") mb-2">
+                            @(company.IsActive ? "Ativa" : "Inativa")
+                        </span>
+                        <form asp-action="Select" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="companyDb" value="@company.CompanyDb" />
+                            <div class="mb-2">
+                                <input type="text" name="sapUser" class="form-control form-control-sm" placeholder="Usuario SAP" required />
+                            </div>
+                            <div class="mb-2">
+                                <input type="password" name="sapPassword" class="form-control form-control-sm" placeholder="Senha SAP" required />
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm w-100" @(!company.IsActive ? "disabled" : "")>Conectar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else
+{
+    <div class="alert alert-info">Nenhuma empresa disponivel.</div>
+}
