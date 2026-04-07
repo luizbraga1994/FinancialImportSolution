@@ -1,0 +1,22 @@
+@{
+    ViewData["Title"] = "Erro";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6 text-center">
+        <div class="mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" fill="currentColor" class="text-danger" viewBox="0 0 16 16">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0M7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.553.553 0 0 1-1.1 0z"/>
+            </svg>
+        </div>
+        <h2 class="fw-bold">Ocorreu um Erro</h2>
+        <p class="text-muted mb-4">
+            Algo inesperado aconteceu ao processar sua solicitacao.
+            Por favor, tente novamente mais tarde ou entre em contato com o administrador.
+        </p>
+        <a asp-controller="Home" asp-action="Index" class="btn btn-primary">
+            Voltar para o Inicio
+        </a>
+    </div>
+</div>

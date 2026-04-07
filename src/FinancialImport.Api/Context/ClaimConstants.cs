@@ -1,4 +1,4 @@
-﻿namespace FinancialImport.Web.Context;
+﻿namespace FinancialImport.Api.Context;
 
 public static class ClaimConstants
 {

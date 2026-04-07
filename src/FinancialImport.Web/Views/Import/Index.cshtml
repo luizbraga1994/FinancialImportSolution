@@ -1,0 +1,63 @@
+@{
+    ViewData["Title"] = "Importar Arquivo";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Importar Arquivo</h1>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Enviar Arquivo para Importação</h5>
+                <p class="text-muted small mb-4">
+                    Selecione um arquivo CSV ou TXT para importação. O sistema identificará o layout
+                    automaticamente e processará os registros.
+                </p>
+
+                <div asp-validation-summary="All" class="text-danger small mb-3"></div>
+
+                <form asp-controller="Import" asp-action="Upload" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-4">
+                        <label for="file" class="form-label">Arquivo (CSV / TXT)</label>
+                        <input type="file"
+                               class="form-control"
+                               id="file"
+                               name="file"
+                               accept=".csv,.txt"
+                               required />
+                        <div class="form-text">Formatos aceitos: .csv, .txt</div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
+                                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                                <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
+                            </svg>
+                            Enviar Arquivo
+                        </button>
+                        <a asp-controller="Home" asp-action="Index" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title">Instruções</h6>
+                <ul class="small text-muted mb-0">
+                    <li class="mb-2">O arquivo deve estar no formato CSV ou TXT.</li>
+                    <li class="mb-2">O layout será detectado automaticamente com base no conteúdo.</li>
+                    <li class="mb-2">Verifique se o arquivo está codificado em UTF-8 ou ISO-8859-1.</li>
+                    <li>Após o envio, o sistema exibirá um relatório de processamento.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
