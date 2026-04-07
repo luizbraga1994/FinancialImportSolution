@@ -11,6 +11,8 @@ using FinancialImport.Web.Middleware;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -152,7 +154,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         logger.LogInformation("Aplicando migrations automaticamente...");
-        await db.Database.MigrateAsync();
+        var migrator = db.Database.GetService<IMigrator>();
+        await migrator.MigrateAsync();
         logger.LogInformation("Migrations aplicadas com sucesso.");
     }
     catch (Exception ex)
