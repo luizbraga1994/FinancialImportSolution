@@ -38,19 +38,19 @@
                 @if (isLogin)
                 {
                     <select name="level" class="form-select form-select-sm">
-                        <option value="" @(string.IsNullOrEmpty(Model.Level) ? "selected" : "")>Todos</option>
-                        <option value="success" @(Model.Level == "success" ? "selected" : "")>Sucesso</option>
-                        <option value="failure" @(Model.Level == "failure" ? "selected" : "")>Falha</option>
+                        <option value="" selected="@string.IsNullOrEmpty(Model.Level)">Todos</option>
+                        <option value="success" selected="@(Model.Level == "success")">Sucesso</option>
+                        <option value="failure" selected="@(Model.Level == "failure")">Falha</option>
                     </select>
                 }
                 else
                 {
                     <select name="level" class="form-select form-select-sm">
-                        <option value="" @(string.IsNullOrEmpty(Model.Level) ? "selected" : "")>Todos</option>
-                        <option value="Information" @(Model.Level == "Information" ? "selected" : "")>Information</option>
-                        <option value="Warning" @(Model.Level == "Warning" ? "selected" : "")>Warning</option>
-                        <option value="Error" @(Model.Level == "Error" ? "selected" : "")>Error</option>
-                        <option value="Critical" @(Model.Level == "Critical" ? "selected" : "")>Critical</option>
+                        <option value="" selected="@string.IsNullOrEmpty(Model.Level)">Todos</option>
+                        <option value="Information" selected="@(Model.Level == "Information")">Information</option>
+                        <option value="Warning" selected="@(Model.Level == "Warning")">Warning</option>
+                        <option value="Error" selected="@(Model.Level == "Error")">Error</option>
+                        <option value="Critical" selected="@(Model.Level == "Critical")">Critical</option>
                     </select>
                 }
             </div>
