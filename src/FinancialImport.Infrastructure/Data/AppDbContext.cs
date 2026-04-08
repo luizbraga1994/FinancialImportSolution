@@ -1,11 +1,17 @@
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace FinancialImport.Infrastructure.Data;
 
 public sealed class AppDbContext : DbContext
 {
+    private readonly ILogger<AppDbContext>? _logger;
+
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
@@ -198,6 +204,7 @@ public sealed class AppDbContext : DbContext
             entity.HasOne(e => e.ImportFile).WithMany(f => f.Lines).HasForeignKey(e => e.ImportFileId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.CompanyDb, e.BusinessKeyHash }).IsUnique();
             entity.HasIndex(e => e.ImportFileId);
+            entity.HasIndex(e => e.Reference).HasDatabaseName("IX_ImportacaoLinha_Referencia");
         });
 
         modelBuilder.Entity<SystemLog>(entity =>
@@ -266,5 +273,97 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
             entity.HasIndex(e => e.Key).IsUnique();
         });
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // Validações antes de salvar
+            ValidateEntities();
+
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            var innerMessage = ex.InnerException?.Message ?? ex.Message;
+
+            // Log do erro detalhado
+            var logger = this.GetService<ILogger<AppDbContext>>();
+            logger?.LogError(ex, "Erro ao salvar alterações no banco. Detalhe: {InnerMessage}", innerMessage);
+
+            // Identifica o tipo de erro para mensagem mais amigável
+            if (innerMessage.Contains("Duplicate entry") || innerMessage.Contains("UNIQUE constraint failed"))
+            {
+                if (innerMessage.Contains("HashChaveNegocio"))
+                {
+                    throw new DbUpdateException("Linha duplicada: esta combinação de dados já foi importada anteriormente.", ex);
+                }
+                if (innerMessage.Contains("HashArquivo"))
+                {
+                    throw new DbUpdateException("Arquivo duplicado: este arquivo já foi importado para esta empresa.", ex);
+                }
+                throw new DbUpdateException("Registro duplicado. Verifique se os dados já não foram importados.", ex);
+            }
+
+            if (innerMessage.Contains("Data too long") || innerMessage.Contains("String or binary data would be truncated"))
+            {
+                throw new DbUpdateException("Um ou mais campos excederam o tamanho máximo permitido. Verifique os dados da planilha.", ex);
+            }
+
+            if (innerMessage.Contains("JSON") || innerMessage.Contains("json"))
+            {
+                throw new DbUpdateException("Erro no formato JSON dos dados. Entre em contato com o suporte.", ex);
+            }
+
+            throw;
+        }
+    }
+
+    private void ValidateEntities()
+    {
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State == EntityState.Added || entry.State == EntityState.Modified)
+            {
+                // Validação para ImportLine
+                if (entry.Entity is ImportLine line)
+                {
+                    if (!string.IsNullOrEmpty(line.SourceJson) && line.SourceJson.Length > 65535)
+                    {
+                        throw new InvalidOperationException($"JSON da linha {line.Id} excede o tamanho máximo de 65535 caracteres.");
+                    }
+
+                    if (!string.IsNullOrEmpty(line.ValidationMessage) && line.ValidationMessage.Length > 400)
+                    {
+                        line.ValidationMessage = line.ValidationMessage.Substring(0, 397) + "...";
+                    }
+
+                    if (!string.IsNullOrEmpty(line.SapReturnMessage) && line.SapReturnMessage.Length > 400)
+                    {
+                        line.SapReturnMessage = line.SapReturnMessage.Substring(0, 397) + "...";
+                    }
+
+                    if (!string.IsNullOrEmpty(line.LineMemo) && line.LineMemo.Length > 200)
+                    {
+                        line.LineMemo = line.LineMemo.Substring(0, 197) + "...";
+                    }
+
+                    if (!string.IsNullOrEmpty(line.Reference) && line.Reference.Length > 120)
+                    {
+                        line.Reference = line.Reference.Substring(0, 117) + "...";
+                    }
+                }
+
+                // Validação para ImportFile
+                if (entry.Entity is ImportFile file)
+                {
+                    if (!string.IsNullOrEmpty(file.OriginalFileName) && file.OriginalFileName.Length > 200)
+                    {
+                        file.OriginalFileName = file.OriginalFileName.Substring(0, 197) + "...";
+                    }
+                }
+            }
+        }
     }
 }
