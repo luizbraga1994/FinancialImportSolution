@@ -22,7 +22,6 @@
             background: #f8fafc;
         }
 
-        /* ---- LEFT BRANDING PANEL ---- */
         .login-brand {
             flex: 1;
             background: linear-gradient(160deg, #0f172a 0%, #1e293b 40%, #334155 100%);
@@ -39,74 +38,45 @@
         .login-brand::before {
             content: '';
             position: absolute;
-            width: 500px;
-            height: 500px;
+            width: 500px; height: 500px;
             border-radius: 50%;
             background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
-            top: -150px;
-            right: -150px;
+            top: -150px; right: -150px;
         }
 
         .login-brand::after {
             content: '';
             position: absolute;
-            width: 350px;
-            height: 350px;
+            width: 350px; height: 350px;
             border-radius: 50%;
             background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
-            bottom: -100px;
-            left: -100px;
+            bottom: -100px; left: -100px;
         }
 
         .brand-icon-wrapper {
-            width: 88px;
-            height: 88px;
+            width: 88px; height: 88px;
             background: rgba(255,255,255,0.08);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
             border-radius: 22px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 2rem;
-            z-index: 1;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 2rem; z-index: 1;
         }
 
-        .brand-icon-wrapper i {
-            font-size: 2.5rem;
-            color: rgba(255,255,255,0.9);
-        }
+        .brand-icon-wrapper i { font-size: 2.5rem; color: rgba(255,255,255,0.9); }
 
-        .login-brand h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 0.75rem;
-            z-index: 1;
-            letter-spacing: -0.02em;
-        }
+        .login-brand h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.75rem; z-index: 1; letter-spacing: -0.02em; }
+        .login-brand p { font-size: 1rem; color: rgba(255,255,255,0.55); z-index: 1; max-width: 300px; text-align: center; line-height: 1.6; }
 
-        .login-brand p {
-            font-size: 1rem;
-            color: rgba(255,255,255,0.55);
-            z-index: 1;
-            max-width: 300px;
-            text-align: center;
-            line-height: 1.6;
-        }
-
-        /* ---- RIGHT FORM PANEL ---- */
         .login-form-panel {
             flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            display: flex; align-items: center; justify-content: center;
             padding: 2rem;
             background: #f8fafc;
         }
 
         .login-card {
-            width: 100%;
-            max-width: 440px;
+            width: 100%; max-width: 440px;
             background: #ffffff;
             border-radius: 16px;
             padding: 2.5rem;
@@ -114,306 +84,104 @@
             border: 1px solid rgba(0,0,0,0.04);
         }
 
-        .login-card h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #0f172a;
-            margin-bottom: 0.375rem;
-            letter-spacing: -0.02em;
-        }
+        .login-card h2 { font-size: 1.5rem; font-weight: 700; color: #0f172a; margin-bottom: 0.375rem; letter-spacing: -0.02em; }
+        .login-card .subtitle { color: #64748b; font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.5; }
 
-        .login-card .subtitle {
-            color: #64748b;
-            font-size: 0.875rem;
-            margin-bottom: 2rem;
-            line-height: 1.5;
-        }
+        /* Steps */
+        .step-indicator { display: flex; gap: 0.5rem; margin-bottom: 1.75rem; }
+        .step-dot { flex: 1; height: 3px; border-radius: 3px; background: #e2e8f0; transition: background 0.3s; }
+        .step-dot.active { background: #3b82f6; }
+        .step-dot.done { background: #22c55e; }
 
-        /* ---- STEP INDICATOR ---- */
-        .step-indicator {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 1.75rem;
-        }
+        /* Fields */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; font-size: 0.8125rem; font-weight: 600; color: #334155; margin-bottom: 0.5rem; }
+        .form-group .step-num { font-size: 0.7rem; color: #94a3b8; font-weight: 500; }
 
-        .step-dot {
-            flex: 1;
-            height: 3px;
-            border-radius: 3px;
-            background: #e2e8f0;
-            transition: background 0.3s;
-        }
-
-        .step-dot.active {
-            background: #3b82f6;
-        }
-
-        .step-dot.done {
-            background: #22c55e;
-        }
-
-        /* ---- FORM FIELDS ---- */
-        .form-group {
-            margin-bottom: 1.25rem;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 0.8125rem;
-            font-weight: 600;
-            color: #334155;
-            margin-bottom: 0.5rem;
-            letter-spacing: 0.01em;
-        }
-
-        .input-wrapper {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .input-wrapper .input-icon {
-            position: absolute;
-            left: 14px;
-            font-size: 1.1rem;
-            color: #94a3b8;
-            pointer-events: none;
-            transition: color 0.2s;
-            z-index: 2;
-        }
+        .input-wrapper { position: relative; display: flex; align-items: center; }
+        .input-wrapper .input-icon { position: absolute; left: 14px; font-size: 1.1rem; color: #94a3b8; pointer-events: none; transition: color 0.2s; z-index: 2; }
 
         .input-wrapper input,
         .input-wrapper select {
-            width: 100%;
-            height: 48px;
+            width: 100%; height: 48px;
             padding: 0 16px 0 44px;
-            font-size: 0.9375rem;
-            font-family: inherit;
-            color: #1e293b;
+            font-size: 0.9375rem; font-family: inherit; color: #1e293b;
             background: #f8fafc;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 10px;
-            outline: none;
-            transition: all 0.2s ease;
-            -webkit-appearance: none;
-            appearance: none;
+            border: 1.5px solid #e2e8f0; border-radius: 10px;
+            outline: none; transition: all 0.2s ease;
+            -webkit-appearance: none; appearance: none;
         }
 
         .input-wrapper select {
-            cursor: pointer;
-            padding-right: 40px;
+            cursor: pointer; padding-right: 40px;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 14px center;
-            background-size: 16px;
+            background-repeat: no-repeat; background-position: right 14px center; background-size: 16px;
         }
 
-        .input-wrapper input::placeholder {
-            color: #94a3b8;
-            font-weight: 400;
-        }
+        .input-wrapper select:disabled { opacity: 0.6; cursor: not-allowed; background-color: #f1f5f9; }
 
-        .input-wrapper input:hover,
-        .input-wrapper select:hover {
-            border-color: #cbd5e1;
-            background-color: #fff;
-        }
+        .input-wrapper input::placeholder { color: #94a3b8; font-weight: 400; }
 
-        .input-wrapper input:focus,
-        .input-wrapper select:focus {
-            border-color: #3b82f6;
-            background-color: #fff;
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
-        }
+        .input-wrapper input:hover, .input-wrapper select:hover:not(:disabled) { border-color: #cbd5e1; background-color: #fff; }
+        .input-wrapper input:focus, .input-wrapper select:focus { border-color: #3b82f6; background-color: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .input-wrapper select:focus { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%233b82f6' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E"); }
+        .input-wrapper:focus-within .input-icon { color: #3b82f6; }
 
-        .input-wrapper select:focus {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%233b82f6' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
-        }
+        .toggle-password { position: absolute; right: 14px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.1rem; padding: 4px; z-index: 2; transition: color 0.2s; }
+        .toggle-password:hover { color: #64748b; }
 
-        .input-wrapper:focus-within .input-icon {
-            color: #3b82f6;
+        /* Company status */
+        .company-status {
+            font-size: 0.75rem; margin-top: 0.375rem;
+            display: flex; align-items: center; gap: 0.375rem;
+            min-height: 18px;
         }
+        .company-status .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+        .company-status .dot-green { background: #22c55e; }
+        .company-status .dot-red { background: #ef4444; }
+        .company-status .dot-amber { background: #f59e0b; }
+        .company-status .text-ok { color: #16a34a; }
+        .company-status .text-warn { color: #d97706; }
+        .company-status .text-err { color: #dc2626; }
+        .company-status .text-muted { color: #94a3b8; }
 
-        .toggle-password {
-            position: absolute;
-            right: 14px;
-            background: none;
-            border: none;
-            color: #94a3b8;
-            cursor: pointer;
-            font-size: 1.1rem;
-            padding: 4px;
-            z-index: 2;
-            transition: color 0.2s;
-        }
+        /* Loading spinner inline */
+        .company-loading { display: none; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #64748b; margin-top: 0.375rem; }
+        .company-loading.show { display: flex; }
+        .spinner-xs { width: 14px; height: 14px; border: 2px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.6s linear infinite; }
 
-        .toggle-password:hover {
-            color: #64748b;
-        }
-
-        /* ---- SELECT OPTION STYLING ---- */
-        .input-wrapper select option {
-            padding: 8px;
-        }
-
-        .input-wrapper select option:disabled {
-            color: #94a3b8;
-        }
-
-        /* ---- COMPANY COUNT ---- */
-        .company-count {
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-top: 0.375rem;
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-        }
-
-        .company-count i {
-            font-size: 0.7rem;
-        }
-
-        .company-count .dot-green {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #22c55e;
-            display: inline-block;
-        }
-
-        .company-count .dot-red {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #ef4444;
-            display: inline-block;
-        }
-
-        /* ---- SUBMIT BUTTON ---- */
+        /* Button */
         .btn-signin {
-            width: 100%;
-            height: 48px;
+            width: 100%; height: 48px;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            font-size: 0.9375rem;
-            font-weight: 600;
-            font-family: inherit;
+            color: #fff; border: none; border-radius: 10px;
+            font-size: 0.9375rem; font-weight: 600; font-family: inherit;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            transition: all 0.2s ease;
-            margin-top: 0.5rem;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+            transition: all 0.2s ease; margin-top: 0.5rem;
         }
+        .btn-signin:hover { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,23,42,0.25); }
+        .btn-signin:active { transform: translateY(0); box-shadow: none; }
+        .btn-signin:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
 
-        .btn-signin:hover {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(15,23,42,0.25);
-        }
-
-        .btn-signin:active {
-            transform: translateY(0);
-            box-shadow: none;
-        }
-
-        .btn-signin i {
-            font-size: 1.1rem;
-        }
-
-        /* ---- ERROR ALERT ---- */
-        .login-error {
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: 10px;
-            padding: 0.75rem 1rem;
-            margin-bottom: 1.25rem;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.625rem;
-        }
-
-        .login-error i {
-            color: #ef4444;
-            font-size: 1.1rem;
-            margin-top: 1px;
-            flex-shrink: 0;
-        }
-
-        .login-error span {
-            color: #991b1b;
-            font-size: 0.8125rem;
-            line-height: 1.5;
-        }
-
-        /* Warning for HANA unavailable */
-        .login-warning {
-            background: #fffbeb;
-            border: 1px solid #fed7aa;
-            border-radius: 10px;
-            padding: 0.75rem 1rem;
-            margin-bottom: 1.25rem;
-            display: flex;
-            align-items: flex-start;
-            gap: 0.625rem;
-        }
-
-        .login-warning i {
-            color: #f59e0b;
-            font-size: 1.1rem;
-            margin-top: 1px;
-            flex-shrink: 0;
-        }
-
-        .login-warning span {
-            color: #92400e;
-            font-size: 0.8125rem;
-            line-height: 1.5;
-        }
-
-        /* ---- FOOTER ---- */
-        .login-footer {
-            text-align: center;
-            margin-top: 2rem;
-            padding-top: 1.25rem;
-            border-top: 1px solid #f1f5f9;
-            color: #94a3b8;
-            font-size: 0.8rem;
-        }
-
-        /* ---- RESPONSIVE ---- */
-        @@media (max-width: 768px) {
-            .login-brand { display: none; }
-            .login-form-panel {
-                padding: 1.5rem;
-            }
-            .login-card {
-                padding: 2rem 1.5rem;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-            }
-        }
-
-        /* ---- LOADING STATE ---- */
-        .btn-signin.loading {
-            pointer-events: none;
-            opacity: 0.8;
-        }
-
+        /* Loading state */
+        .btn-signin.loading { pointer-events: none; opacity: 0.8; }
         .btn-signin.loading .btn-text { display: none; }
         .btn-signin .btn-loading { display: none; }
         .btn-signin.loading .btn-loading { display: flex; align-items: center; gap: 0.5rem; }
+        .spinner-sm { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
 
-        .spinner-sm {
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.6s linear infinite;
+        /* Alerts */
+        .login-error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; gap: 0.625rem; }
+        .login-error i { color: #ef4444; font-size: 1.1rem; margin-top: 1px; flex-shrink: 0; }
+        .login-error span { color: #991b1b; font-size: 0.8125rem; line-height: 1.5; }
+
+        .login-footer { text-align: center; margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid #f1f5f9; color: #94a3b8; font-size: 0.8rem; }
+
+        @@media (max-width: 768px) {
+            .login-brand { display: none; }
+            .login-form-panel { padding: 1.5rem; }
+            .login-card { padding: 2rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
         }
 
         @@keyframes spin { to { transform: rotate(360deg); } }
@@ -431,22 +199,13 @@
     <div class="login-form-panel">
         <div class="login-card">
             <h2>Bem-vindo</h2>
-            <p class="subtitle">Entre com suas credenciais e selecione a base para acessar o sistema</p>
+            <p class="subtitle">Informe seu login, selecione a base e digite sua senha</p>
 
-            <!-- Step indicator -->
             <div class="step-indicator">
                 <div class="step-dot active" id="step1"></div>
                 <div class="step-dot" id="step2"></div>
                 <div class="step-dot" id="step3"></div>
             </div>
-
-            @if (ViewData["CompanyError"] != null)
-            {
-                <div class="login-warning">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    <span>@ViewData["CompanyError"]</span>
-                </div>
-            }
 
             @if (!ViewData.ModelState.IsValid)
             {
@@ -467,113 +226,75 @@
 
                 <!-- 1. Login -->
                 <div class="form-group">
-                    <label for="Login">
-                        <i class="bi bi-1-circle me-1" style="font-size: 0.75rem;"></i> Login
-                    </label>
+                    <label for="Login">Login <span class="step-num">— passo 1</span></label>
                     <div class="input-wrapper">
                         <i class="bi bi-person input-icon"></i>
-                        <input type="text"
-                               id="Login"
-                               name="Login"
+                        <input type="text" id="Login" name="Login"
                                value="@Model?.Login"
                                placeholder="Digite seu usuario"
-                               required
-                               autocomplete="username"
-                               autofocus />
+                               required autocomplete="username" autofocus />
                     </div>
                 </div>
 
                 <!-- 2. Base/Empresa -->
                 <div class="form-group">
-                    <label for="CompanyDb">
-                        <i class="bi bi-2-circle me-1" style="font-size: 0.75rem;"></i> Base / Empresa
-                    </label>
+                    <label for="CompanyDb">Base / Empresa <span class="step-num">— passo 2</span></label>
                     <div class="input-wrapper">
                         <i class="bi bi-database input-icon"></i>
-                        <select id="CompanyDb" name="CompanyDb" required>
-                            <option value="" disabled @(string.IsNullOrWhiteSpace(Model?.CompanyDb) ? "selected" : "")>Selecione a base...</option>
-                            @if (Model?.Companies != null)
-                            {
-                                @foreach (var company in Model.Companies)
-                                {
-                                    <option value="@company.Value" @(company.Selected ? "selected" : "")>@company.Text</option>
-                                }
-                            }
+                        <select id="CompanyDb" name="CompanyDb" required disabled>
+                            <option value="">Digite o login para carregar as bases...</option>
                         </select>
                     </div>
-                    @if (Model?.Companies != null && Model.Companies.Any())
-                    {
-                        <div class="company-count">
-                            <span class="dot-green"></span>
-                            @Model.Companies.Count base(s) disponivel(is)
-                        </div>
-                    }
-                    else if (ViewData["CompanyError"] == null)
-                    {
-                        <div class="company-count">
-                            <span class="dot-red"></span>
-                            Nenhuma base disponivel
-                        </div>
-                    }
+                    <div class="company-loading" id="companyLoading">
+                        <span class="spinner-xs"></span>
+                        Buscando bases disponiveis...
+                    </div>
+                    <div class="company-status" id="companyStatus"></div>
                 </div>
 
                 <!-- 3. Senha -->
                 <div class="form-group">
-                    <label for="Password">
-                        <i class="bi bi-3-circle me-1" style="font-size: 0.75rem;"></i> Senha
-                    </label>
+                    <label for="Password">Senha <span class="step-num">— passo 3</span></label>
                     <div class="input-wrapper">
                         <i class="bi bi-lock input-icon"></i>
-                        <input type="password"
-                               id="Password"
-                               name="Password"
+                        <input type="password" id="Password" name="Password"
                                placeholder="Digite sua senha"
-                               required
-                               autocomplete="current-password" />
-                        <button type="button" class="toggle-password" onclick="togglePassword()" tabindex="-1" aria-label="Mostrar senha">
+                               required autocomplete="current-password" />
+                        <button type="button" class="toggle-password" onclick="togglePassword()" tabindex="-1">
                             <i class="bi bi-eye" id="toggleIcon"></i>
                         </button>
                     </div>
                 </div>
 
                 <button type="submit" class="btn-signin" id="btnSignin">
-                    <span class="btn-text">
-                        <i class="bi bi-box-arrow-in-right"></i>
-                        Entrar
-                    </span>
-                    <span class="btn-loading">
-                        <span class="spinner-sm"></span>
-                        Autenticando...
-                    </span>
+                    <span class="btn-text"><i class="bi bi-box-arrow-in-right"></i> Entrar</span>
+                    <span class="btn-loading"><span class="spinner-sm"></span> Autenticando...</span>
                 </button>
             </form>
 
-            <div class="login-footer">
-                &copy; @DateTime.Now.Year Financial Import &mdash; SAP Business One
-            </div>
+            <div class="login-footer">&copy; @DateTime.Now.Year Financial Import &mdash; SAP Business One</div>
         </div>
     </div>
 
     <script>
-        function togglePassword() {
-            const input = document.getElementById('Password');
-            const icon = document.getElementById('toggleIcon');
-            if (input.type === 'password') {
-                input.type = 'text';
-                icon.classList.replace('bi-eye', 'bi-eye-slash');
-            } else {
-                input.type = 'password';
-                icon.classList.replace('bi-eye-slash', 'bi-eye');
-            }
-        }
-
-        // Step indicator logic
         const loginInput = document.getElementById('Login');
         const companySelect = document.getElementById('CompanyDb');
         const passwordInput = document.getElementById('Password');
+        const companyLoading = document.getElementById('companyLoading');
+        const companyStatus = document.getElementById('companyStatus');
         const step1 = document.getElementById('step1');
         const step2 = document.getElementById('step2');
         const step3 = document.getElementById('step3');
+
+        let debounceTimer = null;
+        let lastLogin = '';
+
+        function togglePassword() {
+            const input = document.getElementById('Password');
+            const icon = document.getElementById('toggleIcon');
+            if (input.type === 'password') { input.type = 'text'; icon.classList.replace('bi-eye', 'bi-eye-slash'); }
+            else { input.type = 'password'; icon.classList.replace('bi-eye-slash', 'bi-eye'); }
+        }
 
         function updateSteps() {
             const hasLogin = loginInput.value.trim().length > 0;
@@ -585,14 +306,101 @@
             step3.className = 'step-dot ' + (hasPassword ? 'done' : (hasCompany ? 'active' : ''));
         }
 
-        loginInput.addEventListener('input', updateSteps);
+        function setCompanyStatus(type, text) {
+            const dotClass = type === 'ok' ? 'dot-green' : type === 'warn' ? 'dot-amber' : 'dot-red';
+            const textClass = type === 'ok' ? 'text-ok' : type === 'warn' ? 'text-warn' : type === 'err' ? 'text-err' : 'text-muted';
+            companyStatus.innerHTML = `<span class="dot ${dotClass}"></span><span class="${textClass}">${text}</span>`;
+        }
+
+        async function loadCompanies(login) {
+            if (!login || login === lastLogin) return;
+            lastLogin = login;
+
+            companyLoading.classList.add('show');
+            companyStatus.innerHTML = '';
+            companySelect.innerHTML = '<option value="">Carregando...</option>';
+            companySelect.disabled = true;
+
+            try {
+                const res = await fetch(`/Account/Companies?login=${encodeURIComponent(login)}`);
+                const data = await res.json();
+
+                companyLoading.classList.remove('show');
+
+                if (!data.success) {
+                    companySelect.innerHTML = '<option value="">Erro ao carregar bases</option>';
+                    setCompanyStatus('err', data.message || 'Erro ao carregar bases');
+                    return;
+                }
+
+                if (data.count === 0) {
+                    companySelect.innerHTML = '<option value="">Nenhuma base disponivel para este usuario</option>';
+                    setCompanyStatus('warn', 'Nenhuma base vinculada a este usuario');
+                    return;
+                }
+
+                // Populate select
+                let options = '<option value="" disabled selected>Selecione a base...</option>';
+                for (const c of data.companies) {
+                    const sel = c.value === '@(Model?.CompanyDb ?? "")' ? ' selected' : '';
+                    options += `<option value="${c.value}"${sel}>${c.text}</option>`;
+                }
+                companySelect.innerHTML = options;
+                companySelect.disabled = false;
+                setCompanyStatus('ok', `${data.count} base(s) disponivel(is)`);
+
+                // Auto-select if only one company
+                if (data.count === 1) {
+                    companySelect.selectedIndex = 1;
+                    passwordInput.focus();
+                } else {
+                    companySelect.focus();
+                }
+
+                updateSteps();
+            } catch (err) {
+                companyLoading.classList.remove('show');
+                companySelect.innerHTML = '<option value="">Erro de conexao</option>';
+                setCompanyStatus('err', 'Falha na comunicacao com o servidor');
+            }
+        }
+
+        // Debounce: load companies 600ms after user stops typing login
+        loginInput.addEventListener('input', function () {
+            clearTimeout(debounceTimer);
+            const val = loginInput.value.trim();
+            if (val.length >= 2) {
+                debounceTimer = setTimeout(() => loadCompanies(val), 600);
+            } else {
+                lastLogin = '';
+                companySelect.innerHTML = '<option value="">Digite o login para carregar as bases...</option>';
+                companySelect.disabled = true;
+                companyStatus.innerHTML = '';
+            }
+            updateSteps();
+        });
+
+        // Also trigger on blur (tab out of login field)
+        loginInput.addEventListener('blur', function () {
+            const val = loginInput.value.trim();
+            if (val.length >= 2 && val !== lastLogin) {
+                clearTimeout(debounceTimer);
+                loadCompanies(val);
+            }
+        });
+
         companySelect.addEventListener('change', updateSteps);
         passwordInput.addEventListener('input', updateSteps);
-        updateSteps();
 
         document.getElementById('loginForm').addEventListener('submit', function () {
             document.getElementById('btnSignin').classList.add('loading');
         });
+
+        // If login already has a value (e.g., after validation error), load companies
+        updateSteps();
+        if (loginInput.value.trim().length >= 2) {
+            loadCompanies(loginInput.value.trim());
+        }
     </script>
 </body>
 </html>
