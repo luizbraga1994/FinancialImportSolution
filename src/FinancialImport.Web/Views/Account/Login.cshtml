@@ -25,65 +25,39 @@
         .login-brand {
             flex: 1;
             background: linear-gradient(160deg, #0f172a 0%, #1e293b 40%, #334155 100%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: #fff;
-            padding: 3rem;
-            position: relative;
-            overflow: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #fff; padding: 3rem; position: relative; overflow: hidden;
         }
-
         .login-brand::before {
-            content: '';
-            position: absolute;
-            width: 500px; height: 500px;
-            border-radius: 50%;
+            content: ''; position: absolute; width: 500px; height: 500px; border-radius: 50%;
             background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
             top: -150px; right: -150px;
         }
-
         .login-brand::after {
-            content: '';
-            position: absolute;
-            width: 350px; height: 350px;
-            border-radius: 50%;
+            content: ''; position: absolute; width: 350px; height: 350px; border-radius: 50%;
             background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
             bottom: -100px; left: -100px;
         }
-
         .brand-icon-wrapper {
             width: 88px; height: 88px;
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 22px;
+            background: rgba(255,255,255,0.08); backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1); border-radius: 22px;
             display: flex; align-items: center; justify-content: center;
             margin-bottom: 2rem; z-index: 1;
         }
-
         .brand-icon-wrapper i { font-size: 2.5rem; color: rgba(255,255,255,0.9); }
-
         .login-brand h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.75rem; z-index: 1; letter-spacing: -0.02em; }
         .login-brand p { font-size: 1rem; color: rgba(255,255,255,0.55); z-index: 1; max-width: 300px; text-align: center; line-height: 1.6; }
 
         .login-form-panel {
-            flex: 1;
-            display: flex; align-items: center; justify-content: center;
-            padding: 2rem;
-            background: #f8fafc;
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 2rem; background: #f8fafc;
         }
-
         .login-card {
-            width: 100%; max-width: 440px;
-            background: #ffffff;
-            border-radius: 16px;
-            padding: 2.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+            width: 100%; max-width: 440px; background: #ffffff; border-radius: 16px;
+            padding: 2.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
             border: 1px solid rgba(0,0,0,0.04);
         }
-
         .login-card h2 { font-size: 1.5rem; font-weight: 700; color: #0f172a; margin-bottom: 0.375rem; letter-spacing: -0.02em; }
         .login-card .subtitle { color: #64748b; font-size: 0.875rem; margin-bottom: 2rem; line-height: 1.5; }
 
@@ -99,53 +73,94 @@
         .form-group .step-num { font-size: 0.7rem; color: #94a3b8; font-weight: 500; }
 
         .input-wrapper { position: relative; display: flex; align-items: center; }
-        .input-wrapper .input-icon { position: absolute; left: 14px; font-size: 1.1rem; color: #94a3b8; pointer-events: none; transition: color 0.2s; z-index: 2; }
+        .input-wrapper .input-icon {
+            position: absolute; left: 14px; font-size: 1.1rem; color: #94a3b8;
+            pointer-events: none; transition: color 0.2s; z-index: 2;
+        }
 
-        .input-wrapper input,
-        .input-wrapper select {
-            width: 100%; height: 48px;
-            padding: 0 16px 0 44px;
+        .input-wrapper input {
+            width: 100%; height: 48px; padding: 0 16px 0 44px;
             font-size: 0.9375rem; font-family: inherit; color: #1e293b;
-            background: #f8fafc;
-            border: 1.5px solid #e2e8f0; border-radius: 10px;
+            background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px;
             outline: none; transition: all 0.2s ease;
-            -webkit-appearance: none; appearance: none;
         }
-
-        .input-wrapper select {
-            cursor: pointer; padding-right: 40px;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
-            background-repeat: no-repeat; background-position: right 14px center; background-size: 16px;
-        }
-
-        .input-wrapper select:disabled { opacity: 0.6; cursor: not-allowed; background-color: #f1f5f9; }
-
         .input-wrapper input::placeholder { color: #94a3b8; font-weight: 400; }
-
-        .input-wrapper input:hover, .input-wrapper select:hover:not(:disabled) { border-color: #cbd5e1; background-color: #fff; }
-        .input-wrapper input:focus, .input-wrapper select:focus { border-color: #3b82f6; background-color: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-        .input-wrapper select:focus { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%233b82f6' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E"); }
+        .input-wrapper input:hover { border-color: #cbd5e1; background-color: #fff; }
+        .input-wrapper input:focus { border-color: #3b82f6; background-color: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
         .input-wrapper:focus-within .input-icon { color: #3b82f6; }
+        .input-wrapper input:disabled { opacity: 0.5; cursor: not-allowed; background-color: #f1f5f9; }
 
-        .toggle-password { position: absolute; right: 14px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 1.1rem; padding: 4px; z-index: 2; transition: color 0.2s; }
+        .toggle-password {
+            position: absolute; right: 14px; background: none; border: none;
+            color: #94a3b8; cursor: pointer; font-size: 1.1rem; padding: 4px; z-index: 2; transition: color 0.2s;
+        }
         .toggle-password:hover { color: #64748b; }
 
-        /* Company status */
+        /* Searchable select */
+        .custom-select-wrap { position: relative; }
+        .custom-select-trigger {
+            width: 100%; height: 48px; padding: 0 40px 0 44px;
+            font-size: 0.9375rem; font-family: inherit; color: #1e293b;
+            background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px;
+            outline: none; transition: all 0.2s ease; cursor: pointer;
+            display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .custom-select-trigger.disabled { opacity: 0.5; cursor: not-allowed; background-color: #f1f5f9; }
+        .custom-select-trigger:not(.disabled):hover { border-color: #cbd5e1; background-color: #fff; }
+        .custom-select-trigger.open { border-color: #3b82f6; background-color: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .custom-select-trigger .placeholder { color: #94a3b8; }
+        .custom-select-arrow {
+            position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+            color: #94a3b8; font-size: 0.85rem; pointer-events: none; transition: transform 0.2s;
+        }
+        .custom-select-trigger.open ~ .custom-select-arrow { transform: translateY(-50%) rotate(180deg); color: #3b82f6; }
+
+        .custom-select-dropdown {
+            display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+            background: #fff; border: 1.5px solid #e2e8f0; border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 100; overflow: hidden;
+        }
+        .custom-select-dropdown.show { display: block; }
+
+        .custom-select-search {
+            padding: 0.625rem 0.75rem; border-bottom: 1px solid #f1f5f9;
+        }
+        .custom-select-search input {
+            width: 100%; height: 36px; padding: 0 12px;
+            font-size: 0.8125rem; font-family: inherit; color: #1e293b;
+            background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 8px;
+            outline: none; transition: all 0.2s;
+        }
+        .custom-select-search input::placeholder { color: #94a3b8; }
+        .custom-select-search input:focus { border-color: #3b82f6; background: #fff; }
+
+        .custom-select-list {
+            max-height: 240px; overflow-y: auto; padding: 0.375rem;
+        }
+        .custom-select-list::-webkit-scrollbar { width: 6px; }
+        .custom-select-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+        .custom-select-option {
+            padding: 0.5rem 0.75rem; font-size: 0.8125rem; color: #334155;
+            border-radius: 6px; cursor: pointer; transition: background 0.1s;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .custom-select-option:hover { background: #f1f5f9; }
+        .custom-select-option.selected { background: #eff6ff; color: #2563eb; font-weight: 500; }
+        .custom-select-option.hidden { display: none; }
+        .custom-select-empty {
+            padding: 1rem; text-align: center; color: #94a3b8; font-size: 0.8125rem;
+        }
+
+        /* Status messages */
         .company-status {
             font-size: 0.75rem; margin-top: 0.375rem;
-            display: flex; align-items: center; gap: 0.375rem;
-            min-height: 18px;
+            display: flex; align-items: center; gap: 0.375rem; min-height: 18px;
         }
         .company-status .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-        .company-status .dot-green { background: #22c55e; }
-        .company-status .dot-red { background: #ef4444; }
-        .company-status .dot-amber { background: #f59e0b; }
-        .company-status .text-ok { color: #16a34a; }
-        .company-status .text-warn { color: #d97706; }
-        .company-status .text-err { color: #dc2626; }
-        .company-status .text-muted { color: #94a3b8; }
+        .dot-green { background: #22c55e; } .dot-red { background: #ef4444; } .dot-amber { background: #f59e0b; }
+        .text-ok { color: #16a34a; } .text-warn { color: #d97706; } .text-err { color: #dc2626; }
 
-        /* Loading spinner inline */
         .company-loading { display: none; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #64748b; margin-top: 0.375rem; }
         .company-loading.show { display: flex; }
         .spinner-xs { width: 14px; height: 14px; border: 2px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.6s linear infinite; }
@@ -155,16 +170,13 @@
             width: 100%; height: 48px;
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: #fff; border: none; border-radius: 10px;
-            font-size: 0.9375rem; font-weight: 600; font-family: inherit;
-            cursor: pointer;
+            font-size: 0.9375rem; font-weight: 600; font-family: inherit; cursor: pointer;
             display: flex; align-items: center; justify-content: center; gap: 0.5rem;
             transition: all 0.2s ease; margin-top: 0.5rem;
         }
-        .btn-signin:hover { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,23,42,0.25); }
-        .btn-signin:active { transform: translateY(0); box-shadow: none; }
-        .btn-signin:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-
-        /* Loading state */
+        .btn-signin:hover:not(:disabled) { background: linear-gradient(135deg, #1e293b 0%, #334155 100%); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(15,23,42,0.25); }
+        .btn-signin:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+        .btn-signin:disabled { opacity: 0.4; cursor: not-allowed; }
         .btn-signin.loading { pointer-events: none; opacity: 0.8; }
         .btn-signin.loading .btn-text { display: none; }
         .btn-signin .btn-loading { display: none; }
@@ -172,7 +184,10 @@
         .spinner-sm { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; }
 
         /* Alerts */
-        .login-error { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; gap: 0.625rem; }
+        .login-error {
+            background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+            padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: flex-start; gap: 0.625rem;
+        }
         .login-error i { color: #ef4444; font-size: 1.1rem; margin-top: 1px; flex-shrink: 0; }
         .login-error span { color: #991b1b; font-size: 0.8125rem; line-height: 1.5; }
 
@@ -189,9 +204,7 @@
 </head>
 <body>
     <div class="login-brand">
-        <div class="brand-icon-wrapper">
-            <i class="bi bi-stack"></i>
-        </div>
+        <div class="brand-icon-wrapper"><i class="bi bi-stack"></i></div>
         <h1>Financial Import</h1>
         <p>Plataforma de importacao contabil integrada ao SAP Business One</p>
     </div>
@@ -223,6 +236,7 @@
             <form asp-controller="Account" asp-action="Login" method="post" id="loginForm">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="ReturnUrl" value="@Model?.ReturnUrl" />
+                <input type="hidden" name="CompanyDb" id="CompanyDbHidden" value="@Model?.CompanyDb" />
 
                 <!-- 1. Login -->
                 <div class="form-group">
@@ -236,37 +250,45 @@
                     </div>
                 </div>
 
-                <!-- 2. Base/Empresa -->
+                <!-- 2. Base/Empresa - searchable -->
                 <div class="form-group">
-                    <label for="CompanyDb">Base / Empresa <span class="step-num">— passo 2</span></label>
-                    <div class="input-wrapper">
-                        <i class="bi bi-database input-icon"></i>
-                        <select id="CompanyDb" name="CompanyDb" required disabled>
-                            <option value="">Digite o login para carregar as bases...</option>
-                        </select>
+                    <label>Base / Empresa <span class="step-num">— passo 2</span></label>
+                    <div class="custom-select-wrap" id="companyWrap">
+                        <div class="input-wrapper">
+                            <i class="bi bi-database input-icon"></i>
+                            <div class="custom-select-trigger disabled" id="companyTrigger">
+                                <span class="placeholder">Digite o login para carregar as bases...</span>
+                            </div>
+                            <i class="bi bi-chevron-down custom-select-arrow"></i>
+                        </div>
+                        <div class="custom-select-dropdown" id="companyDropdown">
+                            <div class="custom-select-search">
+                                <input type="text" id="companySearch" placeholder="Pesquisar base..." autocomplete="off" />
+                            </div>
+                            <div class="custom-select-list" id="companyList"></div>
+                        </div>
                     </div>
                     <div class="company-loading" id="companyLoading">
-                        <span class="spinner-xs"></span>
-                        Buscando bases disponiveis...
+                        <span class="spinner-xs"></span> Buscando bases disponiveis...
                     </div>
                     <div class="company-status" id="companyStatus"></div>
                 </div>
 
-                <!-- 3. Senha -->
+                <!-- 3. Senha - disabled until user exists -->
                 <div class="form-group">
                     <label for="Password">Senha <span class="step-num">— passo 3</span></label>
                     <div class="input-wrapper">
                         <i class="bi bi-lock input-icon"></i>
                         <input type="password" id="Password" name="Password"
-                               placeholder="Digite sua senha"
-                               required autocomplete="current-password" />
+                               placeholder="Aguardando validacao do usuario..."
+                               required autocomplete="current-password" disabled />
                         <button type="button" class="toggle-password" onclick="togglePassword()" tabindex="-1">
                             <i class="bi bi-eye" id="toggleIcon"></i>
                         </button>
                     </div>
                 </div>
 
-                <button type="submit" class="btn-signin" id="btnSignin">
+                <button type="submit" class="btn-signin" id="btnSignin" disabled>
                     <span class="btn-text"><i class="bi bi-box-arrow-in-right"></i> Entrar</span>
                     <span class="btn-loading"><span class="spinner-sm"></span> Autenticando...</span>
                 </button>
@@ -278,38 +300,131 @@
 
     <script>
         const loginInput = document.getElementById('Login');
-        const companySelect = document.getElementById('CompanyDb');
         const passwordInput = document.getElementById('Password');
+        const companyHidden = document.getElementById('CompanyDbHidden');
+        const companyTrigger = document.getElementById('companyTrigger');
+        const companyDropdown = document.getElementById('companyDropdown');
+        const companySearch = document.getElementById('companySearch');
+        const companyList = document.getElementById('companyList');
         const companyLoading = document.getElementById('companyLoading');
         const companyStatus = document.getElementById('companyStatus');
+        const btnSignin = document.getElementById('btnSignin');
         const step1 = document.getElementById('step1');
         const step2 = document.getElementById('step2');
         const step3 = document.getElementById('step3');
 
         let debounceTimer = null;
         let lastLogin = '';
+        let companiesData = [];
+        let selectedValue = '';
+        let userExists = false;
+        let dropdownOpen = false;
 
         function togglePassword() {
-            const input = document.getElementById('Password');
             const icon = document.getElementById('toggleIcon');
-            if (input.type === 'password') { input.type = 'text'; icon.classList.replace('bi-eye', 'bi-eye-slash'); }
-            else { input.type = 'password'; icon.classList.replace('bi-eye-slash', 'bi-eye'); }
+            if (passwordInput.type === 'password') { passwordInput.type = 'text'; icon.classList.replace('bi-eye', 'bi-eye-slash'); }
+            else { passwordInput.type = 'password'; icon.classList.replace('bi-eye-slash', 'bi-eye'); }
         }
 
         function updateSteps() {
             const hasLogin = loginInput.value.trim().length > 0;
-            const hasCompany = companySelect.value.trim().length > 0;
+            const hasCompany = selectedValue.length > 0;
             const hasPassword = passwordInput.value.trim().length > 0;
-
             step1.className = 'step-dot ' + (hasLogin ? 'done' : 'active');
             step2.className = 'step-dot ' + (hasCompany ? 'done' : (hasLogin ? 'active' : ''));
             step3.className = 'step-dot ' + (hasPassword ? 'done' : (hasCompany ? 'active' : ''));
+            btnSignin.disabled = !(hasLogin && hasCompany && userExists);
         }
 
         function setCompanyStatus(type, text) {
             const dotClass = type === 'ok' ? 'dot-green' : type === 'warn' ? 'dot-amber' : 'dot-red';
-            const textClass = type === 'ok' ? 'text-ok' : type === 'warn' ? 'text-warn' : type === 'err' ? 'text-err' : 'text-muted';
-            companyStatus.innerHTML = `<span class="dot ${dotClass}"></span><span class="${textClass}">${text}</span>`;
+            const textClass = type === 'ok' ? 'text-ok' : type === 'warn' ? 'text-warn' : 'text-err';
+            companyStatus.innerHTML = '<span class="dot ' + dotClass + '"></span><span class="' + textClass + '">' + text + '</span>';
+        }
+
+        function selectCompany(value, text) {
+            selectedValue = value;
+            companyHidden.value = value;
+            companyTrigger.innerHTML = '<span>' + text + '</span>';
+            closeDropdown();
+            if (userExists) {
+                passwordInput.disabled = false;
+                passwordInput.placeholder = 'Digite sua senha';
+                passwordInput.focus();
+            }
+            updateSteps();
+        }
+
+        function renderOptions(filter) {
+            const q = (filter || '').toLowerCase();
+            let html = '';
+            let visibleCount = 0;
+            for (const c of companiesData) {
+                const match = !q || c.text.toLowerCase().includes(q);
+                if (match) {
+                    const sel = c.value === selectedValue ? ' selected' : '';
+                    html += '<div class="custom-select-option' + sel + '" data-value="' + c.value + '" onclick="selectCompany(\'' + c.value.replace(/'/g, "\\'") + '\', \'' + c.text.replace(/'/g, "\\'") + '\')">' + c.text + '</div>';
+                    visibleCount++;
+                }
+            }
+            if (visibleCount === 0) {
+                html = '<div class="custom-select-empty">Nenhuma base encontrada</div>';
+            }
+            companyList.innerHTML = html;
+        }
+
+        function openDropdown() {
+            if (companiesData.length === 0) return;
+            dropdownOpen = true;
+            companyTrigger.classList.add('open');
+            companyDropdown.classList.add('show');
+            companySearch.value = '';
+            renderOptions('');
+            setTimeout(function() { companySearch.focus(); }, 50);
+        }
+
+        function closeDropdown() {
+            dropdownOpen = false;
+            companyTrigger.classList.remove('open');
+            companyDropdown.classList.remove('show');
+        }
+
+        companyTrigger.addEventListener('click', function () {
+            if (companyTrigger.classList.contains('disabled')) return;
+            if (dropdownOpen) closeDropdown();
+            else openDropdown();
+        });
+
+        companySearch.addEventListener('input', function () {
+            renderOptions(this.value);
+        });
+
+        companySearch.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') closeDropdown();
+        });
+
+        // Close dropdown on outside click
+        document.addEventListener('click', function (e) {
+            if (dropdownOpen && !document.getElementById('companyWrap').contains(e.target)) {
+                closeDropdown();
+            }
+        });
+
+        function resetCompanySelect(placeholder) {
+            companiesData = [];
+            selectedValue = '';
+            companyHidden.value = '';
+            companyTrigger.innerHTML = '<span class="placeholder">' + placeholder + '</span>';
+            companyTrigger.classList.add('disabled');
+            closeDropdown();
+        }
+
+        function enablePasswordField(enable) {
+            userExists = enable;
+            passwordInput.disabled = !enable;
+            passwordInput.placeholder = enable ? 'Digite sua senha' : 'Aguardando validacao do usuario...';
+            if (!enable) passwordInput.value = '';
+            updateSteps();
         }
 
         async function loadCompanies(login) {
@@ -318,69 +433,76 @@
 
             companyLoading.classList.add('show');
             companyStatus.innerHTML = '';
-            companySelect.innerHTML = '<option value="">Carregando...</option>';
-            companySelect.disabled = true;
+            resetCompanySelect('Carregando...');
+            enablePasswordField(false);
 
             try {
-                const res = await fetch(`/Account/Companies?login=${encodeURIComponent(login)}`);
+                const res = await fetch('/Account/Companies?login=' + encodeURIComponent(login));
                 const data = await res.json();
-
                 companyLoading.classList.remove('show');
 
                 if (!data.success) {
-                    companySelect.innerHTML = '<option value="">Erro ao carregar bases</option>';
+                    resetCompanySelect('Erro ao carregar bases');
                     setCompanyStatus('err', data.message || 'Erro ao carregar bases');
                     return;
                 }
 
+                if (!data.userExists) {
+                    resetCompanySelect('Usuario nao encontrado');
+                    setCompanyStatus('warn', 'Usuario nao encontrado no sistema');
+                    enablePasswordField(false);
+                    return;
+                }
+
+                // User exists
+                enablePasswordField(true);
+
                 if (data.count === 0) {
-                    companySelect.innerHTML = '<option value="">Nenhuma base disponivel para este usuario</option>';
+                    resetCompanySelect('Nenhuma base disponivel');
                     setCompanyStatus('warn', 'Nenhuma base vinculada a este usuario');
                     return;
                 }
 
-                // Populate select
-                let options = '<option value="" disabled selected>Selecione a base...</option>';
-                for (const c of data.companies) {
-                    const sel = c.value === '@(Model?.CompanyDb ?? "")' ? ' selected' : '';
-                    options += `<option value="${c.value}"${sel}>${c.text}</option>`;
-                }
-                companySelect.innerHTML = options;
-                companySelect.disabled = false;
-                setCompanyStatus('ok', `${data.count} base(s) disponivel(is)`);
+                companiesData = data.companies;
+                companyTrigger.innerHTML = '<span class="placeholder">Selecione a base...</span>';
+                companyTrigger.classList.remove('disabled');
+                setCompanyStatus('ok', data.count + ' base(s) disponivel(is)');
 
-                // Auto-select if only one company
+                // Auto-select if only 1
                 if (data.count === 1) {
-                    companySelect.selectedIndex = 1;
-                    passwordInput.focus();
+                    selectCompany(data.companies[0].value, data.companies[0].text);
                 } else {
-                    companySelect.focus();
+                    // Restore previous selection if coming back from validation error
+                    var prev = '@(Model?.CompanyDb ?? "")';
+                    if (prev) {
+                        var found = data.companies.find(function(c) { return c.value === prev; });
+                        if (found) selectCompany(found.value, found.text);
+                    }
                 }
 
                 updateSteps();
             } catch (err) {
                 companyLoading.classList.remove('show');
-                companySelect.innerHTML = '<option value="">Erro de conexao</option>';
+                resetCompanySelect('Erro de conexao');
                 setCompanyStatus('err', 'Falha na comunicacao com o servidor');
             }
         }
 
-        // Debounce: load companies 600ms after user stops typing login
+        // Debounce login input
         loginInput.addEventListener('input', function () {
             clearTimeout(debounceTimer);
             const val = loginInput.value.trim();
             if (val.length >= 2) {
-                debounceTimer = setTimeout(() => loadCompanies(val), 600);
+                debounceTimer = setTimeout(function() { loadCompanies(val); }, 600);
             } else {
                 lastLogin = '';
-                companySelect.innerHTML = '<option value="">Digite o login para carregar as bases...</option>';
-                companySelect.disabled = true;
+                resetCompanySelect('Digite o login para carregar as bases...');
                 companyStatus.innerHTML = '';
+                enablePasswordField(false);
             }
             updateSteps();
         });
 
-        // Also trigger on blur (tab out of login field)
         loginInput.addEventListener('blur', function () {
             const val = loginInput.value.trim();
             if (val.length >= 2 && val !== lastLogin) {
@@ -389,14 +511,14 @@
             }
         });
 
-        companySelect.addEventListener('change', updateSteps);
         passwordInput.addEventListener('input', updateSteps);
 
-        document.getElementById('loginForm').addEventListener('submit', function () {
-            document.getElementById('btnSignin').classList.add('loading');
+        document.getElementById('loginForm').addEventListener('submit', function (e) {
+            if (!selectedValue || !userExists) { e.preventDefault(); return; }
+            btnSignin.classList.add('loading');
         });
 
-        // If login already has a value (e.g., after validation error), load companies
+        // Init
         updateSteps();
         if (loginInput.value.trim().length >= 2) {
             loadCompanies(loginInput.value.trim());

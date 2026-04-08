@@ -75,8 +75,12 @@ public class AccountController : Controller
 
             if (user == null)
             {
-                // Don't reveal if user exists or not - return empty
-                return Json(new { success = true, companies = Array.Empty<object>(), count = 0 });
+                return Json(new { success = true, userExists = false, companies = Array.Empty<object>(), count = 0 });
+            }
+
+            if (!user.IsActive)
+            {
+                return Json(new { success = true, userExists = false, companies = Array.Empty<object>(), count = 0 });
             }
 
             // 2. Get all companies from HANA
@@ -116,7 +120,7 @@ public class AccountController : Controller
                     .ToList<object>();
             }
 
-            return Json(new { success = true, companies = result, count = result.Count });
+            return Json(new { success = true, userExists = true, companies = result, count = result.Count });
         }
         catch (Exception ex)
         {
