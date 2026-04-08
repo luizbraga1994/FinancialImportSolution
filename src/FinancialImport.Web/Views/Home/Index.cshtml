@@ -2,85 +2,103 @@
     ViewData["Title"] = "Dashboard";
 }
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">Dashboard</h1>
+<!-- Stats Row -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-primary-subtle text-primary">
+                        <i class="bi bi-file-earmark-check"></i>
+                    </div>
+                    <div class="ms-3">
+                        <div class="stat-value">0</div>
+                        <div class="stat-label">Importacoes Realizadas</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-warning-subtle text-warning">
+                        <i class="bi bi-hourglass-split"></i>
+                    </div>
+                    <div class="ms-3">
+                        <div class="stat-value">0</div>
+                        <div class="stat-label">Pendentes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-danger-subtle text-danger">
+                        <i class="bi bi-exclamation-triangle"></i>
+                    </div>
+                    <div class="ms-3">
+                        <div class="stat-value">0</div>
+                        <div class="stat-label">Com Erro</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card stat-card border-0">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon bg-success-subtle text-success">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div class="ms-3">
+                        <div class="stat-value">0</div>
+                        <div class="stat-label">Enviados ao SAP</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
-<p class="text-muted">
-    Bem-vindo, <strong>@User.Identity?.Name</strong>! Acompanhe suas importações abaixo.
-</p>
-
-<div class="row g-4 mb-4">
-    <div class="col-md-4">
-        <div class="card border-start border-primary border-4 h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="card-subtitle text-muted text-uppercase small">Importações Realizadas</h6>
-                        <h2 class="card-title mt-2 mb-0">0</h2>
-                    </div>
-                    <div class="text-primary opacity-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0M4.5 7.5a.5.5 0 0 0 0 1h5.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3a.5.5 0 0 0 0-.708l-3-3a.5.5 0 1 0-.708.708L10.293 7.5z"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card border-start border-warning border-4 h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="card-subtitle text-muted text-uppercase small">Pendentes</h6>
-                        <h2 class="card-title mt-2 mb-0">0</h2>
-                    </div>
-                    <div class="text-warning opacity-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16m.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.399l-.502-.032.07-.346zm.133-2.588a.86.86 0 1 1 0-1.72.86.86 0 0 1 0 1.72"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card border-start border-danger border-4 h-100">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h6 class="card-subtitle text-muted text-uppercase small">Erros</h6>
-                        <h2 class="card-title mt-2 mb-0">0</h2>
-                    </div>
-                    <div class="text-danger opacity-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0M5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293z"/>
-                        </svg>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
+<!-- Quick Actions + Recent Activity -->
 <div class="row g-3">
-    <div class="col-auto">
-        <a asp-controller="Import" asp-action="Index" class="btn btn-primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
-                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
-                <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
-            </svg>
-            Nova Importação
-        </a>
+    <div class="col-lg-4">
+        <div class="card border-0 h-100">
+            <div class="card-header bg-transparent border-0 pt-3">
+                <h6 class="fw-bold mb-0"><i class="bi bi-lightning-charge me-2"></i>Acoes Rapidas</h6>
+            </div>
+            <div class="card-body d-grid gap-2">
+                <a asp-controller="Import" asp-action="Index" class="btn btn-primary">
+                    <i class="bi bi-upload me-2"></i>Nova Importacao
+                </a>
+                <a asp-controller="History" asp-action="Index" class="btn btn-outline-secondary">
+                    <i class="bi bi-clock-history me-2"></i>Ver Historico
+                </a>
+                <a asp-controller="Company" asp-action="Index" class="btn btn-outline-secondary">
+                    <i class="bi bi-building me-2"></i>Trocar Empresa
+                </a>
+            </div>
+        </div>
     </div>
-    <div class="col-auto">
-        <a asp-controller="History" asp-action="Index" class="btn btn-outline-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="me-1" viewBox="0 0 16 16">
-                <path d="M8.515 1.019A7 7 0 0 0 8 1V0a8 8 0 0 1 .589.022zm2.004.45a7 7 0 0 0-.985-.299l.219-.976q.576.129 1.126.342zm1.37.71a7 7 0 0 0-.439-.27l.493-.87a8 8 0 0 1 .979.654l-.615.789a7 7 0 0 0-.418-.302zm1.834 1.79a7 7 0 0 0-.653-.796l.724-.69q.406.429.747.91zm.744 1.352a7 7 0 0 0-.214-.468l.893-.45a8 8 0 0 1 .45 1.088l-.95.313a7 7 0 0 0-.179-.483m.53 2.507a7 7 0 0 0-.1-1.025l.985-.17q.1.58.116 1.17zm-.131 1.538q.05-.254.081-.51l.993.123a8 8 0 0 1-.23 1.155l-.964-.267q.069-.247.12-.501m-.952 2.379q.276-.436.486-.908l.914.405q-.253.556-.574 1.073zm-1.543 1.872q.215-.235.406-.49l.793.601a8 8 0 0 1-.908 1.022zm-1.578 1.018q.244-.159.47-.34l.624.78a8 8 0 0 1-1.052.766zm-2.447.933a7 7 0 0 0 .997-.304l.348.933a8 8 0 0 1-1.135.347zM8 15a7 7 0 0 0 .526-.04l.122.99A8 8 0 0 1 8 16zM.152 9.58q.078.362.193.707l-.952.306a8 8 0 0 1-.22-.807zm-.1-1.14a7 7 0 0 1-.002-.467l1 .007a6 6 0 0 0 .004.408zM1.114 5.17a7 7 0 0 0-.394.88l-.94-.342a8 8 0 0 1 .45-1.007zM2.66 3.44a7 7 0 0 0-.573.705l-.79-.614a8 8 0 0 1 .654-.878zM8 1a7 7 0 0 0-1.986.286l-.29-.956A8 8 0 0 1 8 0z"/>
-                <path d="M8 4.5a.5.5 0 0 1 .5.5v3.793l2.354 2.354a.5.5 0 0 1-.708.708l-2.5-2.5A.5.5 0 0 1 7.5 9V5a.5.5 0 0 1 .5-.5"/>
-            </svg>
-            Ver Histórico
-        </a>
+    <div class="col-lg-8">
+        <div class="card border-0 h-100">
+            <div class="card-header bg-transparent border-0 pt-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0"><i class="bi bi-activity me-2"></i>Atividade Recente</h6>
+                <a asp-controller="History" asp-action="Index" class="btn btn-sm btn-link text-decoration-none">Ver tudo</a>
+            </div>
+            <div class="card-body">
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox" style="font-size: 2.5rem; opacity: 0.3;"></i>
+                    <p class="mt-2 mb-0">Nenhuma atividade recente</p>
+                    <p class="small">As importacoes realizadas aparecerao aqui</p>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
