@@ -60,39 +60,36 @@ else
             </div>
         }
     </div>
+}
 
-    @{
-        var inactiveCompanies = Model.Where(c => !c.IsActive).ToList();
-    }
-    @if (inactiveCompanies.Any())
-    {
-        <div class="mt-4">
-            <div class="sidebar-section-title mb-2" style="color: #94a3b8; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">
-                Empresas Inativas
-            </div>
-            <div class="row g-3">
-                @foreach (var company in inactiveCompanies)
-                {
-                    <div class="col-md-6 col-lg-4 col-xl-3">
-                        <div class="card h-100 border-0 opacity-50">
-                            <div class="card-body p-3">
-                                <div class="d-flex align-items-center gap-3">
-                                    <div class="company-icon company-icon-inactive">
-                                        <i class="bi bi-building"></i>
-                                    </div>
-                                    <div class="flex-grow-1 overflow-hidden">
-                                        <div class="fw-semibold text-truncate" style="font-size: 0.875rem;">@company.CompanyName</div>
-                                        <code class="text-muted" style="font-size: 0.75rem;">@company.CompanyDb</code>
-                                    </div>
-                                    <span class="badge bg-secondary-subtle text-secondary-emphasis" style="font-size: 0.65rem;">Inativa</span>
+@if (Model != null && Model.Any(c => !c.IsActive))
+{
+    <div class="mt-4">
+        <div class="sidebar-section-title mb-2" style="color: #94a3b8; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;">
+            Empresas Inativas
+        </div>
+        <div class="row g-3">
+            @foreach (var company in Model.Where(c => !c.IsActive))
+            {
+                <div class="col-md-6 col-lg-4 col-xl-3">
+                    <div class="card h-100 border-0 opacity-50">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="company-icon company-icon-inactive">
+                                    <i class="bi bi-building"></i>
                                 </div>
+                                <div class="flex-grow-1 overflow-hidden">
+                                    <div class="fw-semibold text-truncate" style="font-size: 0.875rem;">@company.CompanyName</div>
+                                    <code class="text-muted" style="font-size: 0.75rem;">@company.CompanyDb</code>
+                                </div>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis" style="font-size: 0.65rem;">Inativa</span>
                             </div>
                         </div>
                     </div>
-                }
-            </div>
+                </div>
+            }
         </div>
-    }
+    </div>
 }
 
 <style>
