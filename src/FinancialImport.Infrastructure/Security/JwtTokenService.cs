@@ -15,6 +15,7 @@ public sealed class JwtTokenService
     public JwtTokenService(IOptions<JwtOptions> options)
     {
         _options = options.Value;
+        _options.Validate();
     }
 
     public string GenerateToken(ApplicationUserSession session)

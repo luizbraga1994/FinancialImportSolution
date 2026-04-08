@@ -26,6 +26,7 @@ public sealed class Layout2Parser : ILayoutImportParser
             result.Add(new LancamentoContabilImportado
             {
                 LayoutOrigem = LayoutName,
+                SeqLancamento = row.Get("Seq Lancamento"),
                 Referencia = row.GetRequired("Observacao"),
                 DataLancamento = row.GetDate("Data Lancamento"),
                 DataVencimento = row.GetDate("Data Vencimento"),
@@ -48,7 +49,8 @@ public sealed class Layout2Parser : ILayoutImportParser
                     ["Data Vencimento"] = row.Get("Data Vencimento"),
                     ["Data Documento"] = row.Get("Data Documento"),
                     ["Observacao Linha"] = row.Get("Observacao Linha"),
-                    ["Filial"] = row.Get("Filial")
+                    ["Filial"] = row.Get("Filial"),
+                    ["Seq Lancamento"] = row.Get("Seq Lancamento")
                 }
             });
         }

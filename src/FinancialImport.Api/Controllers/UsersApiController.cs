@@ -36,6 +36,9 @@ public sealed class UsersApiController : ControllerBase
         [FromQuery] string? search = null,
         CancellationToken cancellationToken = default)
     {
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        page = Math.Max(page, 1);
+
         var query = _dbContext.Users
             .Include(u => u.Profiles).ThenInclude(up => up.Profile)
             .Include(u => u.AllowedCompanies)

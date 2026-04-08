@@ -73,7 +73,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
                 CompanyName = companyDb,
                 SessionId = sessionId,
                 RouteId = routeId,
-                ExpiresAt = _clock.UtcNow.AddMinutes(_options.SessionDurationMinutes),
+                ExpiresAt = _clock.Now.AddMinutes(_options.SessionDurationMinutes),
                 SapUserName = sapUserName
             };
 
@@ -131,7 +131,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
             if (doc.RootElement.TryGetProperty("SessionId", out var sid))
                 return sid.GetString() ?? string.Empty;
         }
-        catch { }
+        catch (JsonException) { }
 
         if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
         {
@@ -174,7 +174,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
                 return val.GetString() ?? rawResponse;
             }
         }
-        catch { }
+        catch (JsonException) { }
         return rawResponse;
     }
 }
