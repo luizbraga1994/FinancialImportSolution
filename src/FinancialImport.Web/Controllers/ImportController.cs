@@ -3,6 +3,7 @@ using FinancialImport.Application.Imports;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Infrastructure.Imports;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +58,15 @@ public class ImportController : Controller
         return View();
     }
 
+    [HttpGet]
+    public IActionResult DownloadTemplate(string? layout = "Layout2")
+    {
+        // Only Layout2 has a downloadable template for now.
+        var bytes = ImportTemplateBuilder.BuildLayout2Template();
+        const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        return File(bytes, contentType, "modelo-importacao-layout2.xlsx");
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(10 * 1024 * 1024)] // 10 MB
@@ -95,7 +105,7 @@ public class ImportController : Controller
                 "Iniciando preview do arquivo '{FileName}' ({Size} bytes) para company '{Company}'.",
                 file.FileName, file.Length, _companyContext.CompanyDb);
 
-            var context = await ReadFileAsync(file, cancellationToken);
+            var context = await ImportFileReader.ReadAsync(file, cancellationToken);
             var result = await _importService.PreviewAsync(context, cancellationToken);
 
             if (result.ImportFileId == 0)
@@ -205,49 +215,4 @@ public class ImportController : Controller
         }
     }
 
-    private static async Task<ImportFileContext> ReadFileAsync(IFormFile file, CancellationToken cancellationToken)
-    {
-        await using var stream = file.OpenReadStream();
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken);
-        var fileBytes = ms.ToArray();
-
-        ms.Position = 0;
-        using var reader = new StreamReader(ms);
-        var lines = new List<string>();
-        while (!reader.EndOfStream)
-        {
-            var line = await reader.ReadLineAsync(cancellationToken);
-            if (!string.IsNullOrWhiteSpace(line)) lines.Add(line);
-        }
-
-        if (lines.Count == 0)
-        {
-            return new ImportFileContext { FileName = file.FileName, FileBytes = fileBytes };
-        }
-
-        var delimiter = lines[0].Contains(';') ? ';' : ',';
-        var headers = lines[0].Split(delimiter).Select(h => h.Trim()).ToArray();
-        var rows = new List<ImportRow>();
-
-        foreach (var line in lines.Skip(1))
-        {
-            var values = line.Split(delimiter);
-            var dict = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-            for (var i = 0; i < headers.Length; i++)
-            {
-                var value = i < values.Length ? values[i].Trim() : null;
-                dict[headers[i]] = string.IsNullOrWhiteSpace(value) ? null : value;
-            }
-            rows.Add(new ImportRow(dict));
-        }
-
-        return new ImportFileContext
-        {
-            FileName = file.FileName,
-            FileBytes = fileBytes,
-            Headers = headers,
-            Rows = rows
-        };
-    }
 }
