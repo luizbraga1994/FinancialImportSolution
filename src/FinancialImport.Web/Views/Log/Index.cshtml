@@ -1,0 +1,206 @@
+@model FinancialImport.Web.Controllers.LogIndexViewModel
+@{
+    ViewData["Title"] = "Logs do Sistema";
+    var isSystem = Model.Tab == "system";
+    var isLogin = Model.Tab == "login";
+}
+
+<div class="mb-4">
+    <h5 class="fw-bold mb-1">Logs do Sistema</h5>
+    <p class="text-muted mb-0" style="font-size: 0.85rem;">Auditoria de operacoes e tentativas de login</p>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link @(isSystem ? "active" : "")" asp-action="Index" asp-route-tab="system">
+            <i class="bi bi-journal-text me-1"></i> Sistema
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link @(isLogin ? "active" : "")" asp-action="Index" asp-route-tab="login">
+            <i class="bi bi-key me-1"></i> Login
+        </a>
+    </li>
+</ul>
+
+<div class="card mb-3">
+    <div class="card-body p-3">
+        <form method="get" asp-action="Index" class="row g-2 align-items-end">
+            <input type="hidden" name="tab" value="@Model.Tab" />
+            <div class="col-md-3">
+                <label class="form-label small fw-medium mb-1">Pesquisar</label>
+                <input type="text" name="search" value="@Model.Search" class="form-control form-control-sm" placeholder="Texto, origem, IP..." />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-medium mb-1">
+                    @(isLogin ? "Resultado" : "Nivel")
+                </label>
+                @if (isLogin)
+                {
+                    <select name="level" class="form-select form-select-sm">
+                        <option value="" @(string.IsNullOrEmpty(Model.Level) ? "selected" : "")>Todos</option>
+                        <option value="success" @(Model.Level == "success" ? "selected" : "")>Sucesso</option>
+                        <option value="failure" @(Model.Level == "failure" ? "selected" : "")>Falha</option>
+                    </select>
+                }
+                else
+                {
+                    <select name="level" class="form-select form-select-sm">
+                        <option value="" @(string.IsNullOrEmpty(Model.Level) ? "selected" : "")>Todos</option>
+                        <option value="Information" @(Model.Level == "Information" ? "selected" : "")>Information</option>
+                        <option value="Warning" @(Model.Level == "Warning" ? "selected" : "")>Warning</option>
+                        <option value="Error" @(Model.Level == "Error" ? "selected" : "")>Error</option>
+                        <option value="Critical" @(Model.Level == "Critical" ? "selected" : "")>Critical</option>
+                    </select>
+                }
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-medium mb-1">De</label>
+                <input type="date" name="from" value="@(Model.From?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-medium mb-1">Ate</label>
+                <input type="date" name="to" value="@(Model.To?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
+                    <i class="bi bi-funnel me-1"></i> Filtrar
+                </button>
+                <a asp-action="Index" asp-route-tab="@Model.Tab" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (isLogin && Model.LoginAudits.Count == 0)
+        {
+            <div class="empty-state py-5">
+                <div class="empty-state-icon">
+                    <i class="bi bi-key"></i>
+                </div>
+                <h6 class="empty-state-title">Nenhum registro de login</h6>
+                <p class="empty-state-text">Nao ha tentativas de login para os filtros aplicados</p>
+            </div>
+        }
+        else if (isLogin)
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 small">
+                    <thead>
+                        <tr>
+                            <th>Data/Hora</th>
+                            <th>Login</th>
+                            <th>Usuario</th>
+                            <th>Resultado</th>
+                            <th>IP</th>
+                            <th>Motivo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Model.LoginAudits)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@entry.OccurredAt.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                <td><code>@entry.LoginProvided</code></td>
+                                <td>@(entry.User?.Name ?? "-")</td>
+                                <td>
+                                    @if (entry.Success)
+                                    {
+                                        <span class="badge bg-success-subtle text-success-emphasis">
+                                            <i class="bi bi-check-circle me-1"></i>Sucesso
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger-emphasis">
+                                            <i class="bi bi-x-circle me-1"></i>Falha
+                                        </span>
+                                    }
+                                </td>
+                                <td><code>@(entry.IpAddress ?? "-")</code></td>
+                                <td class="text-muted">@(entry.FailureReason ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else if (!isLogin && Model.SystemLogs.Count == 0)
+        {
+            <div class="empty-state py-5">
+                <div class="empty-state-icon">
+                    <i class="bi bi-journal-text"></i>
+                </div>
+                <h6 class="empty-state-title">Nenhum log do sistema</h6>
+                <p class="empty-state-text">Nao ha registros para os filtros aplicados</p>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 small">
+                    <thead>
+                        <tr>
+                            <th>Data/Hora</th>
+                            <th>Nivel</th>
+                            <th>Origem</th>
+                            <th>Mensagem</th>
+                            <th>Base</th>
+                            <th>Correlacao</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in Model.SystemLogs)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@log.OccurredAt.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                <td>
+                                    <span class="badge @(log.Level == "Error" || log.Level == "Critical" ? "bg-danger-subtle text-danger-emphasis" : log.Level == "Warning" ? "bg-warning-subtle text-warning-emphasis" : log.Level == "Information" ? "bg-info-subtle text-info-emphasis" : "bg-secondary-subtle text-secondary-emphasis")">
+                                        <i class="bi @(log.Level == "Error" || log.Level == "Critical" ? "bi-exclamation-octagon" : log.Level == "Warning" ? "bi-exclamation-triangle" : log.Level == "Information" ? "bi-info-circle" : "bi-dot") me-1"></i>@log.Level
+                                    </span>
+                                </td>
+                                <td><code>@log.Source</code></td>
+                                <td>@log.Message</td>
+                                <td><code>@(log.CompanyDb ?? "-")</code></td>
+                                <td><code class="text-muted">@(log.CorrelationId ?? "-")</code></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+
+    @if (Model.TotalPages > 1)
+    {
+        <div class="card-footer bg-white d-flex align-items-center justify-content-between">
+            <span class="text-muted small">
+                Pagina @Model.Page de @Model.TotalPages &mdash; @Model.TotalCount registros
+            </span>
+            <div class="btn-group btn-group-sm">
+                @if (Model.Page > 1)
+                {
+                    <a class="btn btn-light" asp-action="Index"
+                       asp-route-tab="@Model.Tab" asp-route-level="@Model.Level" asp-route-search="@Model.Search"
+                       asp-route-from="@(Model.From?.ToString("yyyy-MM-dd"))" asp-route-to="@(Model.To?.ToString("yyyy-MM-dd"))"
+                       asp-route-page="@(Model.Page - 1)">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                }
+                @if (Model.Page < Model.TotalPages)
+                {
+                    <a class="btn btn-light" asp-action="Index"
+                       asp-route-tab="@Model.Tab" asp-route-level="@Model.Level" asp-route-search="@Model.Search"
+                       asp-route-from="@(Model.From?.ToString("yyyy-MM-dd"))" asp-route-to="@(Model.To?.ToString("yyyy-MM-dd"))"
+                       asp-route-page="@(Model.Page + 1)">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                }
+            </div>
+        </div>
+    }
+</div>

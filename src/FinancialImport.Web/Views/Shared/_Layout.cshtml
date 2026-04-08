@@ -41,13 +41,13 @@
                 <a href="@Url.Action("Index","User")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "User" ? "active" : "")">
                     <i class="bi bi-people"></i><span>Usuarios</span>
                 </a>
+                <a href="@Url.Action("Index","Profile")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Profile" ? "active" : "")">
+                    <i class="bi bi-shield-lock"></i><span>Perfis</span>
+                </a>
+                <a href="@Url.Action("Index","Log")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Log" ? "active" : "")">
+                    <i class="bi bi-journal-text"></i><span>Logs</span>
+                </a>
             }
-            <a href="#" class="sidebar-link disabled">
-                <i class="bi bi-shield-lock"></i><span>Perfis</span>
-            </a>
-            <a href="#" class="sidebar-link disabled">
-                <i class="bi bi-journal-text"></i><span>Logs</span>
-            </a>
         </nav>
 
         <div class="sidebar-footer">
