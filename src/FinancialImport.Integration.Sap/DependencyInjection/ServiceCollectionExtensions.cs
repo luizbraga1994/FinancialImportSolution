@@ -21,9 +21,12 @@ public static class ServiceCollectionExtensions
             client.BaseAddress = new Uri(options.BaseUrl);
             client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
             client.DefaultRequestHeaders.Add("Accept", "application/json");
-        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        }).ConfigurePrimaryHttpMessageHandler(() =>
         {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            var handler = new HttpClientHandler();
+            if (options.IgnoreSslErrors)
+                handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            return handler;
         });
 
         services.AddScoped<ISapCompanySessionService, SapCompanySessionService>();

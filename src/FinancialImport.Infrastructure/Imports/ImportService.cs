@@ -146,7 +146,10 @@ public sealed class ImportService : IImportService
             ImportFileId = importFileId,
             LayoutDetected = parser.LayoutName,
             Lines = parsed,
-            Errors = errors.Distinct().ToArray()
+            Errors = errors.Distinct().ToArray(),
+            ValidLines = importFile.ValidLines,
+            InvalidLines = importFile.InvalidLines,
+            DuplicatedLines = importFile.DuplicatedLines
         };
     }
 
@@ -178,74 +181,113 @@ public sealed class ImportService : IImportService
 
         int imported = 0, duplicated = 0, invalid = 0, sapErrors = 0;
 
-        foreach (var line in validLines)
-        {
-            try
-            {
-                int? bplId = ResolveBplId(line, importFile, branchMappings);
+        // Group by Reference (= Observacao for Layout2, REFERENCIA for Layout1).
+        // Each unique group becomes ONE SAP JournalEntry with multiple JournalEntryLines.
+        var groups = validLines
+            .GroupBy(l => l.Reference ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-                var journalEntry = new SapJournalEntry
+        _logger.LogInformation(
+            "Processando arquivo {FileId}: {LineCount} linhas agrupadas em {GroupCount} lancamentos SAP.",
+            importFileId, validLines.Count, groups.Count);
+
+        try
+        {
+            foreach (var group in groups)
+            {
+                var groupLines = group.ToList();
+                var firstLine = groupLines[0];
+
+                try
                 {
-                    ReferenceDate = line.PostingDate,
-                    DueDate = line.DueDate,
-                    TaxDate = line.DocumentDate,
-                    Memo = line.Reference,
-                    Reference = line.Reference,
-                    BPLID = bplId,
-                    JournalEntryLines = new List<SapJournalEntryLine>
+                    int? bplId = ResolveBplId(firstLine, importFile, branchMappings);
+
+                    var journalEntry = new SapJournalEntry
                     {
-                        new()
+                        ReferenceDate = firstLine.PostingDate,
+                        DueDate = firstLine.DueDate,
+                        TaxDate = firstLine.DocumentDate,
+                        Memo = Truncate(firstLine.Reference, 50),
+                        Reference = Truncate(firstLine.Reference, 27),
+                        BPLID = bplId,
+                        JournalEntryLines = new List<SapJournalEntryLine>()
+                    };
+
+                    // Each import line contributes a balanced debit/credit pair
+                    // (conta contabil vs conta contrapartida).
+                    foreach (var line in groupLines)
+                    {
+                        journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
                         {
                             AccountCode = line.AccountCode,
                             Debit = line.DebitAmount ?? 0,
                             Credit = line.CreditAmount ?? 0,
-                            LineMemo = line.LineMemo
-                        },
-                        new()
+                            LineMemo = Truncate(line.LineMemo, 50)
+                        });
+                        journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
                         {
                             AccountCode = line.ContraAccountCode,
                             Debit = line.CreditAmount ?? 0,
                             Credit = line.DebitAmount ?? 0,
-                            LineMemo = line.LineMemo
+                            LineMemo = Truncate(line.LineMemo, 50)
+                        });
+                    }
+
+                    var result = await _sapJournalEntryService.CreateJournalEntryAsync(sapSession, journalEntry, cancellationToken);
+
+                    if (result.Success)
+                    {
+                        int? docEntry = ExtractDocEntry(result.RawResponse);
+                        foreach (var line in groupLines)
+                        {
+                            line.Status = ImportLineStatus.Imported;
+                            line.SapReturnMessage = "OK";
+                            line.SapDocEntry = docEntry;
+                            imported++;
                         }
                     }
-                };
-
-                var result = await _sapJournalEntryService.CreateJournalEntryAsync(sapSession, journalEntry, cancellationToken);
-
-                if (result.Success)
-                {
-                    line.Status = ImportLineStatus.Imported;
-                    line.SapReturnMessage = "OK";
-                    TryExtractDocEntry(result.RawResponse, line);
-                    imported++;
+                    else
+                    {
+                        foreach (var line in groupLines)
+                        {
+                            line.Status = ImportLineStatus.SapError;
+                            line.SapReturnMessage = result.ErrorMessage;
+                            sapErrors++;
+                        }
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    line.Status = ImportLineStatus.SapError;
-                    line.SapReturnMessage = result.ErrorMessage;
-                    sapErrors++;
+                    _logger.LogError(ex,
+                        "Erro ao processar grupo '{Reference}' do arquivo {FileId}",
+                        group.Key, importFileId);
+                    foreach (var line in groupLines)
+                    {
+                        line.Status = ImportLineStatus.SapError;
+                        line.SapReturnMessage = ex.Message;
+                        sapErrors++;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Erro ao processar linha {LineId} do arquivo {FileId}", line.Id, importFileId);
-                line.Status = ImportLineStatus.SapError;
-                line.SapReturnMessage = ex.Message;
-                sapErrors++;
             }
         }
+        finally
+        {
+            // Always update final status even if cancellation or unexpected error occurs
+            duplicated = importFile.Lines.Count(l => l.Status == ImportLineStatus.Duplicated);
+            invalid = importFile.Lines.Count(l => l.Status == ImportLineStatus.Invalid);
 
-        duplicated = importFile.Lines.Count(l => l.Status == ImportLineStatus.Duplicated);
-        invalid = importFile.Lines.Count(l => l.Status == ImportLineStatus.Invalid);
+            importFile.ImportedLines = imported;
+            importFile.LinesWithError = sapErrors;
+            importFile.DuplicatedLines = duplicated;
+            importFile.InvalidLines = invalid;
 
-        importFile.ImportedLines = imported;
-        importFile.LinesWithError = sapErrors;
-        importFile.DuplicatedLines = duplicated;
-        importFile.InvalidLines = invalid;
-        importFile.Status = sapErrors == 0 && invalid == 0 ? ImportStatus.Completed : ImportStatus.Failed;
+            if (sapErrors > 0 || invalid > 0)
+                importFile.Status = imported > 0 ? ImportStatus.PartiallyCompleted : ImportStatus.Failed;
+            else
+                importFile.Status = ImportStatus.Completed;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveChangesAsync(CancellationToken.None);
+        }
 
         return new ImportProcessResult
         {
@@ -271,18 +313,28 @@ public sealed class ImportService : IImportService
         return mapping?.BplId;
     }
 
-    private static void TryExtractDocEntry(string? rawResponse, ImportLine line)
+    private static int? ExtractDocEntry(string? rawResponse)
     {
-        if (string.IsNullOrWhiteSpace(rawResponse)) return;
+        if (string.IsNullOrWhiteSpace(rawResponse)) return null;
         try
         {
             using var doc = JsonDocument.Parse(rawResponse);
             if (doc.RootElement.TryGetProperty("DocEntry", out var docEntry))
             {
-                line.SapDocEntry = docEntry.GetInt32();
+                return docEntry.GetInt32();
             }
         }
-        catch { }
+        catch (JsonException)
+        {
+            // Raw response is not valid JSON
+        }
+        return null;
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
     private static string BuildBusinessKey(string companyDb, LancamentoContabilImportado line)

@@ -1,0 +1,168 @@
+@model FinancialImport.Web.Controllers.ProfileFormViewModel
+@{
+    ViewData["Title"] = "Editar Perfil";
+    var groupedPermissions = Model.AvailablePermissions
+        .Select((p, idx) => new { Item = p, Index = idx })
+        .GroupBy(x => x.Item.Group ?? "Outras")
+        .OrderBy(g => g.Key)
+        .ToList();
+}
+
+<div class="mb-4">
+    <a asp-action="Index" class="btn btn-light btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h5 class="fw-bold mb-1">Editar Perfil</h5>
+    <p class="text-muted mb-0" style="font-size: 0.85rem;">Atualize o nome, descricao ou permissoes concedidas</p>
+</div>
+
+<form asp-action="Edit" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" name="Id" value="@Model.Id" />
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <div>@error.ErrorMessage</div>
+                }
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="section-icon section-icon-purple">
+                            <i class="bi bi-shield-check"></i>
+                        </div>
+                        <h6 class="fw-bold mb-0 ms-3">Dados do Perfil</h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Nome <span class="text-danger">*</span></label>
+                        <input type="text" name="Name" value="@Model.Name" class="form-control" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Descricao</label>
+                        <textarea name="Description" class="form-control" rows="3">@Model.Description</textarea>
+                    </div>
+
+                    <hr class="my-3" />
+
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="chkActive" @(Model.IsActive ? "checked" : "") />
+                        <label class="form-check-label fw-medium" for="chkActive">Ativo</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-4">
+                        <div class="d-flex align-items-center">
+                            <div class="section-icon">
+                                <i class="bi bi-key"></i>
+                            </div>
+                            <h6 class="fw-bold mb-0 ms-3">Permissoes</h6>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-light" onclick="togglePermissions(true)">Todas</button>
+                            <button type="button" class="btn btn-sm btn-light" onclick="togglePermissions(false)">Nenhuma</button>
+                        </div>
+                    </div>
+
+                    @if (Model.AvailablePermissions.Count == 0)
+                    {
+                        <div class="text-muted text-center py-3" style="font-size: 0.85rem;">
+                            <i class="bi bi-info-circle me-1"></i>Nenhuma permissao cadastrada no sistema.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="permissions-list">
+                            @foreach (var group in groupedPermissions)
+                            {
+                                <div class="permission-group mb-3">
+                                    <div class="permission-group-title">@group.Key</div>
+                                    @foreach (var entry in group)
+                                    {
+                                        <div class="check-item">
+                                            <input type="hidden" name="AvailablePermissions[@entry.Index].PermissionId" value="@entry.Item.PermissionId" />
+                                            <input type="hidden" name="AvailablePermissions[@entry.Index].Code" value="@entry.Item.Code" />
+                                            <input type="hidden" name="AvailablePermissions[@entry.Index].Name" value="@entry.Item.Name" />
+                                            <input type="hidden" name="AvailablePermissions[@entry.Index].Group" value="@entry.Item.Group" />
+                                            <div class="form-check">
+                                                <input class="form-check-input permission-check" type="checkbox"
+                                                       name="AvailablePermissions[@entry.Index].IsSelected" value="true"
+                                                       id="perm_@entry.Index"
+                                                       @(entry.Item.IsSelected ? "checked" : "") />
+                                                <label class="form-check-label" for="perm_@entry.Index">
+                                                    <span class="fw-medium">@entry.Item.Name</span>
+                                                    <code class="text-muted ms-2" style="font-size: 0.7rem;">@entry.Item.Code</code>
+                                                    @if (!string.IsNullOrWhiteSpace(entry.Item.Description))
+                                                    {
+                                                        <br /><small class="text-muted">@entry.Item.Description</small>
+                                                    }
+                                                </label>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <a asp-action="Index" class="btn btn-light">Cancelar</a>
+        <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check-lg me-1"></i> Salvar Alteracoes
+        </button>
+    </div>
+</form>
+
+<style>
+    .check-item {
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        transition: background 0.15s;
+    }
+    .check-item:hover { background: #f8fafc; }
+    .permissions-list {
+        max-height: 520px;
+        overflow-y: auto;
+    }
+    .permission-group-title {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748b;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid #e8ecf1;
+        margin-bottom: 0.25rem;
+    }
+</style>
+
+@section Scripts {
+<script>
+    function togglePermissions(state) {
+        document.querySelectorAll('.permission-check').forEach(function(cb) {
+            cb.checked = state;
+        });
+    }
+</script>
+}

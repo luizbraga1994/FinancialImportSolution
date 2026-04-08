@@ -68,7 +68,7 @@ public sealed class SapJournalEntryService : ISapJournalEntryService
                 return val.GetString() ?? rawResponse;
             }
         }
-        catch { }
+        catch (JsonException) { }
         return rawResponse;
     }
 }

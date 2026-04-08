@@ -1,0 +1,145 @@
+@{
+    ViewData["Title"] = "Importar Arquivo";
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>@TempData["Error"]</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-end mb-2">
+            <a asp-action="DownloadTemplate" asp-route-layout="Layout2" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-file-earmark-excel me-1"></i> Baixar modelo Layout 2
+            </a>
+        </div>
+        <div class="card border-0">
+            <div class="card-body p-4">
+                <form asp-controller="Import" asp-action="Upload" method="post" enctype="multipart/form-data">
+                    @Html.AntiForgeryToken()
+
+                    <!-- Drop Zone -->
+                    <div class="upload-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">
+                            <i class="bi bi-cloud-arrow-up"></i>
+                        </div>
+                        <h5 class="fw-semibold mb-1">Arraste o arquivo aqui</h5>
+                        <p class="text-muted mb-2">ou clique para selecionar</p>
+                        <span class="badge bg-light text-dark border">.CSV</span>
+                        <span class="badge bg-light text-dark border">.TXT</span>
+                        <span class="badge bg-light text-dark border">.XLSX</span>
+                        <input type="file" id="fileInput" name="file" class="d-none"
+                               accept=".csv,.txt,.xlsx" onchange="handleFileSelect(this)" />
+                    </div>
+
+                    <!-- Selected file info -->
+                    <div id="fileInfo" class="d-none mt-3">
+                        <div class="d-flex align-items-center p-3 bg-light rounded-3">
+                            <div class="file-icon me-3">
+                                <i class="bi bi-file-earmark-text"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold" id="fileName"></div>
+                                <div class="text-muted small" id="fileSize"></div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearFile()">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-end">
+                        <button type="submit" class="btn btn-primary px-4" id="submitBtn" disabled>
+                            <i class="bi bi-send me-2"></i>Enviar Arquivo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card border-0 mt-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Instrucoes</h6>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-start">
+                            <span class="badge bg-primary rounded-circle me-2 mt-1">1</span>
+                            <div>
+                                <div class="fw-semibold small">Selecione o arquivo</div>
+                                <div class="text-muted small">Formatos: CSV, TXT ou XLSX</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-start">
+                            <span class="badge bg-primary rounded-circle me-2 mt-1">2</span>
+                            <div>
+                                <div class="fw-semibold small">Validacao automatica</div>
+                                <div class="text-muted small">O layout sera detectado automaticamente</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex align-items-start">
+                            <span class="badge bg-primary rounded-circle me-2 mt-1">3</span>
+                            <div>
+                                <div class="fw-semibold small">Confirme a importacao</div>
+                                <div class="text-muted small">Revise e confirme o envio ao SAP</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+
+    ['dragenter','dragover'].forEach(e => {
+        dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('dragover'); });
+    });
+    ['dragleave','drop'].forEach(e => {
+        dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('dragover'); });
+    });
+    dropzone.addEventListener('drop', ev => {
+        fileInput.files = ev.dataTransfer.files;
+        handleFileSelect(fileInput);
+    });
+
+    function handleFileSelect(input) {
+        if (input.files.length > 0) {
+            const f = input.files[0];
+            document.getElementById('fileName').textContent = f.name;
+            document.getElementById('fileSize').textContent = formatSize(f.size);
+            document.getElementById('fileInfo').classList.remove('d-none');
+            document.getElementById('submitBtn').disabled = false;
+            dropzone.classList.add('has-file');
+        }
+    }
+    function clearFile() {
+        fileInput.value = '';
+        document.getElementById('fileInfo').classList.add('d-none');
+        document.getElementById('submitBtn').disabled = true;
+        dropzone.classList.remove('has-file');
+    }
+    function formatSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+</script>
+}

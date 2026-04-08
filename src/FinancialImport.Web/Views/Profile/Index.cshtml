@@ -1,0 +1,128 @@
+@model List<FinancialImport.Domain.Entities.Profile>
+@{
+    ViewData["Title"] = "Perfis";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h5 class="fw-bold mb-1">Gerenciamento de Perfis</h5>
+        <p class="text-muted mb-0" style="font-size: 0.85rem;">Defina perfis e quais permissoes cada um concede</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> Novo Perfil
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (Model.Count == 0)
+        {
+            <div class="empty-state py-5">
+                <div class="empty-state-icon">
+                    <i class="bi bi-shield-lock"></i>
+                </div>
+                <h6 class="empty-state-title">Nenhum perfil cadastrado</h6>
+                <p class="empty-state-text">Crie o primeiro perfil para agrupar permissoes</p>
+                <a asp-action="Create" class="btn btn-sm btn-primary mt-2">
+                    <i class="bi bi-plus-lg me-1"></i> Criar Perfil
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Perfil</th>
+                            <th>Descricao</th>
+                            <th>Permissoes</th>
+                            <th>Usuarios</th>
+                            <th>Status</th>
+                            <th class="text-end">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var profile in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="profile-avatar">
+                                            <i class="bi bi-shield-check"></i>
+                                        </div>
+                                        <div class="fw-semibold" style="font-size: 0.875rem;">@profile.Name</div>
+                                    </div>
+                                </td>
+                                <td style="font-size: 0.85rem;">@(profile.Description ?? "-")</td>
+                                <td>
+                                    @if (profile.Permissions.Any())
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary-emphasis">
+                                            <i class="bi bi-key me-1"></i>@profile.Permissions.Count permiss@(profile.Permissions.Count > 1 ? "oes" : "ao")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" style="font-size: 0.8rem;">Nenhuma</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (profile.Users.Any())
+                                    {
+                                        <span class="badge bg-info-subtle text-info-emphasis">
+                                            <i class="bi bi-people me-1"></i>@profile.Users.Count
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" style="font-size: 0.8rem;">0</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (profile.IsActive)
+                                    {
+                                        <span class="badge bg-success-subtle text-success-emphasis">Ativo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Inativo</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <a asp-action="Edit" asp-route-id="@profile.Id" class="btn btn-sm btn-light" title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form asp-action="ToggleActive" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@profile.Id" />
+                                            <button type="submit" class="btn btn-sm btn-light" title="@(profile.IsActive ? "Desativar" : "Ativar")">
+                                                <i class="bi @(profile.IsActive ? "bi-toggle-on text-success" : "bi-toggle-off text-muted")"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .profile-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: #ede9fe;
+        color: #7c3aed;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+</style>

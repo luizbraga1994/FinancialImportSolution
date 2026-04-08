@@ -1,4 +1,4 @@
-﻿using FinancialImport.Application.Sap;
+using FinancialImport.Application.Sap;
 using FinancialImport.Integration.Hana.Options;
 using FinancialImport.Integration.Hana.Services;
 using Microsoft.Extensions.Configuration;
@@ -10,7 +10,7 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddHanaIntegration(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<HanaOptions>(configuration.GetSection("Hana"));
+        services.Configure<HanaOptions>(configuration.GetSection("HanaDbConnection"));
         services.AddScoped<ISapCompanyDiscoveryService, SapCompanyDiscoveryService>();
         return services;
     }

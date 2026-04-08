@@ -1,4 +1,4 @@
-﻿using System.Data.Common;
+using System.Data.Common;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Integration.Hana.Options;
@@ -20,14 +20,16 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
 
     public async Task<IReadOnlyCollection<SapCompanyInfo>> GetAvailableCompaniesAsync(CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_options.ConnectionString))
+        if (string.IsNullOrWhiteSpace(_options.Server))
         {
-            throw new InvalidOperationException("Hana:ConnectionString não configurado.");
+            throw new InvalidOperationException("HanaDbConnection:Server não configurado.");
         }
 
+        var connectionString = _options.BuildConnectionString();
+
         const string sql = @"
-            SELECT DBNAME, COMPANYNAME, SERVER, IFNULL(ACTIVE, 'Y') AS ACTIVE
-            FROM SBOCOMMON.SRGC";
+            SELECT ""dbName"", ""cmpName"", ""cmpStatus""
+            FROM ""SBOCOMMON"".""SRGC""";
 
         var results = new List<SapCompanyInfo>();
 
@@ -41,21 +43,23 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
                 throw new InvalidOperationException("Não foi possível criar conexão HANA.");
             }
 
-            connection.ConnectionString = _options.ConnectionString;
+            connection.ConnectionString = connectionString;
             await connection.OpenAsync(cancellationToken);
 
             await using var command = connection.CreateCommand();
             command.CommandText = sql;
+            command.CommandTimeout = _options.CommandTimeout;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
+                var status = reader.IsDBNull(2) ? null : reader.GetString(2);
                 results.Add(new SapCompanyInfo
                 {
                     CompanyDb = reader.GetString(0),
-                    CompanyName = reader.GetString(1),
-                    Server = reader.IsDBNull(2) ? null : reader.GetString(2),
-                    IsActive = reader.GetString(3).Equals("Y", StringComparison.OrdinalIgnoreCase)
+                    CompanyName = reader.IsDBNull(1) ? reader.GetString(0) : reader.GetString(1),
+                    Server = null,
+                    IsActive = status == null || !status.Equals("N", StringComparison.OrdinalIgnoreCase)
                 });
             }
         }
@@ -76,7 +80,6 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
         }
         catch
         {
-            // tentativa de registro dinâmico via reflexão
             try
             {
                 if (!string.IsNullOrWhiteSpace(_options.ProviderAssemblyPath))

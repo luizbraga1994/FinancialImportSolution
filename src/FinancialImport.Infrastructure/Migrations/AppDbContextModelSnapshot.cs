@@ -188,6 +188,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
             b.Property<long>("PermissionId").HasColumnType("bigint").HasColumnName("PermissaoId");
             b.Property<long>("ProfileId").HasColumnType("bigint").HasColumnName("PerfilId");
             b.HasKey("Id");
+            b.HasIndex("PermissionId");
             b.HasIndex("ProfileId", "PermissionId").IsUnique();
             b.ToTable("PerfilPermissao", (string)null);
         });
@@ -263,6 +264,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
             b.Property<long>("ProfileId").HasColumnType("bigint").HasColumnName("PerfilId");
             b.Property<long>("UserId").HasColumnType("bigint").HasColumnName("UsuarioId");
             b.HasKey("Id");
+            b.HasIndex("ProfileId");
             b.HasIndex("UserId", "ProfileId").IsUnique();
             b.ToTable("UsuarioPerfil", (string)null);
         });

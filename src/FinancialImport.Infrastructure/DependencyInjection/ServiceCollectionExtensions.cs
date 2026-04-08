@@ -21,10 +21,11 @@ public static class ServiceCollectionExtensions
         services.Configure<MySqlOptions>(configuration.GetSection("MySql"));
         services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
 
-        var connectionString = configuration.GetSection("MySql").GetValue<string>("ConnectionString");
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? configuration.GetSection("MySql").GetValue<string>("ConnectionString");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
-            throw new InvalidOperationException("MySql:ConnectionString nao configurado.");
+            throw new InvalidOperationException("ConnectionStrings:DefaultConnection ou MySql:ConnectionString nao configurado.");
         }
 
         services.AddDbContext<AppDbContext>(options =>

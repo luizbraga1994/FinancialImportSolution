@@ -39,17 +39,23 @@ public sealed class Layout1Parser : ILayoutImportParser
             result.Add(new LancamentoContabilImportado
             {
                 LayoutOrigem = LayoutName,
+                SeqLancamento = row.Get("SEQLANC"),
                 Referencia = row.GetRequired("REFERENCIA"),
                 DataLancamento = row.GetDate("DTLANCCONTABIL"),
-                DataVencimento = row.GetDate("DTLANCCONTABIL"),
-                DataDocumento = row.GetDate("DTLANCCONTABIL"),
+                DataVencimento = row.GetDate("DTVENCTO") != DateTime.MinValue
+                    ? row.GetDate("DTVENCTO")
+                    : row.GetDate("DTLANCCONTABIL"),
+                DataDocumento = row.GetDate("DTDOCUMENTO") != DateTime.MinValue
+                    ? row.GetDate("DTDOCUMENTO")
+                    : row.GetDate("DTLANCCONTABIL"),
                 ContaContabil = row.GetRequired("CODCONTACONTABIL"),
                 ContaContrapartida = row.GetRequired("CODCONTACONTRA"),
                 Valor = valor,
-                ValorCredito = credito,
-                ValorDebito = debito,
+                ValorCredito = credito > 0 ? credito : (decimal?)null,
+                ValorDebito = debito > 0 ? debito : (decimal?)null,
                 TipoLanc = tipo,
                 HistoricoLinha = row.GetRequired("HIST"),
+                Filial = row.Get("FILIAL"),
                 CamposOriginais = new Dictionary<string, string?>
                 {
                     ["CODCONTACONTABIL"] = row.Get("CODCONTACONTABIL"),
@@ -58,7 +64,9 @@ public sealed class Layout1Parser : ILayoutImportParser
                     ["VLR"] = row.Get("VLR"),
                     ["CODCONTACONTRA"] = row.Get("CODCONTACONTRA"),
                     ["HIST"] = row.Get("HIST"),
-                    ["TIPOLANC"] = row.Get("TIPOLANC")
+                    ["TIPOLANC"] = row.Get("TIPOLANC"),
+                    ["FILIAL"] = row.Get("FILIAL"),
+                    ["SEQLANC"] = row.Get("SEQLANC")
                 }
             });
         }

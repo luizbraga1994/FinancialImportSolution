@@ -1,0 +1,229 @@
+@model FinancialImport.Web.Controllers.UserFormViewModel
+@{
+    ViewData["Title"] = "Novo Usuario";
+}
+
+<div class="mb-4">
+    <a asp-action="Index" class="btn btn-light btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h5 class="fw-bold mb-1">Novo Usuario</h5>
+    <p class="text-muted mb-0" style="font-size: 0.85rem;">Preencha os dados, selecione os perfis e as bases permitidas</p>
+</div>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <div>@error.ErrorMessage</div>
+                }
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <!-- Left: Basic Info -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="section-icon">
+                            <i class="bi bi-person-badge"></i>
+                        </div>
+                        <h6 class="fw-bold mb-0 ms-3">Dados do Usuario</h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Login <span class="text-danger">*</span></label>
+                        <input type="text" name="Login" value="@Model.Login" class="form-control" placeholder="ex: joao.silva" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Nome Completo <span class="text-danger">*</span></label>
+                        <input type="text" name="Name" value="@Model.Name" class="form-control" placeholder="ex: Joao da Silva" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Email <span class="text-danger">*</span></label>
+                        <input type="email" name="Email" value="@Model.Email" class="form-control" placeholder="ex: joao@empresa.com" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Senha <span class="text-danger">*</span></label>
+                        <input type="password" name="Password" class="form-control" placeholder="Minimo 6 caracteres" required minlength="6" />
+                    </div>
+
+                    <hr class="my-3" />
+
+                    <div class="d-flex flex-wrap gap-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="IsActive" value="true" id="chkActive" @(Model.IsActive ? "checked" : "") />
+                            <label class="form-check-label fw-medium" for="chkActive">Ativo</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" name="IsGlobalAdmin" value="true" id="chkAdmin" @(Model.IsGlobalAdmin ? "checked" : "") onchange="toggleAdminMode(this)" />
+                            <label class="form-check-label fw-medium" for="chkAdmin">Admin Global</label>
+                        </div>
+                    </div>
+                    <p class="text-muted mt-2 mb-0" style="font-size: 0.75rem;">
+                        <i class="bi bi-info-circle me-1"></i>Admin Global tem acesso total a todas as funcionalidades e bases.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Profiles + Companies -->
+        <div class="col-lg-6">
+            <!-- Profiles -->
+            <div class="card mb-4" id="profilesCard">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center mb-4">
+                        <div class="section-icon section-icon-purple">
+                            <i class="bi bi-shield-check"></i>
+                        </div>
+                        <h6 class="fw-bold mb-0 ms-3">Perfis de Acesso</h6>
+                    </div>
+
+                    @if (Model.AvailableProfiles.Count == 0)
+                    {
+                        <div class="text-muted text-center py-3" style="font-size: 0.85rem;">
+                            <i class="bi bi-info-circle me-1"></i>Nenhum perfil cadastrado. Crie perfis primeiro.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="profiles-list">
+                            @for (var i = 0; i < Model.AvailableProfiles.Count; i++)
+                            {
+                                <div class="check-item">
+                                    <input type="hidden" name="AvailableProfiles[@i].ProfileId" value="@Model.AvailableProfiles[i].ProfileId" />
+                                    <input type="hidden" name="AvailableProfiles[@i].Name" value="@Model.AvailableProfiles[i].Name" />
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox"
+                                               name="AvailableProfiles[@i].IsSelected" value="true"
+                                               id="profile_@i"
+                                               @(Model.AvailableProfiles[i].IsSelected ? "checked" : "") />
+                                        <label class="form-check-label" for="profile_@i">
+                                            <span class="fw-medium">@Model.AvailableProfiles[i].Name</span>
+                                            @if (!string.IsNullOrWhiteSpace(Model.AvailableProfiles[i].Description))
+                                            {
+                                                <br /><small class="text-muted">@Model.AvailableProfiles[i].Description</small>
+                                            }
+                                        </label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Companies -->
+            <div class="card" id="companiesCard">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center justify-content-between mb-4">
+                        <div class="d-flex align-items-center">
+                            <div class="section-icon" style="background: #ecfdf5; color: #059669;">
+                                <i class="bi bi-database"></i>
+                            </div>
+                            <h6 class="fw-bold mb-0 ms-3">Bases Permitidas</h6>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-light" onclick="toggleAllCompanies(true)">Todas</button>
+                            <button type="button" class="btn btn-sm btn-light" onclick="toggleAllCompanies(false)">Nenhuma</button>
+                        </div>
+                    </div>
+
+                    @if (Model.AvailableCompanies.Count == 0)
+                    {
+                        <div class="text-muted text-center py-3" style="font-size: 0.85rem;">
+                            <i class="bi bi-info-circle me-1"></i>Nao foi possivel carregar as bases do HANA.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="companies-list">
+                            @for (var i = 0; i < Model.AvailableCompanies.Count; i++)
+                            {
+                                <div class="check-item">
+                                    <input type="hidden" name="AvailableCompanies[@i].CompanyDb" value="@Model.AvailableCompanies[i].CompanyDb" />
+                                    <input type="hidden" name="AvailableCompanies[@i].CompanyName" value="@Model.AvailableCompanies[i].CompanyName" />
+                                    <div class="form-check">
+                                        <input class="form-check-input company-check" type="checkbox"
+                                               name="AvailableCompanies[@i].IsSelected" value="true"
+                                               id="company_@i"
+                                               @(Model.AvailableCompanies[i].IsSelected ? "checked" : "") />
+                                        <label class="form-check-label" for="company_@i">
+                                            <span class="fw-medium">@Model.AvailableCompanies[i].CompanyName</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 mt-4">
+        <a asp-action="Index" class="btn btn-light">Cancelar</a>
+        <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check-lg me-1"></i> Criar Usuario
+        </button>
+    </div>
+</form>
+
+<style>
+    .check-item {
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        transition: background 0.15s;
+    }
+    .check-item:hover {
+        background: #f8fafc;
+    }
+    .profiles-list, .companies-list {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    .admin-disabled {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+</style>
+
+@section Scripts {
+<script>
+    function toggleAdminMode(el) {
+        var profilesCard = document.getElementById('profilesCard');
+        var companiesCard = document.getElementById('companiesCard');
+        if (el.checked) {
+            profilesCard.classList.add('admin-disabled');
+            companiesCard.classList.add('admin-disabled');
+        } else {
+            profilesCard.classList.remove('admin-disabled');
+            companiesCard.classList.remove('admin-disabled');
+        }
+    }
+
+    function toggleAllCompanies(state) {
+        document.querySelectorAll('.company-check').forEach(function(cb) {
+            cb.checked = state;
+        });
+    }
+
+    // Init on load
+    var adminCheck = document.getElementById('chkAdmin');
+    if (adminCheck && adminCheck.checked) {
+        toggleAdminMode(adminCheck);
+    }
+</script>
+}
