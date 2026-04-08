@@ -36,9 +36,12 @@
             <div class="sidebar-divider"></div>
             <div class="sidebar-section-title">Sistema</div>
 
-            <a href="#" class="sidebar-link disabled">
-                <i class="bi bi-people"></i><span>Usuarios</span>
-            </a>
+            @if (User.HasClaim("global_admin", "True") || User.HasClaim("global_admin", "true"))
+            {
+                <a href="@Url.Action("Index","User")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "User" ? "active" : "")">
+                    <i class="bi bi-people"></i><span>Usuarios</span>
+                </a>
+            }
             <a href="#" class="sidebar-link disabled">
                 <i class="bi bi-shield-lock"></i><span>Perfis</span>
             </a>

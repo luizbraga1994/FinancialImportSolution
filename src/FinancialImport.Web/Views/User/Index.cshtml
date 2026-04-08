@@ -1,0 +1,161 @@
+@model List<FinancialImport.Domain.Entities.User>
+@{
+    ViewData["Title"] = "Usuarios";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+        <h5 class="fw-bold mb-1">Gerenciamento de Usuarios</h5>
+        <p class="text-muted mb-0" style="font-size: 0.85rem;">Controle de acesso, perfis e bases permitidas</p>
+    </div>
+    <a asp-action="Create" class="btn btn-primary">
+        <i class="bi bi-plus-lg me-1"></i> Novo Usuario
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        @if (Model.Count == 0)
+        {
+            <div class="empty-state py-5">
+                <div class="empty-state-icon">
+                    <i class="bi bi-people"></i>
+                </div>
+                <h6 class="empty-state-title">Nenhum usuario cadastrado</h6>
+                <p class="empty-state-text">Crie o primeiro usuario para controlar o acesso ao sistema</p>
+                <a asp-action="Create" class="btn btn-sm btn-primary mt-2">
+                    <i class="bi bi-plus-lg me-1"></i> Criar Usuario
+                </a>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Usuario</th>
+                            <th>Login</th>
+                            <th>Email</th>
+                            <th>Perfis</th>
+                            <th>Bases</th>
+                            <th>Status</th>
+                            <th class="text-end">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var user in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="user-avatar @(user.IsGlobalAdmin ? "user-avatar-admin" : "")">
+                                            <i class="bi @(user.IsGlobalAdmin ? "bi-shield-lock-fill" : "bi-person-fill")"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold" style="font-size: 0.875rem;">@user.Name</div>
+                                            @if (user.IsGlobalAdmin)
+                                            {
+                                                <span class="badge bg-warning-subtle text-warning-emphasis" style="font-size: 0.65rem;">Admin Global</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><code style="font-size: 0.8rem;">@user.Login</code></td>
+                                <td style="font-size: 0.85rem;">@user.Email</td>
+                                <td>
+                                    @if (user.IsGlobalAdmin)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis">Acesso Total</span>
+                                    }
+                                    else if (user.Profiles.Any())
+                                    {
+                                        @foreach (var up in user.Profiles.Take(2))
+                                        {
+                                            <span class="badge bg-primary-subtle text-primary-emphasis me-1">@up.Profile?.Name</span>
+                                        }
+                                        @if (user.Profiles.Count > 2)
+                                        {
+                                            <span class="badge bg-light text-muted">+@(user.Profiles.Count - 2)</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" style="font-size: 0.8rem;">Nenhum</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.IsGlobalAdmin)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis">Todas</span>
+                                    }
+                                    else
+                                    {
+                                        var activeCompanies = user.AllowedCompanies.Count(c => c.IsActive);
+                                        if (activeCompanies > 0)
+                                        {
+                                            <span class="badge bg-info-subtle text-info-emphasis">
+                                                <i class="bi bi-database me-1"></i>@activeCompanies base@(activeCompanies > 1 ? "s" : "")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" style="font-size: 0.8rem;">Nenhuma</span>
+                                        }
+                                    }
+                                </td>
+                                <td>
+                                    @if (user.IsBlocked)
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger-emphasis">Bloqueado</span>
+                                    }
+                                    else if (user.IsActive)
+                                    {
+                                        <span class="badge bg-success-subtle text-success-emphasis">Ativo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Inativo</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <a asp-action="Edit" asp-route-id="@user.Id" class="btn btn-sm btn-light" title="Editar">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        <form asp-action="ToggleActive" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@user.Id" />
+                                            <button type="submit" class="btn btn-sm btn-light" title="@(user.IsActive ? "Desativar" : "Ativar")">
+                                                <i class="bi @(user.IsActive ? "bi-toggle-on text-success" : "bi-toggle-off text-muted")"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    .user-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+    .user-avatar-admin {
+        background: #fef3c7;
+        color: #d97706;
+    }
+</style>
