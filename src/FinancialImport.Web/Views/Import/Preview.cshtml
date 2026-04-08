@@ -1,0 +1,262 @@
+@using FinancialImport.Domain.Enums
+@model FinancialImport.Web.Controllers.ImportPreviewViewModel
+@{
+    ViewData["Title"] = "Pre-visualizacao da Importacao";
+    var totalCredit = Model.Groups.Sum(g => g.TotalCredit);
+    var totalDebit = Model.Groups.Sum(g => g.TotalDebit);
+    var canConfirm = Model.ValidLines > 0
+        && Model.Status != ImportStatus.Completed
+        && Model.Status != ImportStatus.PartiallyCompleted
+        && Model.Status != ImportStatus.Processing;
+    var statusBadgeClass = Model.Status == ImportStatus.Completed ? "bg-success-subtle text-success-emphasis"
+        : Model.Status == ImportStatus.PartiallyCompleted ? "bg-warning-subtle text-warning-emphasis"
+        : Model.Status == ImportStatus.Failed ? "bg-danger-subtle text-danger-emphasis"
+        : Model.Status == ImportStatus.Processing ? "bg-info-subtle text-info-emphasis"
+        : "bg-secondary-subtle text-secondary-emphasis";
+}
+
+<div class="mb-4 d-flex align-items-center justify-content-between">
+    <div>
+        <a asp-action="Index" class="btn btn-light btn-sm mb-3">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <h5 class="fw-bold mb-1">Pre-visualizacao da Importacao</h5>
+        <p class="text-muted mb-0" style="font-size: 0.85rem;">
+            Revise as linhas agrupadas por Observacao antes de enviar ao SAP
+        </p>
+    </div>
+    <span class="badge @statusBadgeClass">@Model.Status</span>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show d-flex align-items-center" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>
+        <div>@TempData["Success"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+        <div>@TempData["Error"]</div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <div class="text-muted small fw-medium text-uppercase mb-2">Arquivo</div>
+                <div class="fw-semibold text-truncate" title="@Model.FileName">
+                    <i class="bi bi-file-earmark-text me-2"></i>@Model.FileName
+                </div>
+                <div class="text-muted small mt-2">
+                    Layout: <code>@Model.LayoutDetected</code>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <div class="text-muted small fw-medium text-uppercase mb-2">Linhas</div>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="badge bg-secondary-subtle text-secondary-emphasis">
+                        Total: @Model.TotalLines
+                    </span>
+                    <span class="badge bg-success-subtle text-success-emphasis">
+                        Validas: @Model.ValidLines
+                    </span>
+                    <span class="badge bg-danger-subtle text-danger-emphasis">
+                        Invalidas: @Model.InvalidLines
+                    </span>
+                    <span class="badge bg-warning-subtle text-warning-emphasis">
+                        Duplicadas: @Model.DuplicatedLines
+                    </span>
+                </div>
+                <div class="text-muted small mt-2">
+                    Agrupadas em <strong>@Model.Groups.Count</strong> lancamento(s) SAP
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body p-3">
+                <div class="text-muted small fw-medium text-uppercase mb-2">Totais</div>
+                <div class="d-flex justify-content-between small">
+                    <span class="text-muted">Debito</span>
+                    <span class="fw-semibold">@totalDebit.ToString("N2")</span>
+                </div>
+                <div class="d-flex justify-content-between small">
+                    <span class="text-muted">Credito</span>
+                    <span class="fw-semibold">@totalCredit.ToString("N2")</span>
+                </div>
+                <div class="d-flex justify-content-between small mt-2 pt-2 border-top">
+                    <span class="text-muted">Diferenca</span>
+                    <span class="fw-semibold @(totalDebit == totalCredit ? "text-success" : "text-danger")">
+                        @((totalDebit - totalCredit).ToString("N2"))
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.Errors.Count > 0)
+{
+    <div class="card mb-4 border-danger">
+        <div class="card-body p-3">
+            <h6 class="fw-bold text-danger mb-2">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Erros de validacao (@Model.Errors.Count)
+            </h6>
+            <ul class="mb-0 small text-muted">
+                @foreach (var error in Model.Errors.Take(20))
+                {
+                    <li>@error</li>
+                }
+            </ul>
+            @if (Model.Errors.Count > 20)
+            {
+                <div class="small text-muted mt-2">
+                    ... e mais @(Model.Errors.Count - 20) erro(s).
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<div class="card mb-4">
+    <div class="card-header bg-white d-flex align-items-center justify-content-between">
+        <h6 class="fw-bold mb-0">
+            <i class="bi bi-collection me-1"></i>
+            Lancamentos agrupados por Observacao
+        </h6>
+        <span class="text-muted small">@Model.Groups.Count grupo(s)</span>
+    </div>
+    <div class="card-body p-0">
+        @if (Model.Groups.Count == 0)
+        {
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                Nenhuma linha para pre-visualizar.
+            </div>
+        }
+        else
+        {
+            <div class="accordion accordion-flush" id="groupsAccordion">
+                @for (var i = 0; i < Model.Groups.Count; i++)
+                {
+                    var group = Model.Groups[i];
+                    var collapseId = $"collapse-{i}";
+                    var headingId = $"heading-{i}";
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="@headingId">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#@collapseId"
+                                    aria-expanded="false" aria-controls="@collapseId">
+                                <div class="d-flex align-items-center justify-content-between w-100 me-3">
+                                    <div>
+                                        <code class="fw-semibold">@(string.IsNullOrWhiteSpace(group.Reference) ? "(sem referencia)" : group.Reference)</code>
+                                        <span class="badge bg-light text-dark border ms-2">@group.LineCount linha(s)</span>
+                                    </div>
+                                    <div class="small text-muted d-none d-md-block">
+                                        D: <strong>@group.TotalDebit.ToString("N2")</strong>
+                                        &nbsp;|&nbsp;
+                                        C: <strong>@group.TotalCredit.ToString("N2")</strong>
+                                    </div>
+                                </div>
+                            </button>
+                        </h2>
+                        <div id="@collapseId" class="accordion-collapse collapse"
+                             aria-labelledby="@headingId" data-bs-parent="#groupsAccordion">
+                            <div class="accordion-body p-0">
+                                <div class="table-responsive">
+                                    <table class="table table-sm mb-0 small">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Status</th>
+                                                <th>Data</th>
+                                                <th>Conta</th>
+                                                <th>Contrapartida</th>
+                                                <th class="text-end">Debito</th>
+                                                <th class="text-end">Credito</th>
+                                                <th>Historico</th>
+                                                <th>Filial</th>
+                                                <th>Mensagem</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var line in group.Lines)
+                                            {
+                                                var rowBadge = line.Status == ImportLineStatus.Valid ? "bg-success-subtle text-success-emphasis"
+                                                    : line.Status == ImportLineStatus.Invalid ? "bg-danger-subtle text-danger-emphasis"
+                                                    : line.Status == ImportLineStatus.Duplicated ? "bg-warning-subtle text-warning-emphasis"
+                                                    : line.Status == ImportLineStatus.Imported ? "bg-primary-subtle text-primary-emphasis"
+                                                    : line.Status == ImportLineStatus.SapError ? "bg-danger-subtle text-danger-emphasis"
+                                                    : "bg-secondary-subtle text-secondary-emphasis";
+                                                <tr>
+                                                    <td>
+                                                        <span class="badge @rowBadge">@line.Status</span>
+                                                    </td>
+                                                    <td class="text-nowrap">@line.PostingDate.ToString("dd/MM/yyyy")</td>
+                                                    <td><code>@line.AccountCode</code></td>
+                                                    <td><code>@line.ContraAccountCode</code></td>
+                                                    <td class="text-end">@((line.DebitAmount ?? 0m).ToString("N2"))</td>
+                                                    <td class="text-end">@((line.CreditAmount ?? 0m).ToString("N2"))</td>
+                                                    <td class="text-truncate" style="max-width: 240px;" title="@line.LineMemo">@line.LineMemo</td>
+                                                    <td>@(line.BranchCode ?? "-")</td>
+                                                    <td class="small text-muted">
+                                                        @if (!string.IsNullOrWhiteSpace(line.ValidationMessage))
+                                                        {
+                                                            <span class="text-danger">@line.ValidationMessage</span>
+                                                        }
+                                                        else if (!string.IsNullOrWhiteSpace(line.SapReturnMessage))
+                                                        {
+                                                            <span>@line.SapReturnMessage</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>-</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="d-flex justify-content-end gap-2">
+    <a asp-action="Index" class="btn btn-light">
+        <i class="bi bi-x-lg me-1"></i> Cancelar
+    </a>
+    @if (canConfirm)
+    {
+        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-primary px-4"
+                    onclick="return confirm('Confirmar envio de @Model.ValidLines linha(s) ao SAP em @Model.Groups.Count lancamento(s)?');">
+                <i class="bi bi-send-check me-1"></i> Confirmar Importacao
+            </button>
+        </form>
+    }
+    else
+    {
+        <button type="button" class="btn btn-primary px-4" disabled
+                title="Nao ha linhas validas para confirmar ou ja foi processado.">
+            <i class="bi bi-send-check me-1"></i> Confirmar Importacao
+        </button>
+    }
+</div>

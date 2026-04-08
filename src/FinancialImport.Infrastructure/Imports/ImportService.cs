@@ -181,63 +181,92 @@ public sealed class ImportService : IImportService
 
         int imported = 0, duplicated = 0, invalid = 0, sapErrors = 0;
 
+        // Group by Reference (= Observacao for Layout2, REFERENCIA for Layout1).
+        // Each unique group becomes ONE SAP JournalEntry with multiple JournalEntryLines.
+        var groups = validLines
+            .GroupBy(l => l.Reference ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _logger.LogInformation(
+            "Processando arquivo {FileId}: {LineCount} linhas agrupadas em {GroupCount} lancamentos SAP.",
+            importFileId, validLines.Count, groups.Count);
+
         try
         {
-            foreach (var line in validLines)
+            foreach (var group in groups)
             {
+                var groupLines = group.ToList();
+                var firstLine = groupLines[0];
+
                 try
                 {
-                    int? bplId = ResolveBplId(line, importFile, branchMappings);
+                    int? bplId = ResolveBplId(firstLine, importFile, branchMappings);
 
                     var journalEntry = new SapJournalEntry
                     {
-                        ReferenceDate = line.PostingDate,
-                        DueDate = line.DueDate,
-                        TaxDate = line.DocumentDate,
-                        Memo = line.Reference,
-                        Reference = line.Reference,
+                        ReferenceDate = firstLine.PostingDate,
+                        DueDate = firstLine.DueDate,
+                        TaxDate = firstLine.DocumentDate,
+                        Memo = Truncate(firstLine.Reference, 50),
+                        Reference = Truncate(firstLine.Reference, 27),
                         BPLID = bplId,
-                        JournalEntryLines = new List<SapJournalEntryLine>
-                        {
-                            new()
-                            {
-                                AccountCode = line.AccountCode,
-                                Debit = line.DebitAmount ?? 0,
-                                Credit = line.CreditAmount ?? 0,
-                                LineMemo = line.LineMemo
-                            },
-                            new()
-                            {
-                                AccountCode = line.ContraAccountCode,
-                                Debit = line.CreditAmount ?? 0,
-                                Credit = line.DebitAmount ?? 0,
-                                LineMemo = line.LineMemo
-                            }
-                        }
+                        JournalEntryLines = new List<SapJournalEntryLine>()
                     };
+
+                    // Each import line contributes a balanced debit/credit pair
+                    // (conta contabil vs conta contrapartida).
+                    foreach (var line in groupLines)
+                    {
+                        journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
+                        {
+                            AccountCode = line.AccountCode,
+                            Debit = line.DebitAmount ?? 0,
+                            Credit = line.CreditAmount ?? 0,
+                            LineMemo = Truncate(line.LineMemo, 50)
+                        });
+                        journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
+                        {
+                            AccountCode = line.ContraAccountCode,
+                            Debit = line.CreditAmount ?? 0,
+                            Credit = line.DebitAmount ?? 0,
+                            LineMemo = Truncate(line.LineMemo, 50)
+                        });
+                    }
 
                     var result = await _sapJournalEntryService.CreateJournalEntryAsync(sapSession, journalEntry, cancellationToken);
 
                     if (result.Success)
                     {
-                        line.Status = ImportLineStatus.Imported;
-                        line.SapReturnMessage = "OK";
-                        TryExtractDocEntry(result.RawResponse, line);
-                        imported++;
+                        int? docEntry = ExtractDocEntry(result.RawResponse);
+                        foreach (var line in groupLines)
+                        {
+                            line.Status = ImportLineStatus.Imported;
+                            line.SapReturnMessage = "OK";
+                            line.SapDocEntry = docEntry;
+                            imported++;
+                        }
                     }
                     else
                     {
-                        line.Status = ImportLineStatus.SapError;
-                        line.SapReturnMessage = result.ErrorMessage;
-                        sapErrors++;
+                        foreach (var line in groupLines)
+                        {
+                            line.Status = ImportLineStatus.SapError;
+                            line.SapReturnMessage = result.ErrorMessage;
+                            sapErrors++;
+                        }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Erro ao processar linha {LineId} do arquivo {FileId}", line.Id, importFileId);
-                    line.Status = ImportLineStatus.SapError;
-                    line.SapReturnMessage = ex.Message;
-                    sapErrors++;
+                    _logger.LogError(ex,
+                        "Erro ao processar grupo '{Reference}' do arquivo {FileId}",
+                        group.Key, importFileId);
+                    foreach (var line in groupLines)
+                    {
+                        line.Status = ImportLineStatus.SapError;
+                        line.SapReturnMessage = ex.Message;
+                        sapErrors++;
+                    }
                 }
             }
         }
@@ -284,21 +313,28 @@ public sealed class ImportService : IImportService
         return mapping?.BplId;
     }
 
-    private static void TryExtractDocEntry(string? rawResponse, ImportLine line)
+    private static int? ExtractDocEntry(string? rawResponse)
     {
-        if (string.IsNullOrWhiteSpace(rawResponse)) return;
+        if (string.IsNullOrWhiteSpace(rawResponse)) return null;
         try
         {
             using var doc = JsonDocument.Parse(rawResponse);
             if (doc.RootElement.TryGetProperty("DocEntry", out var docEntry))
             {
-                line.SapDocEntry = docEntry.GetInt32();
+                return docEntry.GetInt32();
             }
         }
         catch (JsonException)
         {
-            // Raw response is not valid JSON - DocEntry will remain null
+            // Raw response is not valid JSON
         }
+        return null;
+    }
+
+    private static string Truncate(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
     private static string BuildBusinessKey(string companyDb, LancamentoContabilImportado line)
