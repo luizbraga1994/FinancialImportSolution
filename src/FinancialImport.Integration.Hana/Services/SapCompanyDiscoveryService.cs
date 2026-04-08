@@ -28,8 +28,8 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
         var connectionString = _options.BuildConnectionString();
 
         const string sql = @"
-            SELECT DBNAME, COMPANYNAME, SERVER, IFNULL(ACTIVE, 'Y') AS ACTIVE
-            FROM SBOCOMMON.SRGC";
+            SELECT ""dbName"", ""cmpName"", ""srvName""
+            FROM ""SBOCOMMON"".""SRGC""";
 
         var results = new List<SapCompanyInfo>();
 
@@ -56,9 +56,9 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
                 results.Add(new SapCompanyInfo
                 {
                     CompanyDb = reader.GetString(0),
-                    CompanyName = reader.GetString(1),
+                    CompanyName = reader.IsDBNull(1) ? reader.GetString(0) : reader.GetString(1),
                     Server = reader.IsDBNull(2) ? null : reader.GetString(2),
-                    IsActive = reader.GetString(3).Equals("Y", StringComparison.OrdinalIgnoreCase)
+                    IsActive = true
                 });
             }
         }
