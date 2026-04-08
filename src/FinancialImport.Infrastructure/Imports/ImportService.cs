@@ -68,7 +68,6 @@ public sealed class ImportService : IImportService
         var fileHash = _hashService.ComputeHash(context.FileBytes);
         _logger.LogInformation("PreviewAsync - FileHash: {FileHash}", fileHash);
 
-        // Verifica se o arquivo ja foi importado, mas permite reprocessamento se for Failed ou Rejected
         var existingFile = await _dbContext.ImportFiles
             .FirstOrDefaultAsync(f => f.CompanyDb == companyDb && f.FileHash == fileHash, cancellationToken);
 
@@ -143,7 +142,7 @@ public sealed class ImportService : IImportService
                 {
                     status = ImportLineStatus.Duplicated;
                     duplicatedCount++;
-                    validCount--; // Remove do count de validas se for duplicada
+                    validCount--;
                     _logger.LogDebug("Linha duplicada detectada. BusinessKeyHash: {BusinessKeyHash}", businessKeyHash);
                 }
 
@@ -186,7 +185,6 @@ public sealed class ImportService : IImportService
 
             if (existingFile != null && (existingFile.Status == ImportStatus.Failed || existingFile.Status == ImportStatus.Rejected))
             {
-                // Reprocessamento: remove linhas antigas e atualiza o arquivo
                 _logger.LogInformation("PreviewAsync - Reprocessando arquivo existente {FileId}", existingFile.Id);
 
                 var oldLines = await _dbContext.ImportLines
@@ -276,8 +274,16 @@ public sealed class ImportService : IImportService
 
         int imported = 0, duplicated = 0, invalid = 0, sapErrors = 0;
 
+        // =============================================
+        // AJUSTE 1: Agrupar por 4 campos
+        // =============================================
         var groups = validLines
-            .GroupBy(l => l.Reference ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(l => new {
+                l.Reference,
+                l.PostingDate,
+                l.DueDate,
+                l.DocumentDate
+            })
             .ToList();
 
         _logger.LogInformation(
@@ -295,12 +301,15 @@ public sealed class ImportService : IImportService
                 {
                     int? bplId = ResolveBplId(firstLine, importFile, branchMappings);
 
+                    // =============================================
+                    // AJUSTE 2: Historico com as 3 datas
+                    // =============================================
                     var journalEntry = new SapJournalEntry
                     {
                         ReferenceDate = firstLine.PostingDate,
                         DueDate = firstLine.DueDate,
                         TaxDate = firstLine.DocumentDate,
-                        Memo = Truncate(firstLine.Reference, 50),
+                        Memo = Truncate($"{firstLine.Reference} - Venc:{firstLine.DueDate:dd/MM/yyyy} - Doc:{firstLine.DocumentDate:dd/MM/yyyy}", 50),
                         Reference = Truncate(firstLine.Reference, 27),
                         BPLID = bplId,
                         JournalEntryLines = new List<SapJournalEntryLine>()
@@ -349,9 +358,12 @@ public sealed class ImportService : IImportService
                 }
                 catch (Exception ex)
                 {
+                    // =============================================
+                    // AJUSTE 3: Log com as 4 chaves
+                    // =============================================
                     _logger.LogError(ex,
-                        "Erro ao processar grupo '{Reference}' do arquivo {FileId}",
-                        group.Key, importFileId);
+                        "Erro ao processar grupo - Ref:{Reference}, DataLanc:{PostingDate}, DataVenc:{DueDate}, DataDoc:{DocumentDate} do arquivo {FileId}",
+                        group.Key.Reference, group.Key.PostingDate, group.Key.DueDate, group.Key.DocumentDate, importFileId);
                     foreach (var line in groupLines)
                     {
                         line.Status = ImportLineStatus.SapError;
