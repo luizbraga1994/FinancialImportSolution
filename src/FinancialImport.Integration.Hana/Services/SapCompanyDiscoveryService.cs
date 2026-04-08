@@ -28,7 +28,7 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
         var connectionString = _options.BuildConnectionString();
 
         const string sql = @"
-            SELECT ""dbName"", ""cmpName"", ""srvName""
+            SELECT ""dbName"", ""cmpName"", ""cmpStatus""
             FROM ""SBOCOMMON"".""SRGC""";
 
         var results = new List<SapCompanyInfo>();
@@ -53,12 +53,13 @@ public sealed class SapCompanyDiscoveryService : ISapCompanyDiscoveryService
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
+                var status = reader.IsDBNull(2) ? null : reader.GetString(2);
                 results.Add(new SapCompanyInfo
                 {
                     CompanyDb = reader.GetString(0),
                     CompanyName = reader.IsDBNull(1) ? reader.GetString(0) : reader.GetString(1),
-                    Server = reader.IsDBNull(2) ? null : reader.GetString(2),
-                    IsActive = true
+                    Server = null,
+                    IsActive = status == null || !status.Equals("N", StringComparison.OrdinalIgnoreCase)
                 });
             }
         }
