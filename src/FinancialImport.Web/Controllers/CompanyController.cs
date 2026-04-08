@@ -1,6 +1,8 @@
 using FinancialImport.Application.Sap;
+using FinancialImport.Integration.Sap.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Web.Controllers;
 
@@ -9,13 +11,16 @@ public class CompanyController : Controller
 {
     private readonly ISapCompanyDiscoveryService _discoveryService;
     private readonly ISapCompanySessionService _sessionService;
+    private readonly SapServiceLayerOptions _sapOptions;
 
     public CompanyController(
         ISapCompanyDiscoveryService discoveryService,
-        ISapCompanySessionService sessionService)
+        ISapCompanySessionService sessionService,
+        IOptions<SapServiceLayerOptions> sapOptions)
     {
         _discoveryService = discoveryService;
         _sessionService = sessionService;
+        _sapOptions = sapOptions.Value;
     }
 
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -26,13 +31,14 @@ public class CompanyController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Select(string companyDb, string sapUser, string sapPassword, CancellationToken cancellationToken)
+    public async Task<IActionResult> Select(string companyDb, CancellationToken cancellationToken)
     {
-        var result = await _sessionService.SignInCompanyAsync(companyDb, sapUser, sapPassword, cancellationToken);
+        var result = await _sessionService.SignInCompanyAsync(
+            companyDb, _sapOptions.UserName, _sapOptions.Password, cancellationToken);
 
         if (!result.Success)
         {
-            ModelState.AddModelError(string.Empty, result.ErrorMessage ?? "Failed to connect to the selected company.");
+            TempData["Error"] = result.ErrorMessage ?? "Falha ao conectar na empresa selecionada.";
             var companies = await _discoveryService.GetAvailableCompaniesAsync(cancellationToken);
             return View(nameof(Index), companies);
         }
