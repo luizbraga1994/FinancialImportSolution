@@ -1,7 +1,9 @@
-﻿<Solution>
-  <Project Path="src/FinancialImport.Api/FinancialImport.Api.csproj" />
+<Solution>
   <Project Path="src/FinancialImport.Web/FinancialImport.Web.csproj" />
   <Project Path="src/FinancialImport.Domain/FinancialImport.Domain.csproj" />
+  <Project Path="src/FinancialImport.Api/FinancialImport.Api.csproj">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
   <Project Path="src/FinancialImport.Application/FinancialImport.Application.csproj" />
   <Project Path="src/FinancialImport.Infrastructure/FinancialImport.Infrastructure.csproj" />
   <Project Path="src/FinancialImport.Integration.Sap/FinancialImport.Integration.Sap.csproj" />
