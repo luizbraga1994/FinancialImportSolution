@@ -1,5 +1,7 @@
+@model List<FinancialImport.Domain.Entities.ImportFile>
 @{
     ViewData["Title"] = "Historico de Importacoes";
+    var companyDb = User.FindFirst("company_db")?.Value ?? "Não selecionada";
 }
 
 <div class="card border-0">
@@ -7,34 +9,88 @@
         <div>
             <h6 class="fw-bold mb-0">Importacoes</h6>
             <small class="text-muted">Historico completo de importacoes realizadas</small>
+            <div class="mt-1">
+                <span class="badge bg-secondary-subtle text-secondary-emphasis">
+                    <i class="bi bi-database me-1"></i>Empresa atual: @companyDb
+                </span>
+            </div>
         </div>
         <a asp-controller="Import" asp-action="Index" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-lg me-1"></i>Nova Importacao
         </a>
     </div>
     <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="ps-4">Data</th>
-                        <th>Arquivo</th>
-                        <th>Layout</th>
-                        <th>Status</th>
-                        <th class="text-center">Linhas</th>
-                        <th class="text-center">Validas</th>
-                        <th class="text-center">Erros</th>
-                        <th class="text-end pe-4">Acoes</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
+        @if (TempData["Error"] != null)
+        {
+            <div class="alert alert-warning m-3">
+                <i class="bi bi-exclamation-triangle me-2"></i>@TempData["Error"]
+            </div>
+        }
 
-        <div class="text-center py-5">
-            <i class="bi bi-folder2-open" style="font-size: 3rem; opacity: 0.2;"></i>
-            <p class="text-muted mt-2 mb-0">Nenhuma importacao encontrada</p>
-            <p class="text-muted small">Realize sua primeira importacao clicando no botao acima</p>
-        </div>
+        @if (Model == null || Model.Count == 0)
+        {
+            <div class="text-center py-5">
+                <i class="bi bi-folder2-open" style="font-size: 3rem; opacity: 0.2;"></i>
+                <p class="text-muted mt-2 mb-0">Nenhuma importacao encontrada para a empresa @companyDb</p>
+                <p class="text-muted small">Realize sua primeira importacao clicando no botao acima</p>
+                <div class="mt-3 small text-muted">
+                    <i class="bi bi-info-circle"></i> Dica: Certifique-se de que uma empresa esteja selecionada no menu Empresas
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-4">Data</th>
+                            <th>Arquivo</th>
+                            <th>Layout</th>
+                            <th>Status</th>
+                            <th class="text-center">Linhas</th>
+                            <th class="text-center">Validas</th>
+                            <th class="text-center">Importadas</th>
+                            <th class="text-center">Erros</th>
+                            <th class="text-end pe-4">Acoes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var import in Model)
+                        {
+                            var statusClass = import.Status.ToString() switch
+                            {
+                                "Completed" => "bg-success-subtle text-success-emphasis",
+                                "PartiallyCompleted" => "bg-warning-subtle text-warning-emphasis",
+                                "Failed" => "bg-danger-subtle text-danger-emphasis",
+                                "Processing" => "bg-info-subtle text-info-emphasis",
+                                _ => "bg-secondary-subtle text-secondary-emphasis"
+                            };
+                            
+                            <tr>
+                                <td class="ps-4 text-nowrap">@import.ImportedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-file-earmark-excel text-success"></i>
+                                        <span class="text-truncate" style="max-width: 200px;" title="@import.OriginalFileName">@import.OriginalFileName</span>
+                                    </div>
+                                </td>
+                                <td><code>@import.LayoutDetected</code></td>
+                                <td><span class="badge @statusClass">@import.Status</span></td>
+                                <td class="text-center">@import.TotalLines</td>
+                                <td class="text-center text-success">@import.ValidLines</td>
+                                <td class="text-center text-primary">@import.ImportedLines</td>
+                                <td class="text-center text-danger">@import.LinesWithError</td>
+                                <td class="text-end pe-4">
+                                    <a asp-controller="Import" asp-action="Preview" asp-route-id="@import.Id" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> Ver
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </div>
 </div>

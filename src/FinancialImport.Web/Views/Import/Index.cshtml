@@ -18,13 +18,13 @@
 <div class="row justify-content-center">
     <div class="col-lg-8">
         <div class="d-flex justify-content-end mb-2">
-            <a asp-action="DownloadTemplate" asp-route-layout="Layout2" class="btn btn-sm btn-outline-primary">
+            <a asp-action="DownloadTemplate" asp-route-layout="Layout2" class="btn btn-sm btn-outline-primary" data-loading data-loading-message="Baixando template...">
                 <i class="bi bi-file-earmark-excel me-1"></i> Baixar modelo Layout 2
             </a>
         </div>
         <div class="card border-0">
             <div class="card-body p-4">
-                <form asp-controller="Import" asp-action="Upload" method="post" enctype="multipart/form-data">
+                <form asp-controller="Import" asp-action="Upload" method="post" enctype="multipart/form-data" data-loading data-loading-message="Enviando arquivo e processando...">
                     @Html.AntiForgeryToken()
 
                     <!-- Drop Zone -->
@@ -105,41 +105,41 @@
 </div>
 
 @section Scripts {
-<script>
-    const dropzone = document.getElementById('dropzone');
-    const fileInput = document.getElementById('fileInput');
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
 
-    ['dragenter','dragover'].forEach(e => {
-        dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('dragover'); });
-    });
-    ['dragleave','drop'].forEach(e => {
-        dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('dragover'); });
-    });
-    dropzone.addEventListener('drop', ev => {
-        fileInput.files = ev.dataTransfer.files;
-        handleFileSelect(fileInput);
-    });
+        ['dragenter','dragover'].forEach(e => {
+            dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('dragover'); });
+        });
+        ['dragleave','drop'].forEach(e => {
+            dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('dragover'); });
+        });
+        dropzone.addEventListener('drop', ev => {
+            fileInput.files = ev.dataTransfer.files;
+            handleFileSelect(fileInput);
+        });
 
-    function handleFileSelect(input) {
-        if (input.files.length > 0) {
-            const f = input.files[0];
-            document.getElementById('fileName').textContent = f.name;
-            document.getElementById('fileSize').textContent = formatSize(f.size);
-            document.getElementById('fileInfo').classList.remove('d-none');
-            document.getElementById('submitBtn').disabled = false;
-            dropzone.classList.add('has-file');
+        function handleFileSelect(input) {
+            if (input.files.length > 0) {
+                const f = input.files[0];
+                document.getElementById('fileName').textContent = f.name;
+                document.getElementById('fileSize').textContent = formatSize(f.size);
+                document.getElementById('fileInfo').classList.remove('d-none');
+                document.getElementById('submitBtn').disabled = false;
+                dropzone.classList.add('has-file');
+            }
         }
-    }
-    function clearFile() {
-        fileInput.value = '';
-        document.getElementById('fileInfo').classList.add('d-none');
-        document.getElementById('submitBtn').disabled = true;
-        dropzone.classList.remove('has-file');
-    }
-    function formatSize(bytes) {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-        return (bytes / 1048576).toFixed(1) + ' MB';
-    }
-</script>
+        function clearFile() {
+            fileInput.value = '';
+            document.getElementById('fileInfo').classList.add('d-none');
+            document.getElementById('submitBtn').disabled = true;
+            dropzone.classList.remove('has-file');
+        }
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+    </script>
 }

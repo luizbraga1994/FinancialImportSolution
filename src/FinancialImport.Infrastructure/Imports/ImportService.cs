@@ -56,101 +56,196 @@ public sealed class ImportService : IImportService
 
     public async Task<ImportPreviewResult> PreviewAsync(ImportFileContext context, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("=== INICIO PREVIEWASYNC ===");
+
         var userId = _userContext.UserId ?? throw new InvalidOperationException("Usuario nao autenticado.");
         var companyDb = _companyContext.CompanyDb ?? throw new InvalidOperationException("Company nao selecionada.");
 
+        _logger.LogInformation("PreviewAsync - UserId: {UserId}, CompanyDb: '{CompanyDb}'", userId, companyDb);
+        _logger.LogInformation("PreviewAsync - FileName: {FileName}, Headers: {Headers}",
+            context.FileName, string.Join(", ", context.Headers.Take(10)));
+
         var fileHash = _hashService.ComputeHash(context.FileBytes);
-        if (await _repository.ExistsFileHashAsync(companyDb, fileHash, cancellationToken))
+        _logger.LogInformation("PreviewAsync - FileHash: {FileHash}", fileHash);
+
+        // Verifica se o arquivo ja foi importado, mas permite reprocessamento se for Failed ou Rejected
+        var existingFile = await _dbContext.ImportFiles
+            .FirstOrDefaultAsync(f => f.CompanyDb == companyDb && f.FileHash == fileHash, cancellationToken);
+
+        if (existingFile != null && existingFile.Status != ImportStatus.Failed && existingFile.Status != ImportStatus.Rejected)
         {
+            _logger.LogWarning("PreviewAsync - Arquivo ja importado para esta company com status {Status}. FileHash: {FileHash}",
+                existingFile.Status, fileHash);
             return new ImportPreviewResult
             {
-                Errors = new[] { "Arquivo ja importado para esta company." }
+                Errors = new[] { $"Arquivo ja importado para esta company. Status atual: {existingFile.Status}. Use a opcao de reprocessamento se necessario." }
             };
         }
 
-        var parser = _layoutResolver.Resolve(context);
-        context.DetectedLayout = parser.LayoutName;
-        var parsed = await parser.ParseAsync(context, cancellationToken);
-
-        var importFile = new ImportFile
+        if (existingFile != null)
         {
-            UserId = userId,
-            CompanyDb = companyDb,
-            OriginalFileName = context.FileName,
-            FileHash = fileHash,
-            LayoutDetected = parser.LayoutName,
-            BranchDefault = context.BranchDefault,
-            UseBranchFromFile = context.UseBranchFromFile,
-            Status = ImportStatus.Validated,
-            TotalLines = parsed.Count,
-            ImportedAt = _clock.Now
-        };
+            _logger.LogInformation("PreviewAsync - Arquivo com status {Status} encontrado. Permitindo reprocessamento.", existingFile.Status);
+        }
 
-        var lines = new List<ImportLine>();
-        var errors = new List<string>();
-
-        foreach (var line in parsed)
+        try
         {
-            var validation = await _validator.ValidateAsync(line, cancellationToken);
-            var status = validation.IsValid ? ImportLineStatus.Valid : ImportLineStatus.Invalid;
-            if (!validation.IsValid)
-            {
-                errors.AddRange(validation.Errors.Select(e => e.ErrorMessage));
-            }
+            var parser = _layoutResolver.Resolve(context);
+            context.DetectedLayout = parser.LayoutName;
+            _logger.LogInformation("PreviewAsync - Layout detectado: {LayoutName}", parser.LayoutName);
 
-            var businessKey = BuildBusinessKey(companyDb, line);
-            var businessKeyHash = _hashService.ComputeHash(businessKey);
-            var isDuplicate = await _repository.ExistsBusinessKeyAsync(companyDb, businessKeyHash, cancellationToken);
-            if (isDuplicate)
-            {
-                status = ImportLineStatus.Duplicated;
-            }
+            var parsed = await parser.ParseAsync(context, cancellationToken);
+            _logger.LogInformation("PreviewAsync - Parse concluido. Total de linhas parseadas: {Count}", parsed.Count);
 
-            var importLine = new ImportLine
+            var importFile = new ImportFile
             {
-                ImportFile = importFile,
-                LineHash = _hashService.ComputeHash(JsonSerializer.Serialize(line)),
-                BusinessKeyHash = businessKeyHash,
-                SeqLancamento = line.SeqLancamento,
-                Reference = line.Referencia,
-                AccountCode = line.ContaContabil,
-                ContraAccountCode = line.ContaContrapartida,
-                PostingDate = line.DataLancamento,
-                DueDate = line.DataVencimento,
-                DocumentDate = line.DataDocumento,
-                Amount = line.Valor,
-                CreditAmount = line.ValorCredito,
-                DebitAmount = line.ValorDebito,
-                LineMemo = line.HistoricoLinha,
-                BranchCode = line.Filial,
+                UserId = userId,
                 CompanyDb = companyDb,
-                Status = status,
-                ValidationMessage = validation.IsValid ? null : string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)),
-                SourceJson = JsonSerializer.Serialize(line)
+                OriginalFileName = context.FileName,
+                FileHash = fileHash,
+                LayoutDetected = parser.LayoutName,
+                BranchDefault = context.BranchDefault,
+                UseBranchFromFile = context.UseBranchFromFile,
+                Status = ImportStatus.Validated,
+                TotalLines = parsed.Count,
+                ImportedAt = _clock.Now
             };
 
-            lines.Add(importLine);
+            var lines = new List<ImportLine>();
+            var errors = new List<string>();
+            var validCount = 0;
+            var invalidCount = 0;
+            var duplicatedCount = 0;
+
+            foreach (var line in parsed)
+            {
+                var validation = await _validator.ValidateAsync(line, cancellationToken);
+                var status = validation.IsValid ? ImportLineStatus.Valid : ImportLineStatus.Invalid;
+
+                if (!validation.IsValid)
+                {
+                    invalidCount++;
+                    foreach (var error in validation.Errors)
+                    {
+                        errors.Add($"Linha: {line.Referencia} - {error.ErrorMessage}");
+                        _logger.LogDebug("Erro de validacao na linha: {Error}", error.ErrorMessage);
+                    }
+                }
+                else
+                {
+                    validCount++;
+                }
+
+                var businessKey = BuildBusinessKey(companyDb, line);
+                var businessKeyHash = _hashService.ComputeHash(businessKey);
+                var isDuplicate = await _repository.ExistsBusinessKeyAsync(companyDb, businessKeyHash, cancellationToken);
+
+                if (isDuplicate)
+                {
+                    status = ImportLineStatus.Duplicated;
+                    duplicatedCount++;
+                    validCount--; // Remove do count de validas se for duplicada
+                    _logger.LogDebug("Linha duplicada detectada. BusinessKeyHash: {BusinessKeyHash}", businessKeyHash);
+                }
+
+                var importLine = new ImportLine
+                {
+                    ImportFile = importFile,
+                    LineHash = _hashService.ComputeHash(JsonSerializer.Serialize(line)),
+                    BusinessKeyHash = businessKeyHash,
+                    SeqLancamento = line.SeqLancamento,
+                    Reference = line.Referencia,
+                    AccountCode = line.ContaContabil,
+                    ContraAccountCode = line.ContaContrapartida,
+                    PostingDate = line.DataLancamento,
+                    DueDate = line.DataVencimento,
+                    DocumentDate = line.DataDocumento,
+                    Amount = line.Valor,
+                    CreditAmount = line.ValorCredito,
+                    DebitAmount = line.ValorDebito,
+                    LineMemo = line.HistoricoLinha,
+                    BranchCode = line.Filial,
+                    CompanyDb = companyDb,
+                    Status = status,
+                    ValidationMessage = validation.IsValid ? null : string.Join("; ", validation.Errors.Select(e => e.ErrorMessage)),
+                    SourceJson = JsonSerializer.Serialize(line)
+                };
+
+                lines.Add(importLine);
+            }
+
+            importFile.ValidLines = validCount;
+            importFile.InvalidLines = invalidCount;
+            importFile.DuplicatedLines = duplicatedCount;
+            importFile.LinesWithError = 0;
+            importFile.ImportedLines = 0;
+
+            _logger.LogInformation("PreviewAsync - Resumo: Total={Total}, Validas={Valid}, Invalidas={Invalid}, Duplicadas={Duplicated}",
+                parsed.Count, validCount, invalidCount, duplicatedCount);
+
+            long importFileId;
+
+            if (existingFile != null && (existingFile.Status == ImportStatus.Failed || existingFile.Status == ImportStatus.Rejected))
+            {
+                // Reprocessamento: remove linhas antigas e atualiza o arquivo
+                _logger.LogInformation("PreviewAsync - Reprocessando arquivo existente {FileId}", existingFile.Id);
+
+                var oldLines = await _dbContext.ImportLines
+                    .Where(l => l.ImportFileId == existingFile.Id)
+                    .ToListAsync(cancellationToken);
+                _dbContext.ImportLines.RemoveRange(oldLines);
+
+                existingFile.UserId = userId;
+                existingFile.OriginalFileName = context.FileName;
+                existingFile.LayoutDetected = parser.LayoutName;
+                existingFile.BranchDefault = context.BranchDefault;
+                existingFile.UseBranchFromFile = context.UseBranchFromFile;
+                existingFile.Status = ImportStatus.Validated;
+                existingFile.TotalLines = parsed.Count;
+                existingFile.ValidLines = validCount;
+                existingFile.InvalidLines = invalidCount;
+                existingFile.DuplicatedLines = duplicatedCount;
+                existingFile.ImportedAt = _clock.Now;
+
+                _dbContext.ImportFiles.Update(existingFile);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+
+                importFileId = existingFile.Id;
+            }
+            else
+            {
+                importFileId = await _repository.AddImportFileAsync(importFile, cancellationToken);
+            }
+
+            await _repository.AddImportLinesAsync(lines, cancellationToken);
+
+            return new ImportPreviewResult
+            {
+                ImportFileId = importFileId,
+                LayoutDetected = parser.LayoutName,
+                Lines = parsed,
+                Errors = errors.Distinct().ToArray(),
+                ValidLines = validCount,
+                InvalidLines = invalidCount,
+                DuplicatedLines = duplicatedCount
+            };
         }
-
-        importFile.ValidLines = lines.Count(l => l.Status == ImportLineStatus.Valid);
-        importFile.InvalidLines = lines.Count(l => l.Status == ImportLineStatus.Invalid);
-        importFile.DuplicatedLines = lines.Count(l => l.Status == ImportLineStatus.Duplicated);
-        importFile.LinesWithError = 0;
-        importFile.ImportedLines = 0;
-
-        var importFileId = await _repository.AddImportFileAsync(importFile, cancellationToken);
-        await _repository.AddImportLinesAsync(lines, cancellationToken);
-
-        return new ImportPreviewResult
+        catch (InvalidOperationException ex)
         {
-            ImportFileId = importFileId,
-            LayoutDetected = parser.LayoutName,
-            Lines = parsed,
-            Errors = errors.Distinct().ToArray(),
-            ValidLines = importFile.ValidLines,
-            InvalidLines = importFile.InvalidLines,
-            DuplicatedLines = importFile.DuplicatedLines
-        };
+            _logger.LogError(ex, "PreviewAsync - Erro de layout: {Message}. Headers do arquivo: {Headers}",
+                ex.Message, string.Join(", ", context.Headers));
+            return new ImportPreviewResult
+            {
+                Errors = new[] { $"Layout nao reconhecido: {ex.Message}. Headers encontrados: {string.Join(", ", context.Headers.Take(15))}" }
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "PreviewAsync - Erro inesperado ao processar arquivo {FileName}", context.FileName);
+            return new ImportPreviewResult
+            {
+                Errors = new[] { $"Erro ao processar arquivo: {ex.Message}" }
+            };
+        }
     }
 
     public async Task<ImportProcessResult> ProcessAsync(long importFileId, CancellationToken cancellationToken = default)
@@ -181,8 +276,6 @@ public sealed class ImportService : IImportService
 
         int imported = 0, duplicated = 0, invalid = 0, sapErrors = 0;
 
-        // Group by Reference (= Observacao for Layout2, REFERENCIA for Layout1).
-        // Each unique group becomes ONE SAP JournalEntry with multiple JournalEntryLines.
         var groups = validLines
             .GroupBy(l => l.Reference ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -213,8 +306,6 @@ public sealed class ImportService : IImportService
                         JournalEntryLines = new List<SapJournalEntryLine>()
                     };
 
-                    // Each import line contributes a balanced debit/credit pair
-                    // (conta contabil vs conta contrapartida).
                     foreach (var line in groupLines)
                     {
                         journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
@@ -272,7 +363,6 @@ public sealed class ImportService : IImportService
         }
         finally
         {
-            // Always update final status even if cancellation or unexpected error occurs
             duplicated = importFile.Lines.Count(l => l.Status == ImportLineStatus.Duplicated);
             invalid = importFile.Lines.Count(l => l.Status == ImportLineStatus.Invalid);
 
@@ -326,7 +416,6 @@ public sealed class ImportService : IImportService
         }
         catch (JsonException)
         {
-            // Raw response is not valid JSON
         }
         return null;
     }

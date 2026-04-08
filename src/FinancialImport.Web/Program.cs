@@ -7,6 +7,7 @@ using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,12 +15,17 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, services, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
-        .ReadFrom.Services(services));
+        .ReadFrom.Services(services)
+        .Enrich.WithProperty("Application", "FinancialImport.Web")
+        .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
+        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+        .WriteTo.File(
+            "logs/web-log-.txt",
+            rollingInterval: RollingInterval.Day,
+            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
 
-// --- MVC ---
 builder.Services.AddControllersWithViews();
 
-// --- Cookie Authentication ---
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
@@ -30,17 +36,36 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnSigningIn = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("Usuario esta fazendo login via cookie");
+                return Task.CompletedTask;
+            },
+            OnSignedIn = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogInformation("Usuario logado com sucesso via cookie");
+                return Task.CompletedTask;
+            },
+            OnValidatePrincipal = context =>
+            {
+                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+                logger.LogDebug("Validando principal do cookie para usuario");
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
 
-// --- HttpContext and Context Accessors ---
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ICompanyContext, HttpCompanyContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ILoginAuditContextAccessor, HttpLoginAuditContextAccessor>();
 
-// --- Layer Registration ---
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSapIntegration(builder.Configuration);
@@ -48,7 +73,6 @@ builder.Services.AddHanaIntegration(builder.Configuration);
 
 var app = builder.Build();
 
-// --- Auto-migrate and Seed ---
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -69,16 +93,38 @@ using (var scope = app.Services.CreateScope())
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
+
+    // Log para debug - verificar empresas no banco
+    var companies = await db.ImportFiles.Select(f => f.CompanyDb).Distinct().ToListAsync();
+    logger.LogInformation("Empresas com importacoes no banco: {Companies}", string.Join(", ", companies));
+
+    var sessions = await db.CompanyUserSessions.Where(s => s.IsActive).ToListAsync();
+    logger.LogInformation("Sessoes SAP ativas: {Count}", sessions.Count);
+    foreach (var session in sessions)
+    {
+        logger.LogInformation("  - UsuarioId: {UserId}, CompanyDb: '{CompanyDb}', ExpiraEm: {ExpiresAt}",
+            session.UserId, session.CompanyDb, session.ExpiresAt);
+    }
 }
 
-// --- Middleware Pipeline ---
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
 
-app.UseSerilogRequestLogging();
+app.UseSerilogRequestLogging(options =>
+{
+    options.IncludeQueryInRequestPath = true;
+    options.GetLevel = (httpContext, elapsed, ex) =>
+    {
+        if (ex != null) return Serilog.Events.LogEventLevel.Error;
+        if (httpContext.Response.StatusCode >= 500) return Serilog.Events.LogEventLevel.Error;
+        if (httpContext.Response.StatusCode >= 400) return Serilog.Events.LogEventLevel.Warning;
+        return Serilog.Events.LogEventLevel.Information;
+    };
+});
+
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();

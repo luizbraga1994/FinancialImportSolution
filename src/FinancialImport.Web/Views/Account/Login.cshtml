@@ -320,6 +320,16 @@
         let userExists = false;
         let dropdownOpen = false;
 
+        document.getElementById('loginForm').addEventListener('submit', function (e) {
+    if (!selectedValue || !userExists) { 
+        e.preventDefault(); 
+        return; 
+    }
+    btnSignin.classList.add('loading');
+    showLoading('Autenticando...');
+});
+
+
         function togglePassword() {
             const icon = document.getElementById('toggleIcon');
             if (passwordInput.type === 'password') { passwordInput.type = 'text'; icon.classList.replace('bi-eye', 'bi-eye-slash'); }
