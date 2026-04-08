@@ -69,8 +69,9 @@ public sealed class ImportApiController : ControllerBase
             ImportFileId = result.ImportFileId,
             LayoutDetected = result.LayoutDetected,
             TotalLines = result.Lines.Count,
-            ValidLines = result.Lines.Count - result.Errors.Count,
-            InvalidLines = result.Errors.Count,
+            ValidLines = result.ValidLines,
+            InvalidLines = result.InvalidLines,
+            DuplicatedLines = result.DuplicatedLines,
             Errors = result.Errors
         }));
     }

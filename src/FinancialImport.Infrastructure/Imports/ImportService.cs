@@ -146,7 +146,10 @@ public sealed class ImportService : IImportService
             ImportFileId = importFileId,
             LayoutDetected = parser.LayoutName,
             Lines = parsed,
-            Errors = errors.Distinct().ToArray()
+            Errors = errors.Distinct().ToArray(),
+            ValidLines = importFile.ValidLines,
+            InvalidLines = importFile.InvalidLines,
+            DuplicatedLines = importFile.DuplicatedLines
         };
     }
 

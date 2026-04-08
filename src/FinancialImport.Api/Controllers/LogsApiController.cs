@@ -27,6 +27,9 @@ public sealed class LogsApiController : ControllerBase
         [FromQuery] string? companyDb = null,
         CancellationToken cancellationToken = default)
     {
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        page = Math.Max(page, 1);
+
         var query = _dbContext.SystemLogs.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(level))
@@ -68,6 +71,9 @@ public sealed class LogsApiController : ControllerBase
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        page = Math.Max(page, 1);
+
         var query = _dbContext.LoginAudits.AsNoTracking().AsQueryable();
 
         var total = await query.CountAsync(cancellationToken);
@@ -96,29 +102,4 @@ public sealed class LogsApiController : ControllerBase
             PageSize = pageSize
         }));
     }
-}
-
-public sealed class SystemLogDto
-{
-    public long Id { get; set; }
-    public DateTime OccurredAt { get; set; }
-    public string Level { get; set; } = string.Empty;
-    public string Source { get; set; } = string.Empty;
-    public long? UserId { get; set; }
-    public string? CompanyDb { get; set; }
-    public string? CorrelationId { get; set; }
-    public string Message { get; set; } = string.Empty;
-    public string? Details { get; set; }
-}
-
-public sealed class LoginAuditDto
-{
-    public long Id { get; set; }
-    public long? UserId { get; set; }
-    public string LoginProvided { get; set; } = string.Empty;
-    public bool Success { get; set; }
-    public string? IpAddress { get; set; }
-    public string? UserAgent { get; set; }
-    public DateTime OccurredAt { get; set; }
-    public string? FailureReason { get; set; }
 }
