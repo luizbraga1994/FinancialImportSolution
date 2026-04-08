@@ -89,19 +89,15 @@
                                     {
                                         <span class="badge bg-warning-subtle text-warning-emphasis">Todas</span>
                                     }
+                                    else if (user.AllowedCompanies.Count(c => c.IsActive) > 0)
+                                    {
+                                        <span class="badge bg-info-subtle text-info-emphasis">
+                                            <i class="bi bi-database me-1"></i>@user.AllowedCompanies.Count(c => c.IsActive) base@(user.AllowedCompanies.Count(c => c.IsActive) > 1 ? "s" : "")
+                                        </span>
+                                    }
                                     else
                                     {
-                                        var activeCompanies = user.AllowedCompanies.Count(c => c.IsActive);
-                                        if (activeCompanies > 0)
-                                        {
-                                            <span class="badge bg-info-subtle text-info-emphasis">
-                                                <i class="bi bi-database me-1"></i>@activeCompanies base@(activeCompanies > 1 ? "s" : "")
-                                            </span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted" style="font-size: 0.8rem;">Nenhuma</span>
-                                        }
+                                        <span class="text-muted" style="font-size: 0.8rem;">Nenhuma</span>
                                     }
                                 </td>
                                 <td>
