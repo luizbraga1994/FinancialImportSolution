@@ -106,7 +106,7 @@
 
         .login-card {
             width: 100%;
-            max-width: 420px;
+            max-width: 440px;
             background: #ffffff;
             border-radius: 16px;
             padding: 2.5rem;
@@ -124,9 +124,32 @@
 
         .login-card .subtitle {
             color: #64748b;
-            font-size: 0.9rem;
+            font-size: 0.875rem;
             margin-bottom: 2rem;
             line-height: 1.5;
+        }
+
+        /* ---- STEP INDICATOR ---- */
+        .step-indicator {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.75rem;
+        }
+
+        .step-dot {
+            flex: 1;
+            height: 3px;
+            border-radius: 3px;
+            background: #e2e8f0;
+            transition: background 0.3s;
+        }
+
+        .step-dot.active {
+            background: #3b82f6;
+        }
+
+        .step-dot.done {
+            background: #22c55e;
         }
 
         /* ---- FORM FIELDS ---- */
@@ -159,7 +182,8 @@
             z-index: 2;
         }
 
-        .input-wrapper input {
+        .input-wrapper input,
+        .input-wrapper select {
             width: 100%;
             height: 48px;
             padding: 0 16px 0 44px;
@@ -171,6 +195,17 @@
             border-radius: 10px;
             outline: none;
             transition: all 0.2s ease;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .input-wrapper select {
+            cursor: pointer;
+            padding-right: 40px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%2394a3b8' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 16px;
         }
 
         .input-wrapper input::placeholder {
@@ -178,23 +213,23 @@
             font-weight: 400;
         }
 
-        .input-wrapper input:hover {
+        .input-wrapper input:hover,
+        .input-wrapper select:hover {
             border-color: #cbd5e1;
-            background: #fff;
+            background-color: #fff;
         }
 
-        .input-wrapper input:focus {
+        .input-wrapper input:focus,
+        .input-wrapper select:focus {
             border-color: #3b82f6;
-            background: #fff;
+            background-color: #fff;
             box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
         }
 
-        .input-wrapper input:focus ~ .input-icon,
-        .input-wrapper input:focus + .input-icon {
-            color: #3b82f6;
+        .input-wrapper select:focus {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='%233b82f6' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
         }
 
-        /* Focus icon color - sibling order fix */
         .input-wrapper:focus-within .input-icon {
             color: #3b82f6;
         }
@@ -214,6 +249,45 @@
 
         .toggle-password:hover {
             color: #64748b;
+        }
+
+        /* ---- SELECT OPTION STYLING ---- */
+        .input-wrapper select option {
+            padding: 8px;
+        }
+
+        .input-wrapper select option:disabled {
+            color: #94a3b8;
+        }
+
+        /* ---- COMPANY COUNT ---- */
+        .company-count {
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 0.375rem;
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+        }
+
+        .company-count i {
+            font-size: 0.7rem;
+        }
+
+        .company-count .dot-green {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            display: inline-block;
+        }
+
+        .company-count .dot-red {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #ef4444;
+            display: inline-block;
         }
 
         /* ---- SUBMIT BUTTON ---- */
@@ -276,6 +350,31 @@
             line-height: 1.5;
         }
 
+        /* Warning for HANA unavailable */
+        .login-warning {
+            background: #fffbeb;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.625rem;
+        }
+
+        .login-warning i {
+            color: #f59e0b;
+            font-size: 1.1rem;
+            margin-top: 1px;
+            flex-shrink: 0;
+        }
+
+        .login-warning span {
+            color: #92400e;
+            font-size: 0.8125rem;
+            line-height: 1.5;
+        }
+
         /* ---- FOOTER ---- */
         .login-footer {
             text-align: center;
@@ -291,7 +390,6 @@
             .login-brand { display: none; }
             .login-form-panel {
                 padding: 1.5rem;
-                background: #f8fafc;
             }
             .login-card {
                 padding: 2rem 1.5rem;
@@ -333,7 +431,22 @@
     <div class="login-form-panel">
         <div class="login-card">
             <h2>Bem-vindo</h2>
-            <p class="subtitle">Entre com suas credenciais para acessar o sistema</p>
+            <p class="subtitle">Entre com suas credenciais e selecione a base para acessar o sistema</p>
+
+            <!-- Step indicator -->
+            <div class="step-indicator">
+                <div class="step-dot active" id="step1"></div>
+                <div class="step-dot" id="step2"></div>
+                <div class="step-dot" id="step3"></div>
+            </div>
+
+            @if (ViewData["CompanyError"] != null)
+            {
+                <div class="login-warning">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>@ViewData["CompanyError"]</span>
+                </div>
+            }
 
             @if (!ViewData.ModelState.IsValid)
             {
@@ -350,10 +463,13 @@
 
             <form asp-controller="Account" asp-action="Login" method="post" id="loginForm">
                 @Html.AntiForgeryToken()
-                <input type="hidden" name="ReturnUrl" value="@ViewData["ReturnUrl"]" />
+                <input type="hidden" name="ReturnUrl" value="@Model?.ReturnUrl" />
 
+                <!-- 1. Login -->
                 <div class="form-group">
-                    <label for="Login">Login</label>
+                    <label for="Login">
+                        <i class="bi bi-1-circle me-1" style="font-size: 0.75rem;"></i> Login
+                    </label>
                     <div class="input-wrapper">
                         <i class="bi bi-person input-icon"></i>
                         <input type="text"
@@ -367,8 +483,45 @@
                     </div>
                 </div>
 
+                <!-- 2. Base/Empresa -->
                 <div class="form-group">
-                    <label for="Password">Senha</label>
+                    <label for="CompanyDb">
+                        <i class="bi bi-2-circle me-1" style="font-size: 0.75rem;"></i> Base / Empresa
+                    </label>
+                    <div class="input-wrapper">
+                        <i class="bi bi-database input-icon"></i>
+                        <select id="CompanyDb" name="CompanyDb" required>
+                            <option value="" disabled @(string.IsNullOrWhiteSpace(Model?.CompanyDb) ? "selected" : "")>Selecione a base...</option>
+                            @if (Model?.Companies != null)
+                            {
+                                @foreach (var company in Model.Companies)
+                                {
+                                    <option value="@company.Value" @(company.Selected ? "selected" : "")>@company.Text</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    @if (Model?.Companies != null && Model.Companies.Any())
+                    {
+                        <div class="company-count">
+                            <span class="dot-green"></span>
+                            @Model.Companies.Count base(s) disponivel(is)
+                        </div>
+                    }
+                    else if (ViewData["CompanyError"] == null)
+                    {
+                        <div class="company-count">
+                            <span class="dot-red"></span>
+                            Nenhuma base disponivel
+                        </div>
+                    }
+                </div>
+
+                <!-- 3. Senha -->
+                <div class="form-group">
+                    <label for="Password">
+                        <i class="bi bi-3-circle me-1" style="font-size: 0.75rem;"></i> Senha
+                    </label>
                     <div class="input-wrapper">
                         <i class="bi bi-lock input-icon"></i>
                         <input type="password"
@@ -390,13 +543,13 @@
                     </span>
                     <span class="btn-loading">
                         <span class="spinner-sm"></span>
-                        Entrando...
+                        Autenticando...
                     </span>
                 </button>
             </form>
 
             <div class="login-footer">
-                &copy; @DateTime.Now.Year Financial Import
+                &copy; @DateTime.Now.Year Financial Import &mdash; SAP Business One
             </div>
         </div>
     </div>
@@ -413,6 +566,29 @@
                 icon.classList.replace('bi-eye-slash', 'bi-eye');
             }
         }
+
+        // Step indicator logic
+        const loginInput = document.getElementById('Login');
+        const companySelect = document.getElementById('CompanyDb');
+        const passwordInput = document.getElementById('Password');
+        const step1 = document.getElementById('step1');
+        const step2 = document.getElementById('step2');
+        const step3 = document.getElementById('step3');
+
+        function updateSteps() {
+            const hasLogin = loginInput.value.trim().length > 0;
+            const hasCompany = companySelect.value.trim().length > 0;
+            const hasPassword = passwordInput.value.trim().length > 0;
+
+            step1.className = 'step-dot ' + (hasLogin ? 'done' : 'active');
+            step2.className = 'step-dot ' + (hasCompany ? 'done' : (hasLogin ? 'active' : ''));
+            step3.className = 'step-dot ' + (hasPassword ? 'done' : (hasCompany ? 'active' : ''));
+        }
+
+        loginInput.addEventListener('input', updateSteps);
+        companySelect.addEventListener('change', updateSteps);
+        passwordInput.addEventListener('input', updateSteps);
+        updateSteps();
 
         document.getElementById('loginForm').addEventListener('submit', function () {
             document.getElementById('btnSignin').classList.add('loading');
