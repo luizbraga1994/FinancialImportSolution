@@ -7,5 +7,6 @@ public enum ImportStatus
     Processing = 2,
     Completed = 3,
     Failed = 4,
-    Rejected = 5
+    Rejected = 5,
+    PartiallyCompleted = 6
 }

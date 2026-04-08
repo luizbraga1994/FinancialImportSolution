@@ -128,10 +128,21 @@ public sealed class DatabaseSeeder
 
     private async Task SeedGlobalAdminAsync(CancellationToken cancellationToken)
     {
-        var adminLogin = _configuration["AdminSeed:Login"] ?? "admin";
-        var adminPassword = _configuration["AdminSeed:Password"] ?? "Admin@123";
-        var adminEmail = _configuration["AdminSeed:Email"] ?? "admin@financialimport.local";
-        var adminName = _configuration["AdminSeed:Name"] ?? "Administrador Global";
+        var adminLogin = _configuration["AdminSeed:Login"];
+        var adminPassword = _configuration["AdminSeed:Password"];
+        var adminEmail = _configuration["AdminSeed:Email"];
+        var adminName = _configuration["AdminSeed:Name"];
+
+        if (string.IsNullOrWhiteSpace(adminLogin) || string.IsNullOrWhiteSpace(adminPassword))
+        {
+            _logger.LogWarning("AdminSeed:Login ou AdminSeed:Password nao configurado. Seed de admin ignorado.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(adminEmail))
+            adminEmail = $"{adminLogin}@financialimport.local";
+        if (string.IsNullOrWhiteSpace(adminName))
+            adminName = "Administrador Global";
 
         if (await _dbContext.Users.AnyAsync(u => u.Login == adminLogin, cancellationToken))
         {

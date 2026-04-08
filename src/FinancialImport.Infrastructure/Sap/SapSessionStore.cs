@@ -26,7 +26,7 @@ public sealed class SapSessionStore : ISapSessionStore
             .OrderByDescending(s => s.LoginAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (session == null || session.ExpiresAt <= _clock.UtcNow)
+        if (session == null || session.ExpiresAt <= _clock.Now)
         {
             return null;
         }

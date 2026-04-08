@@ -130,6 +130,21 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// --- CORS ---
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowWeb", policy =>
+    {
+        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+            ?? new[] { "https://localhost:7000", "http://localhost:5000" };
+
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 // --- HttpContext and Context Accessors ---
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();
@@ -185,5 +200,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", app = "FinancialImport.Api", timestamp = DateTime.UtcNow }));
 
 app.Run();

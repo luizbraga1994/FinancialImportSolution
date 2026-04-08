@@ -48,6 +48,15 @@ public sealed class ImportApiController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(ApiResponse<ImportPreviewResponse>.Fail("Arquivo nao fornecido."));
 
+        const long maxFileSize = 10 * 1024 * 1024; // 10 MB
+        if (file.Length > maxFileSize)
+            return BadRequest(ApiResponse<ImportPreviewResponse>.Fail("Arquivo excede o tamanho maximo de 10 MB."));
+
+        var allowedExtensions = new[] { ".csv", ".txt", ".xlsx" };
+        var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(extension) || !allowedExtensions.Contains(extension))
+            return BadRequest(ApiResponse<ImportPreviewResponse>.Fail("Extensao de arquivo nao permitida. Use CSV, TXT ou XLSX."));
+
         var context = await ReadFileAsync(file, cancellationToken);
         if (!string.IsNullOrWhiteSpace(layout)) context.DetectedLayout = layout;
         context.BranchDefault = branchDefault;
@@ -60,8 +69,9 @@ public sealed class ImportApiController : ControllerBase
             ImportFileId = result.ImportFileId,
             LayoutDetected = result.LayoutDetected,
             TotalLines = result.Lines.Count,
-            ValidLines = result.Lines.Count - result.Errors.Count,
-            InvalidLines = result.Errors.Count,
+            ValidLines = result.ValidLines,
+            InvalidLines = result.InvalidLines,
+            DuplicatedLines = result.DuplicatedLines,
             Errors = result.Errors
         }));
     }
@@ -109,6 +119,9 @@ public sealed class ImportApiController : ControllerBase
         [FromQuery] string? companyDb = null,
         CancellationToken cancellationToken = default)
     {
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        page = Math.Max(page, 1);
+
         var query = _dbContext.ImportFiles.AsNoTracking().AsQueryable();
 
         var currentCompany = companyDb ?? _companyContext.CompanyDb;
@@ -156,6 +169,9 @@ public sealed class ImportApiController : ControllerBase
         [FromQuery] int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
+        pageSize = Math.Clamp(pageSize, 1, 200);
+        page = Math.Max(page, 1);
+
         var query = _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == importFileId);

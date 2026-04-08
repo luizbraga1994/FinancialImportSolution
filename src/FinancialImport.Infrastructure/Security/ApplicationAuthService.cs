@@ -33,10 +33,8 @@ public sealed class ApplicationAuthService : IApplicationAuthService
     {
         var user = await _dbContext.Users
             .Include(u => u.Profiles)
-                .ThenInclude(up => up.Profile)
-            .Include(u => u.Profiles)
-                .ThenInclude(up => up.Profile)
-                    .ThenInclude(p => p!.Permissions)
+                .ThenInclude(up => up.Profile!)
+                    .ThenInclude(p => p.Permissions)
                         .ThenInclude(pp => pp.Permission)
             .Include(u => u.AllowedCompanies)
             .SingleOrDefaultAsync(u => u.Login == login, cancellationToken);

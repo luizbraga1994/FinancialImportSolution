@@ -24,7 +24,11 @@ public sealed class HanaOptions
     /// </summary>
     public string BuildConnectionString()
     {
-        return $"Server={Server};UserID={UserID};Password={Password};CS={Database}" +
+        var serverAddr = !string.IsNullOrWhiteSpace(Port) && !Server.Contains(':')
+            ? $"{Server}:{Port}"
+            : Server;
+
+        return $"Server={serverAddr};UserID={UserID};Password={Password};CS={Database}" +
                $";Pooling=true;MaxPoolSize={MaxPoolSize};MinPoolSize={MinPoolSize}" +
                $";Connection Timeout={ConnectionTimeout};CommandTimeout={CommandTimeout}";
     }

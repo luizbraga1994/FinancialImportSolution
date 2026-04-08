@@ -14,6 +14,9 @@ public sealed class ImportPreviewResult
     public string LayoutDetected { get; init; } = string.Empty;
     public IReadOnlyCollection<LancamentoContabilImportado> Lines { get; init; } = Array.Empty<LancamentoContabilImportado>();
     public IReadOnlyCollection<string> Errors { get; init; } = Array.Empty<string>();
+    public int ValidLines { get; init; }
+    public int InvalidLines { get; init; }
+    public int DuplicatedLines { get; init; }
 }
 
 public sealed class ImportProcessResult
