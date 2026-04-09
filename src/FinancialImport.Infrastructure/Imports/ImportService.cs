@@ -77,8 +77,13 @@ public sealed class ImportService : IImportService
                 existingFile.Status, fileHash);
             return new ImportPreviewResult
             {
-                Errors = new[] { $"Arquivo ja importado para esta company. Status atual: {existingFile.Status}" }
+                Errors = new[] { $"Arquivo ja importado para esta company. Status atual: {existingFile.Status}. Use a opcao de reprocessamento se necessario." }
             };
+        }
+
+        if (existingFile != null)
+        {
+            _logger.LogInformation("PreviewAsync - Arquivo com status {Status} encontrado. Permitindo reprocessamento.", existingFile.Status);
         }
 
         try
@@ -89,14 +94,6 @@ public sealed class ImportService : IImportService
 
             var parsed = await parser.ParseAsync(context, cancellationToken);
             _logger.LogInformation("PreviewAsync - Parse concluido. Total de linhas parseadas: {Count}", parsed.Count);
-
-            // Log da primeira linha para debug
-            if (parsed.Any())
-            {
-                var first = parsed.First();
-                _logger.LogInformation("Primeira linha - Referencia: {Ref}, Conta: {Conta}, Contrapartida: {Contrapartida}, Valor: {Valor}, Data: {Data}",
-                    first.Referencia, first.ContaContabil, first.ContaContrapartida, first.Valor, first.DataLancamento);
-            }
 
             var importFile = new ImportFile
             {
@@ -137,10 +134,8 @@ public sealed class ImportService : IImportService
                     validCount++;
                 }
 
-                // Build business key usando Referencia + ContaContabil + Data + Valor
                 var businessKey = BuildBusinessKey(companyDb, line);
                 var businessKeyHash = _hashService.ComputeHash(businessKey);
-
                 var isDuplicate = await _repository.ExistsBusinessKeyAsync(companyDb, businessKeyHash, cancellationToken);
 
                 if (isDuplicate)
@@ -161,8 +156,8 @@ public sealed class ImportService : IImportService
                     AccountCode = line.ContaContabil,
                     ContraAccountCode = line.ContaContrapartida,
                     PostingDate = line.DataLancamento,
-                    DueDate = line.DataVencimento != DateTime.MinValue ? line.DataVencimento : line.DataLancamento,
-                    DocumentDate = line.DataDocumento != DateTime.MinValue ? line.DataDocumento : line.DataLancamento,
+                    DueDate = line.DataVencimento,
+                    DocumentDate = line.DataDocumento,
                     Amount = line.Valor,
                     CreditAmount = line.ValorCredito,
                     DebitAmount = line.ValorDebito,
@@ -192,49 +187,34 @@ public sealed class ImportService : IImportService
             {
                 _logger.LogInformation("PreviewAsync - Reprocessando arquivo existente {FileId}", existingFile.Id);
 
-                    var oldLines = await _dbContext.ImportLines
-                        .Where(l => l.ImportFileId == existingFile.Id)
-                        .ToListAsync(cancellationToken);
-                    _dbContext.ImportLines.RemoveRange(oldLines);
+                var oldLines = await _dbContext.ImportLines
+                    .Where(l => l.ImportFileId == existingFile.Id)
+                    .ToListAsync(cancellationToken);
+                _dbContext.ImportLines.RemoveRange(oldLines);
 
-                    existingFile.UserId = userId;
-                    existingFile.OriginalFileName = context.FileName;
-                    existingFile.LayoutDetected = parser.LayoutName;
-                    existingFile.BranchDefault = context.BranchDefault;
-                    existingFile.UseBranchFromFile = context.UseBranchFromFile;
-                    existingFile.Status = ImportStatus.Validated;
-                    existingFile.TotalLines = parsed.Count;
-                    existingFile.ValidLines = validCount;
-                    existingFile.InvalidLines = invalidCount;
-                    existingFile.DuplicatedLines = duplicatedCount;
-                    existingFile.ImportedAt = _clock.Now;
+                existingFile.UserId = userId;
+                existingFile.OriginalFileName = context.FileName;
+                existingFile.LayoutDetected = parser.LayoutName;
+                existingFile.BranchDefault = context.BranchDefault;
+                existingFile.UseBranchFromFile = context.UseBranchFromFile;
+                existingFile.Status = ImportStatus.Validated;
+                existingFile.TotalLines = parsed.Count;
+                existingFile.ValidLines = validCount;
+                existingFile.InvalidLines = invalidCount;
+                existingFile.DuplicatedLines = duplicatedCount;
+                existingFile.ImportedAt = _clock.Now;
 
-                    _dbContext.ImportFiles.Update(existingFile);
-                    await _dbContext.SaveChangesAsync(cancellationToken);
-                    importFileId = existingFile.Id;
-                }
-                else
-                {
-                    _dbContext.ImportFiles.Add(importFile);
-                    await _dbContext.SaveChangesAsync(cancellationToken);
-                    importFileId = importFile.Id;
-                }
-
-                await _dbContext.ImportLines.AddRangeAsync(lines, cancellationToken);
+                _dbContext.ImportFiles.Update(existingFile);
                 await _dbContext.SaveChangesAsync(cancellationToken);
 
-                await transaction.CommitAsync(cancellationToken);
+                importFileId = existingFile.Id;
             }
-            catch (DbUpdateException ex)
+            else
             {
-                await transaction.RollbackAsync(cancellationToken);
-                _logger.LogError(ex, "Erro ao salvar no banco de dados. InnerException: {InnerException}",
-                    ex.InnerException?.Message);
-                return new ImportPreviewResult
-                {
-                    Errors = new[] { $"Erro ao salvar no banco de dados: {ex.InnerException?.Message ?? ex.Message}" }
-                };
+                importFileId = await _repository.AddImportFileAsync(importFile, cancellationToken);
             }
+
+            await _repository.AddImportLinesAsync(lines, cancellationToken);
 
             return new ImportPreviewResult
             {
@@ -284,19 +264,15 @@ public sealed class ImportService : IImportService
         importFile.Status = ImportStatus.Processing;
         await _repository.UpdateImportFileAsync(importFile, cancellationToken);
 
-        // Pegar apenas linhas VALID (nao duplicadas, nao invalidas, nao processadas ainda)
         var validLines = importFile.Lines
-            .Where(l => l.Status == ImportLineStatus.Valid)
+            .Where(l => l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError)
             .ToList();
-
-        _logger.LogInformation("Processando arquivo {FileId}: {ValidLineCount} linhas validas para processar",
-            importFileId, validLines.Count);
 
         var branchMappings = await _dbContext.BranchMappings
             .Where(b => b.CompanyDb == importFile.CompanyDb && b.IsActive)
             .ToListAsync(cancellationToken);
 
-        int imported = 0, sapErrors = 0;
+        int imported = 0, duplicated = 0, invalid = 0, sapErrors = 0;
 
         // =============================================
         // AJUSTE 1: Agrupar por 4 campos
@@ -310,19 +286,9 @@ public sealed class ImportService : IImportService
             })
             .ToList();
 
-        _logger.LogInformation("Arquivo {FileId}: {LineCount} linhas agrupadas em {GroupCount} grupos por Referencia",
+        _logger.LogInformation(
+            "Processando arquivo {FileId}: {LineCount} linhas agrupadas em {GroupCount} lancamentos SAP.",
             importFileId, validLines.Count, groups.Count);
-
-        // Se nao tem grupos, tenta agrupar por linha individual
-        if (groups.Count == 0 && validLines.Any())
-        {
-            _logger.LogWarning("Nenhum grupo encontrado por Referencia. Criando grupo individual para cada linha.");
-            groups = validLines.Select((l, idx) => new { l, idx })
-                .GroupBy(x => $"Linha_{x.idx}")
-                .Select(g => g.Select(x => x.l).ToList())
-                .Select(g => (IGrouping<string, ImportLine>)new Grouping<string, ImportLine>($"Grupo_{Guid.NewGuid()}", g))
-                .ToList();
-        }
 
         try
         {
@@ -349,42 +315,22 @@ public sealed class ImportService : IImportService
                         JournalEntryLines = new List<SapJournalEntryLine>()
                     };
 
-                    // Cada linha original vira duas linhas no lancamento (debito e credito)
                     foreach (var line in groupLines)
                     {
-                        // Linha de debito/credito para a conta contabil
-                        if (line.DebitAmount > 0 || line.CreditAmount > 0)
+                        journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
                         {
-                            journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
-                            {
-                                AccountCode = line.AccountCode,
-                                Debit = line.DebitAmount ?? 0,
-                                Credit = line.CreditAmount ?? 0,
-                                LineMemo = Truncate(line.LineMemo, 50)
-                            });
-                        }
-
-                        // Linha de contrapartida
-                        if (line.CreditAmount > 0 || line.DebitAmount > 0)
+                            AccountCode = line.AccountCode,
+                            Debit = line.DebitAmount ?? 0,
+                            Credit = line.CreditAmount ?? 0,
+                            LineMemo = Truncate(line.LineMemo, 50)
+                        });
+                        journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
                         {
-                            journalEntry.JournalEntryLines.Add(new SapJournalEntryLine
-                            {
-                                AccountCode = line.ContraAccountCode,
-                                Debit = line.CreditAmount ?? 0,
-                                Credit = line.DebitAmount ?? 0,
-                                LineMemo = Truncate(line.LineMemo, 50)
-                            });
-                        }
-                    }
-
-                    // Valida se o lancamento esta balanceado
-                    var journalTotalDebit = journalEntry.JournalEntryLines.Sum(l => l.Debit);
-                    var journalTotalCredit = journalEntry.JournalEntryLines.Sum(l => l.Credit);
-
-                    if (Math.Abs(journalTotalDebit - journalTotalCredit) > 0.01m)
-                    {
-                        _logger.LogWarning("Lancamento nao balanceado para grupo '{Reference}': Debit={Debit}, Credit={Credit}, Diferenca={Diff}",
-                            group.Key, journalTotalDebit, journalTotalCredit, journalTotalDebit - journalTotalCredit);
+                            AccountCode = line.ContraAccountCode,
+                            Debit = line.CreditAmount ?? 0,
+                            Credit = line.DebitAmount ?? 0,
+                            LineMemo = Truncate(line.LineMemo, 50)
+                        });
                     }
 
                     var result = await _sapJournalEntryService.CreateJournalEntryAsync(sapSession, journalEntry, cancellationToken);
@@ -399,7 +345,6 @@ public sealed class ImportService : IImportService
                             line.SapDocEntry = docEntry;
                             imported++;
                         }
-                        _logger.LogInformation("Grupo '{Reference}' importado com sucesso. DocEntry: {DocEntry}", group.Key, docEntry);
                     }
                     else
                     {
@@ -409,7 +354,6 @@ public sealed class ImportService : IImportService
                             line.SapReturnMessage = result.ErrorMessage;
                             sapErrors++;
                         }
-                        _logger.LogWarning("Falha ao importar grupo '{Reference}': {Error}", group.Key, result.ErrorMessage);
                     }
                 }
                 catch (Exception ex)
@@ -431,27 +375,28 @@ public sealed class ImportService : IImportService
         }
         finally
         {
+            duplicated = importFile.Lines.Count(l => l.Status == ImportLineStatus.Duplicated);
+            invalid = importFile.Lines.Count(l => l.Status == ImportLineStatus.Invalid);
+
             importFile.ImportedLines = imported;
             importFile.LinesWithError = sapErrors;
+            importFile.DuplicatedLines = duplicated;
+            importFile.InvalidLines = invalid;
 
-            if (sapErrors > 0)
+            if (sapErrors > 0 || invalid > 0)
                 importFile.Status = imported > 0 ? ImportStatus.PartiallyCompleted : ImportStatus.Failed;
-            else if (imported > 0)
-                importFile.Status = ImportStatus.Completed;
             else
-                importFile.Status = ImportStatus.Failed;
+                importFile.Status = ImportStatus.Completed;
 
             await _dbContext.SaveChangesAsync(CancellationToken.None);
-            _logger.LogInformation("Processamento concluido para arquivo {FileId}: Importados={Imported}, ErrosSAP={SapErrors}, Status={Status}",
-                importFileId, imported, sapErrors, importFile.Status);
         }
 
         return new ImportProcessResult
         {
             ImportFileId = importFileId,
             Imported = imported,
-            Duplicated = importFile.DuplicatedLines,
-            Invalid = importFile.InvalidLines,
+            Duplicated = duplicated,
+            Invalid = invalid,
             SapErrors = sapErrors
         };
     }
@@ -497,7 +442,6 @@ public sealed class ImportService : IImportService
     {
         return string.Join("|",
             companyDb,
-            line.Referencia,
             line.ContaContabil,
             line.ContaContrapartida,
             line.DataLancamento.ToString("yyyy-MM-dd"),
@@ -505,22 +449,4 @@ public sealed class ImportService : IImportService
             line.HistoricoLinha,
             line.Filial ?? string.Empty);
     }
-}
-
-// Helper class for grouping
-internal class Grouping<TKey, TElement> : IGrouping<TKey, TElement>
-{
-    private readonly IEnumerable<TElement> _elements;
-
-    public Grouping(TKey key, IEnumerable<TElement> elements)
-    {
-        Key = key;
-        _elements = elements;
-    }
-
-    public TKey Key { get; }
-
-    public IEnumerator<TElement> GetEnumerator() => _elements.GetEnumerator();
-
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 }
