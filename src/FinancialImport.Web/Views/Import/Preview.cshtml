@@ -244,7 +244,7 @@
     </a>
     @if (canConfirm)
     {
-        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline">
+        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Enviando ao SAP...">
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-primary px-4"
                     onclick="return confirm('Confirmar envio de @Model.ValidLines linha(s) ao SAP em @Model.Groups.Count lancamento(s)?');">

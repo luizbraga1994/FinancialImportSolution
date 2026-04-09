@@ -17,6 +17,7 @@ public sealed class ImportPreviewResult
     public int ValidLines { get; init; }
     public int InvalidLines { get; init; }
     public int DuplicatedLines { get; init; }
+    public int TotalLines => Lines.Count; // Adicionado para compatibilidade
 }
 
 public sealed class ImportProcessResult

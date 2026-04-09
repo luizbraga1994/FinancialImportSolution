@@ -55,13 +55,21 @@ public class ImportController : Controller
 
     public IActionResult Index()
     {
+        var companyDb = _companyContext.CompanyDb;
+        _logger.LogInformation("Acessando página de importação. CompanyDb: '{CompanyDb}', Usuario: '{User}'",
+            companyDb, User.Identity?.Name ?? "desconhecido");
+
+        if (string.IsNullOrWhiteSpace(companyDb))
+        {
+            TempData["Error"] = "Nenhuma empresa selecionada. Por favor, selecione uma empresa no menu Empresas antes de importar.";
+        }
+
         return View();
     }
 
     [HttpGet]
     public IActionResult DownloadTemplate(string? layout = "Layout2")
     {
-        // Only Layout2 has a downloadable template for now.
         var bytes = ImportTemplateBuilder.BuildLayout2Template();
         const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
         return File(bytes, contentType, "modelo-importacao-layout2.xlsx");
@@ -69,11 +77,19 @@ public class ImportController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [RequestSizeLimit(10 * 1024 * 1024)] // 10 MB
+    [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<IActionResult> Upload(IFormFile file, CancellationToken cancellationToken)
     {
+        var companyDb = _companyContext.CompanyDb;
+
+        _logger.LogInformation("=== INICIO UPLOAD ===");
+        _logger.LogInformation("CompanyDb atual: '{CompanyDb}'", companyDb);
+        _logger.LogInformation("Usuario: '{User}'", User.Identity?.Name ?? "desconhecido");
+        _logger.LogInformation("Claims do usuario: {Claims}", string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
+
         if (file == null || file.Length == 0)
         {
+            _logger.LogWarning("Upload falhou: Nenhum arquivo selecionado.");
             TempData["Error"] = "Selecione um arquivo para importar.";
             return RedirectToAction(nameof(Index));
         }
@@ -82,6 +98,7 @@ public class ImportController : Controller
         var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(extension) || !allowedExtensions.Contains(extension))
         {
+            _logger.LogWarning("Upload falhou: Extensao '{Extension}' nao permitida para arquivo '{FileName}'.", extension, file.FileName);
             TempData["Error"] = "Extensao de arquivo nao permitida. Use CSV, TXT ou XLSX.";
             return RedirectToAction(nameof(Index));
         }
@@ -89,41 +106,55 @@ public class ImportController : Controller
         const long maxFileSize = 10 * 1024 * 1024;
         if (file.Length > maxFileSize)
         {
+            _logger.LogWarning("Upload falhou: Arquivo '{FileName}' excede o tamanho maximo de 10 MB (tamanho: {Size} bytes).", file.FileName, file.Length);
             TempData["Error"] = "Arquivo excede o tamanho maximo de 10 MB.";
             return RedirectToAction(nameof(Index));
         }
 
-        if (string.IsNullOrWhiteSpace(_companyContext.CompanyDb))
+        if (string.IsNullOrWhiteSpace(companyDb))
         {
-            TempData["Error"] = "Selecione uma empresa antes de importar.";
+            _logger.LogWarning("Upload falhou: Nenhuma empresa selecionada. Usuario deve selecionar uma empresa primeiro.");
+            TempData["Error"] = "Selecione uma empresa antes de importar. Acesse o menu Empresas e escolha uma base.";
             return RedirectToAction("Index", "Company");
         }
 
         try
         {
-            _logger.LogInformation(
-                "Iniciando preview do arquivo '{FileName}' ({Size} bytes) para company '{Company}'.",
-                file.FileName, file.Length, _companyContext.CompanyDb);
+            _logger.LogInformation("Iniciando preview do arquivo '{FileName}' ({Size} bytes) para company '{Company}'.",
+                file.FileName, file.Length, companyDb);
 
             var context = await ImportFileReader.ReadAsync(file, cancellationToken);
+            _logger.LogInformation("Arquivo lido com sucesso. Headers detectados: {Headers}",
+                string.Join(", ", context.Headers.Take(10)));
+
             var result = await _importService.PreviewAsync(context, cancellationToken);
 
             if (result.ImportFileId == 0)
             {
-                // PreviewAsync returned without persisting (e.g. file already imported)
-                TempData["Error"] = result.Errors.FirstOrDefault() ?? "Nao foi possivel processar o arquivo.";
+                var errorMsg = result.Errors.FirstOrDefault() ?? "Nao foi possivel processar o arquivo.";
+                _logger.LogWarning("Preview falhou para arquivo '{FileName}': {Error}. CompanyDb: '{Company}'",
+                    file.FileName, errorMsg, companyDb);
+                TempData["Error"] = errorMsg;
                 return RedirectToAction(nameof(Index));
             }
 
             _logger.LogInformation(
-                "Preview concluido: arquivo {FileId}, layout {Layout}, {Valid} validas, {Invalid} invalidas, {Dup} duplicadas.",
-                result.ImportFileId, result.LayoutDetected, result.ValidLines, result.InvalidLines, result.DuplicatedLines);
+                "Preview concluido com sucesso: arquivo {FileId}, layout {Layout}, Total: {Total}, Validas: {Valid}, Invalidas: {Invalid}, Duplicadas: {Dup}.",
+                result.ImportFileId, result.LayoutDetected, result.TotalLines, result.ValidLines, result.InvalidLines, result.DuplicatedLines);
 
             return RedirectToAction(nameof(Preview), new { id = result.ImportFileId });
         }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Erro de operacao invalida durante preview do arquivo '{FileName}' para company '{Company}'.",
+                file.FileName, companyDb);
+            TempData["Error"] = $"Erro ao processar arquivo: {ex.Message}";
+            return RedirectToAction(nameof(Index));
+        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro durante preview do arquivo '{FileName}'.", file.FileName);
+            _logger.LogError(ex, "Erro inesperado durante preview do arquivo '{FileName}' para company '{Company}'.",
+                file.FileName, companyDb);
             TempData["Error"] = $"Erro ao processar arquivo: {ex.Message}";
             return RedirectToAction(nameof(Index));
         }
@@ -132,6 +163,9 @@ public class ImportController : Controller
     [HttpGet]
     public async Task<IActionResult> Preview(long id, CancellationToken cancellationToken)
     {
+        var companyDb = _companyContext.CompanyDb;
+        _logger.LogInformation("Acessando preview do arquivo {FileId}. CompanyDb atual: '{CompanyDb}'", id, companyDb);
+
         var importFile = await _dbContext.ImportFiles
             .AsNoTracking()
             .Include(f => f.Lines)
@@ -139,9 +173,13 @@ public class ImportController : Controller
 
         if (importFile == null)
         {
+            _logger.LogWarning("Arquivo de importacao {FileId} nao encontrado.", id);
             TempData["Error"] = "Arquivo de importacao nao encontrado.";
             return RedirectToAction(nameof(Index));
         }
+
+        _logger.LogInformation("Preview carregado: arquivo {FileId}, Company: '{CompanyDb}', Status: {Status}, Linhas: {TotalLines}",
+            importFile.Id, importFile.CompanyDb, importFile.Status, importFile.TotalLines);
 
         var groups = importFile.Lines
             .GroupBy(l => l.Reference ?? string.Empty, StringComparer.OrdinalIgnoreCase)
@@ -181,10 +219,15 @@ public class ImportController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Confirm(long id, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Confirmando importacao do arquivo {FileId}.", id);
+
         try
         {
-            _logger.LogInformation("Confirmando importacao do arquivo {FileId}.", id);
             var result = await _importService.ProcessAsync(id, cancellationToken);
+
+            _logger.LogInformation(
+                "Resultado da confirmacao do arquivo {FileId}: Importados: {Imported}, Duplicados: {Duplicated}, Invalidos: {Invalid}, Erros SAP: {SapErrors}",
+                id, result.Imported, result.Duplicated, result.Invalid, result.SapErrors);
 
             if (result.SapErrors == 0 && result.Imported > 0)
             {
@@ -214,5 +257,4 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Preview), new { id });
         }
     }
-
 }
