@@ -1,13 +1,14 @@
 using FinancialImport.Application.DependencyInjection;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
+using FinancialImport.Infrastructure.Observability;
 using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.EntityFrameworkCore;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,11 +19,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
         .ReadFrom.Services(services)
         .Enrich.WithProperty("Application", "FinancialImport.Web")
         .Enrich.WithProperty("Environment", context.HostingEnvironment.EnvironmentName)
-        .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
-        .WriteTo.File(
-            "logs/web-log-.txt",
-            rollingInterval: RollingInterval.Day,
-            outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
+        .Enrich.FromLogContext());
 
 builder.Services.AddControllersWithViews();
 
@@ -32,36 +29,16 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/AccessDenied";
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan = TimeSpan.FromHours(
+            builder.Configuration.GetValue<int?>("Security:Cookie:ExpirationHours") ?? 8);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.Events = new CookieAuthenticationEvents
-        {
-            OnSigningIn = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogInformation("Usuario esta fazendo login via cookie");
-                return Task.CompletedTask;
-            },
-            OnSignedIn = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogInformation("Usuario logado com sucesso via cookie");
-                return Task.CompletedTask;
-            },
-            OnValidatePrincipal = context =>
-            {
-                var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
-                logger.LogDebug("Validando principal do cookie para usuario");
-                return Task.CompletedTask;
-            }
-        };
     });
 
 builder.Services.AddAuthorization();
-
 builder.Services.AddHttpContextAccessor();
+
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ICompanyContext, HttpCompanyContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ILoginAuditContextAccessor, HttpLoginAuditContextAccessor>();
@@ -70,6 +47,15 @@ builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSapIntegration(builder.Configuration);
 builder.Services.AddHanaIntegration(builder.Configuration);
+
+// Background workers (outbox dispatcher + import processor). They
+// honor the Messaging options — if RabbitMQ is disabled they simply
+// stay idle and no broker connection is attempted.
+builder.Services.AddFinancialImportWorkers();
+
+// Health checks — db ping + a placeholder for the broker state.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database");
 
 var app = builder.Build();
 
@@ -80,38 +66,31 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        logger.LogInformation("Aplicando migrations automaticamente...");
+        logger.LogInformation("Applying database migrations...");
         var migrator = db.Database.GetService<IMigrator>();
         await migrator.MigrateAsync();
-        logger.LogInformation("Migrations aplicadas com sucesso.");
+        logger.LogInformation("Migrations applied.");
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "Falha ao aplicar migrations. Tentando EnsureCreated...");
+        logger.LogWarning(ex, "MigrateAsync failed; falling back to EnsureCreated.");
         await db.Database.EnsureCreatedAsync();
     }
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
-
-    // Log para debug - verificar empresas no banco
-    var companies = await db.ImportFiles.Select(f => f.CompanyDb).Distinct().ToListAsync();
-    logger.LogInformation("Empresas com importacoes no banco: {Companies}", string.Join(", ", companies));
-
-    var sessions = await db.CompanyUserSessions.Where(s => s.IsActive).ToListAsync();
-    logger.LogInformation("Sessoes SAP ativas: {Count}", sessions.Count);
-    foreach (var session in sessions)
-    {
-        logger.LogInformation("  - UsuarioId: {UserId}, CompanyDb: '{CompanyDb}', ExpiraEm: {ExpiresAt}",
-            session.UserId, session.CompanyDb, session.ExpiresAt);
-    }
 }
+
+// Declare RabbitMQ topology (exchanges, queues, DLX) once at startup.
+app.Services.ProvisionMessagingTopology();
 
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
+
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSerilogRequestLogging(options =>
 {
@@ -136,6 +115,6 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", app = "FinancialImport.Web" }));
+app.MapHealthChecks("/health");
 
 app.Run();

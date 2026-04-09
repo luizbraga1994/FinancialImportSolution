@@ -1,31 +1,31 @@
 using System.Globalization;
 using ClosedXML.Excel;
 using FinancialImport.Application.Imports;
-using Microsoft.AspNetCore.Http;
 
 namespace FinancialImport.Infrastructure.Imports;
 
 /// <summary>
-/// Reads an uploaded file into an <see cref="ImportFileContext"/>.
+/// Reads an uploaded file stream into an <see cref="ImportFileContext"/>.
 /// Supports CSV/TXT (delimited) and XLSX (via ClosedXML). The resulting
-/// headers/rows are consumed by layout parsers.
+/// headers/rows are consumed by layout parsers. Exposed via the
+/// <see cref="IImportFileReader"/> interface so controllers and workers
+/// can swap implementations and unit-test with in-memory streams.
 /// </summary>
-public static class ImportFileReader
+public sealed class ImportFileReader : IImportFileReader
 {
-    public static async Task<ImportFileContext> ReadAsync(IFormFile file, CancellationToken cancellationToken = default)
+    public async Task<ImportFileContext> ReadAsync(
+        Stream fileStream,
+        string fileName,
+        CancellationToken cancellationToken = default)
     {
-        await using var stream = file.OpenReadStream();
         using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, cancellationToken);
+        await fileStream.CopyToAsync(ms, cancellationToken);
         var fileBytes = ms.ToArray();
 
-        var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
-        if (extension == ".xlsx")
-        {
-            return ReadXlsx(file.FileName, fileBytes);
-        }
-
-        return ReadDelimited(file.FileName, fileBytes);
+        var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
+        return extension == ".xlsx"
+            ? ReadXlsx(fileName, fileBytes)
+            : ReadDelimited(fileName, fileBytes);
     }
 
     private static ImportFileContext ReadXlsx(string fileName, byte[] fileBytes)
@@ -64,7 +64,6 @@ public static class ImportFileReader
         var dataRows = new List<ImportRow>();
         foreach (var row in rows.Skip(1))
         {
-            // Skip fully empty rows
             if (row.Cells().All(c => c.IsEmpty()))
                 continue;
 
@@ -72,8 +71,6 @@ public static class ImportFileReader
             for (var i = 0; i < headers.Length; i++)
             {
                 if (string.IsNullOrWhiteSpace(headers[i])) continue;
-
-                // Column indices in ClosedXML are 1-based.
                 var cell = row.Cell(i + 1);
                 var value = CellToString(cell);
                 dict[headers[i]] = string.IsNullOrWhiteSpace(value) ? null : value;
@@ -100,9 +97,6 @@ public static class ImportFileReader
                 return cell.GetDateTime().ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
 
             case XLDataType.Number:
-                // Preserve full decimal precision using invariant format so
-                // downstream parsers can read it. Brazilian formatting is
-                // handled later by ImportRow.GetDecimal.
                 return cell.GetDouble().ToString("G17", CultureInfo.InvariantCulture);
 
             case XLDataType.Boolean:

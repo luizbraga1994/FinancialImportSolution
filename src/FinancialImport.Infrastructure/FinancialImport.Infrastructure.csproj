@@ -6,6 +6,17 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!--
+    We rely on ASP.NET Core abstractions (HttpContext, IFormFile, middleware)
+    in a couple of cross-cutting infrastructure components such as the
+    CorrelationIdMiddleware and the ImportFileReader. Depending on the
+    shared framework avoids pulling a long chain of individual nuget
+    packages while keeping the assembly lean at publish time.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\FinancialImport.Application\FinancialImport.Application.csproj" />
     <ProjectReference Include="..\FinancialImport.Domain\FinancialImport.Domain.csproj" />
@@ -13,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- ORM / persistence -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
@@ -24,13 +36,28 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
+
+    <!-- Extensions / runtime -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Polly" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.0" />
+
+    <!-- File parsing -->
     <PackageReference Include="ClosedXML" Version="0.104.2" />
+
+    <!-- Resilience -->
+    <PackageReference Include="Polly" Version="8.4.2" />
+
+    <!-- Messaging -->
+    <PackageReference Include="RabbitMQ.Client" Version="6.8.1" />
+    <PackageReference Include="Confluent.Kafka" Version="2.6.1" />
   </ItemGroup>
 
 </Project>

@@ -1,17 +1,10 @@
 using FinancialImport.Domain.Entities;
-using FinancialImport.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.Extensions.Logging;
-using System.Text.Json;
 
 namespace FinancialImport.Infrastructure.Data;
 
 public sealed class AppDbContext : DbContext
 {
-    private readonly ILogger<AppDbContext>? _logger;
-
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
     {
     }
@@ -31,6 +24,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<LayoutConfig> LayoutConfigs => Set<LayoutConfig>();
     public DbSet<LayoutFieldConfig> LayoutFieldConfigs => Set<LayoutFieldConfig>();
     public DbSet<Rule> Rules => Set<Rule>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
+    public DbSet<JournalEntryDispatch> JournalEntryDispatches => Set<JournalEntryDispatch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -169,10 +165,17 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.DuplicatedLines).HasColumnName("QuantidadeDuplicadas").IsRequired();
             entity.Property(e => e.LinesWithError).HasColumnName("QuantidadeComErro").IsRequired();
             entity.Property(e => e.ImportedAt).HasColumnName("DataImportacao").IsRequired();
+            entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
+            entity.Property(e => e.ProcessingStartedAtUtc).HasColumnName("ProcessamentoInicioUtc");
+            entity.Property(e => e.ProcessingCompletedAtUtc).HasColumnName("ProcessamentoFimUtc");
+            entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
+            entity.Property(e => e.RowVersion).HasColumnName("Versao").IsConcurrencyToken();
             entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(e => new { e.CompanyDb, e.FileHash }).IsUnique();
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.CompanyDb);
+            entity.HasIndex(e => e.Status).HasDatabaseName("IX_ImportacaoArquivo_Status");
+            entity.HasIndex(e => e.CorrelationId).HasDatabaseName("IX_ImportacaoArquivo_CorrelationId");
         });
 
         modelBuilder.Entity<ImportLine>(entity =>
@@ -201,10 +204,14 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.SapReturnMessage).HasColumnName("MensagemRetornoSap").HasMaxLength(400);
             entity.Property(e => e.SapDocEntry).HasColumnName("DocEntrySap");
             entity.Property(e => e.SourceJson).HasColumnName("JsonOrigem").HasColumnType("json");
+            entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64);
+            entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
             entity.HasOne(e => e.ImportFile).WithMany(f => f.Lines).HasForeignKey(e => e.ImportFileId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(e => new { e.CompanyDb, e.BusinessKeyHash }).IsUnique();
             entity.HasIndex(e => e.ImportFileId);
             entity.HasIndex(e => e.Reference).HasDatabaseName("IX_ImportacaoLinha_Referencia");
+            entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash }).HasDatabaseName("IX_ImportacaoLinha_Grupo");
+            entity.HasIndex(e => e.Status).HasDatabaseName("IX_ImportacaoLinha_Status");
         });
 
         modelBuilder.Entity<SystemLog>(entity =>
@@ -214,14 +221,32 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("Id");
             entity.Property(e => e.OccurredAt).HasColumnName("DataHora").IsRequired();
             entity.Property(e => e.Level).HasColumnName("Nivel").HasMaxLength(20).IsRequired();
-            entity.Property(e => e.Source).HasColumnName("Origem").HasMaxLength(80).IsRequired();
+            entity.Property(e => e.Category).HasColumnName("Categoria").HasMaxLength(30);
+            entity.Property(e => e.Source).HasColumnName("Origem").HasMaxLength(120).IsRequired();
+            entity.Property(e => e.Operation).HasColumnName("Operacao").HasMaxLength(120);
             entity.Property(e => e.UserId).HasColumnName("UsuarioId");
             entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50);
             entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
-            entity.Property(e => e.Message).HasColumnName("Mensagem").HasMaxLength(400).IsRequired();
+            entity.Property(e => e.CausationId).HasColumnName("CausationId").HasMaxLength(60);
+            entity.Property(e => e.MessageId).HasColumnName("MessageId").HasMaxLength(60);
+            entity.Property(e => e.SapSessionId).HasColumnName("SapSessionId").HasMaxLength(120);
+            entity.Property(e => e.ImportFileId).HasColumnName("ImportacaoArquivoId");
+            entity.Property(e => e.ImportLineId).HasColumnName("ImportacaoLinhaId");
+            entity.Property(e => e.BusinessKey).HasColumnName("ChaveNegocio").HasMaxLength(200);
+            entity.Property(e => e.StatusBefore).HasColumnName("StatusAntes").HasMaxLength(40);
+            entity.Property(e => e.StatusAfter).HasColumnName("StatusDepois").HasMaxLength(40);
+            entity.Property(e => e.DurationMs).HasColumnName("DuracaoMs");
+            entity.Property(e => e.Message).HasColumnName("Mensagem").HasMaxLength(1024).IsRequired();
             entity.Property(e => e.Details).HasColumnName("Detalhes");
+            entity.Property(e => e.StackTrace).HasColumnName("StackTrace");
+            entity.Property(e => e.MachineName).HasColumnName("Hostname").HasMaxLength(120);
+            entity.Property(e => e.Environment).HasColumnName("Ambiente").HasMaxLength(40);
+            entity.Property(e => e.Application).HasColumnName("Aplicacao").HasMaxLength(80);
             entity.HasIndex(e => e.OccurredAt);
             entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.CorrelationId);
+            entity.HasIndex(e => new { e.Category, e.Level }).HasDatabaseName("IX_LogSistema_Categoria_Nivel");
+            entity.HasIndex(e => e.ImportFileId).HasDatabaseName("IX_LogSistema_ImportacaoArquivoId");
         });
 
         modelBuilder.Entity<BranchMapping>(entity =>
@@ -273,97 +298,148 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
             entity.HasIndex(e => e.Key).IsUnique();
         });
+
+        // ===== Outbox (messaging) =====
+        modelBuilder.Entity<OutboxMessage>(entity =>
+        {
+            entity.ToTable("MensagensOutbox");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.Channel).HasColumnName("Canal").HasMaxLength(120).IsRequired();
+            entity.Property(e => e.MessageType).HasColumnName("TipoMensagem").HasMaxLength(300).IsRequired();
+            entity.Property(e => e.MessageId).HasColumnName("MessageId").HasMaxLength(60).IsRequired();
+            entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
+            entity.Property(e => e.CausationId).HasColumnName("CausationId").HasMaxLength(60);
+            entity.Property(e => e.Payload).HasColumnName("Payload").HasColumnType("longtext").IsRequired();
+            entity.Property(e => e.Broker).HasColumnName("Broker").HasMaxLength(20).IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("CriadoEmUtc").IsRequired();
+            entity.Property(e => e.DispatchedAtUtc).HasColumnName("EnviadoEmUtc");
+            entity.Property(e => e.NextAttemptAtUtc).HasColumnName("ProximaTentativaUtc");
+            entity.Property(e => e.ClaimedUntilUtc).HasColumnName("ReservadoAteUtc");
+            entity.Property(e => e.AttemptCount).HasColumnName("QuantidadeTentativas").IsRequired();
+            entity.Property(e => e.LastError).HasColumnName("UltimoErro").HasMaxLength(2000);
+            entity.Property(e => e.UserId).HasColumnName("UsuarioId");
+            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50);
+            entity.HasIndex(e => e.MessageId).IsUnique();
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAtUtc })
+                .HasDatabaseName("IX_MensagensOutbox_Status_Proxima");
+            entity.HasIndex(e => e.CorrelationId);
+        });
+
+        // ===== Inbox (idempotency) =====
+        modelBuilder.Entity<InboxMessage>(entity =>
+        {
+            entity.ToTable("MensagensInbox");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.Consumer).HasColumnName("Consumidor").HasMaxLength(120).IsRequired();
+            entity.Property(e => e.MessageId).HasColumnName("MessageId").HasMaxLength(60).IsRequired();
+            entity.Property(e => e.ProcessedAtUtc).HasColumnName("ProcessadoEmUtc").IsRequired();
+            entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
+            entity.HasIndex(e => new { e.Consumer, e.MessageId }).IsUnique();
+            entity.HasIndex(e => e.CorrelationId);
+        });
+
+        // ===== JournalEntryDispatch (SAP dispatch tracking) =====
+        modelBuilder.Entity<JournalEntryDispatch>(entity =>
+        {
+            entity.ToTable("LancamentoSapDispatch");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.ImportFileId).HasColumnName("ImportacaoArquivoId").IsRequired();
+            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.GroupKey).HasColumnName("ChaveGrupo").HasMaxLength(400).IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(e => e.AttemptCount).HasColumnName("QuantidadeTentativas").IsRequired();
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("CriadoEmUtc").IsRequired();
+            entity.Property(e => e.DispatchedAtUtc).HasColumnName("EnviadoEmUtc");
+            entity.Property(e => e.LastAttemptAtUtc).HasColumnName("UltimaTentativaUtc");
+            entity.Property(e => e.SapDocEntry).HasColumnName("DocEntrySap");
+            entity.Property(e => e.SapResponseSummary).HasColumnName("RespostaSap").HasMaxLength(2000);
+            entity.Property(e => e.LastError).HasColumnName("UltimoErro").HasMaxLength(2000);
+            entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
+            entity.HasOne(e => e.ImportFile)
+                .WithMany(f => f.Dispatches)
+                .HasForeignKey(e => e.ImportFileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.CompanyDb, e.GroupKeyHash }).IsUnique();
+            entity.HasIndex(e => e.Status).HasDatabaseName("IX_LancamentoSapDispatch_Status");
+            entity.HasIndex(e => e.ImportFileId).HasDatabaseName("IX_LancamentoSapDispatch_Arquivo");
+        });
     }
 
+    /// <summary>
+    /// Persists changes while automatically stamping audit timestamps
+    /// and enforcing the hard column caps that MySQL would otherwise
+    /// reject. Error translation is NOT done here anymore: letting
+    /// EF Core throw <see cref="DbUpdateException"/> lets the
+    /// application layer decide how to react (retry, surface, audit).
+    /// </summary>
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        try
+        StampTimestamps();
+        NormalizeEntities();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void StampTimestamps()
+    {
+        var nowUtc = DateTime.UtcNow;
+
+        foreach (var entry in ChangeTracker.Entries())
         {
-            // Validações antes de salvar
-            ValidateEntities();
-
-            return await base.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException ex)
-        {
-            var innerMessage = ex.InnerException?.Message ?? ex.Message;
-
-            // Log do erro detalhado
-            var logger = this.GetService<ILogger<AppDbContext>>();
-            logger?.LogError(ex, "Erro ao salvar alterações no banco. Detalhe: {InnerMessage}", innerMessage);
-
-            // Identifica o tipo de erro para mensagem mais amigável
-            if (innerMessage.Contains("Duplicate entry") || innerMessage.Contains("UNIQUE constraint failed"))
+            switch (entry.Entity)
             {
-                if (innerMessage.Contains("HashChaveNegocio"))
-                {
-                    throw new DbUpdateException("Linha duplicada: esta combinação de dados já foi importada anteriormente.", ex);
-                }
-                if (innerMessage.Contains("HashArquivo"))
-                {
-                    throw new DbUpdateException("Arquivo duplicado: este arquivo já foi importado para esta empresa.", ex);
-                }
-                throw new DbUpdateException("Registro duplicado. Verifique se os dados já não foram importados.", ex);
+                case ImportFile file when entry.State is EntityState.Added or EntityState.Modified:
+                    file.UpdatedAtUtc = nowUtc;
+                    break;
+                case ImportLine line when entry.State is EntityState.Added or EntityState.Modified:
+                    line.UpdatedAtUtc = nowUtc;
+                    break;
+                case OutboxMessage outbox when entry.State == EntityState.Added:
+                    if (outbox.CreatedAtUtc == default) outbox.CreatedAtUtc = nowUtc;
+                    break;
+                case InboxMessage inbox when entry.State == EntityState.Added:
+                    if (inbox.ProcessedAtUtc == default) inbox.ProcessedAtUtc = nowUtc;
+                    break;
+                case JournalEntryDispatch dispatch when entry.State == EntityState.Added:
+                    if (dispatch.CreatedAtUtc == default) dispatch.CreatedAtUtc = nowUtc;
+                    break;
+                case SystemLog log when entry.State == EntityState.Added:
+                    if (log.OccurredAt == default) log.OccurredAt = nowUtc;
+                    break;
             }
-
-            if (innerMessage.Contains("Data too long") || innerMessage.Contains("String or binary data would be truncated"))
-            {
-                throw new DbUpdateException("Um ou mais campos excederam o tamanho máximo permitido. Verifique os dados da planilha.", ex);
-            }
-
-            if (innerMessage.Contains("JSON") || innerMessage.Contains("json"))
-            {
-                throw new DbUpdateException("Erro no formato JSON dos dados. Entre em contato com o suporte.", ex);
-            }
-
-            throw;
         }
     }
 
-    private void ValidateEntities()
+    private void NormalizeEntities()
     {
         foreach (var entry in ChangeTracker.Entries())
         {
-            if (entry.State == EntityState.Added || entry.State == EntityState.Modified)
+            if (entry.State != EntityState.Added && entry.State != EntityState.Modified)
+                continue;
+
+            if (entry.Entity is ImportLine line)
             {
-                // Validação para ImportLine
-                if (entry.Entity is ImportLine line)
-                {
-                    if (!string.IsNullOrEmpty(line.SourceJson) && line.SourceJson.Length > 65535)
-                    {
-                        throw new InvalidOperationException($"JSON da linha {line.Id} excede o tamanho máximo de 65535 caracteres.");
-                    }
-
-                    if (!string.IsNullOrEmpty(line.ValidationMessage) && line.ValidationMessage.Length > 400)
-                    {
-                        line.ValidationMessage = line.ValidationMessage.Substring(0, 397) + "...";
-                    }
-
-                    if (!string.IsNullOrEmpty(line.SapReturnMessage) && line.SapReturnMessage.Length > 400)
-                    {
-                        line.SapReturnMessage = line.SapReturnMessage.Substring(0, 397) + "...";
-                    }
-
-                    if (!string.IsNullOrEmpty(line.LineMemo) && line.LineMemo.Length > 200)
-                    {
-                        line.LineMemo = line.LineMemo.Substring(0, 197) + "...";
-                    }
-
-                    if (!string.IsNullOrEmpty(line.Reference) && line.Reference.Length > 120)
-                    {
-                        line.Reference = line.Reference.Substring(0, 117) + "...";
-                    }
-                }
-
-                // Validação para ImportFile
-                if (entry.Entity is ImportFile file)
-                {
-                    if (!string.IsNullOrEmpty(file.OriginalFileName) && file.OriginalFileName.Length > 200)
-                    {
-                        file.OriginalFileName = file.OriginalFileName.Substring(0, 197) + "...";
-                    }
-                }
+                line.ValidationMessage  = Truncate(line.ValidationMessage, 400);
+                line.SapReturnMessage   = Truncate(line.SapReturnMessage, 400);
+                line.LineMemo           = Truncate(line.LineMemo, 200) ?? string.Empty;
+                line.Reference          = Truncate(line.Reference, 120) ?? string.Empty;
+            }
+            else if (entry.Entity is ImportFile file)
+            {
+                file.OriginalFileName = Truncate(file.OriginalFileName, 200) ?? string.Empty;
             }
         }
+    }
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength
+            ? value
+            : value.Substring(0, maxLength - 3) + "...";
     }
 }

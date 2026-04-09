@@ -5,6 +5,7 @@ using FinancialImport.Application.DependencyInjection;
 using FinancialImport.Domain.Constants;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
+using FinancialImport.Infrastructure.Observability;
 using FinancialImport.Infrastructure.Security;
 using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
@@ -21,9 +22,10 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, services, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
-        .ReadFrom.Services(services));
+        .ReadFrom.Services(services)
+        .Enrich.WithProperty("Application", "FinancialImport.Api")
+        .Enrich.FromLogContext());
 
-// --- API Controllers ---
 builder.Services.AddControllers();
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
@@ -32,6 +34,9 @@ builder.Services.AddFluentValidationClientsideAdapters();
 var jwtSection = builder.Configuration.GetSection("Jwt");
 var jwtSecretKey = jwtSection.GetValue<string>("SecretKey")
     ?? throw new InvalidOperationException("Jwt:SecretKey nao configurado.");
+
+if (jwtSecretKey.Length < 32)
+    throw new InvalidOperationException("Jwt:SecretKey deve ter pelo menos 32 caracteres.");
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -45,52 +50,20 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSection.GetValue<string>("Issuer") ?? "FinancialImport",
             ValidAudience = jwtSection.GetValue<string>("Audience") ?? "FinancialImportClients",
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
-            ClockSkew = TimeSpan.FromMinutes(1)
+            ClockSkew = TimeSpan.FromMinutes(jwtSection.GetValue<int?>("ClockSkewMinutes") ?? 1)
         };
     });
 
-// --- Authorization Policies ---
+// --- Authorization policies built from permission codes (no hardcode) ---
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(PermissionCodes.ImportarLancamentos, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.ImportarLancamentos)));
-
-    options.AddPolicy(PermissionCodes.VisualizarHistorico, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.VisualizarHistorico)));
-
-    options.AddPolicy(PermissionCodes.ReprocessarImportacao, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.ReprocessarImportacao)));
-
-    options.AddPolicy(PermissionCodes.TrocarCompany, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.TrocarCompany)));
-
-    options.AddPolicy(PermissionCodes.GerenciarUsuarios, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.GerenciarUsuarios)));
-
-    options.AddPolicy(PermissionCodes.GerenciarPerfis, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.GerenciarPerfis)));
-
-    options.AddPolicy(PermissionCodes.GerenciarPermissoes, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.GerenciarPermissoes)));
-
-    options.AddPolicy(PermissionCodes.VisualizarLogs, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.VisualizarLogs)));
+    foreach (var code in PermissionCodes.All)
+    {
+        options.AddPolicy(code, policy =>
+            policy.RequireAssertion(ctx =>
+                ctx.User.HasClaim("global_admin", "true") ||
+                ctx.User.HasClaim("permission", code)));
+    }
 });
 
 // --- Swagger / OpenAPI ---
@@ -145,17 +118,20 @@ builder.Services.AddCors(options =>
     });
 });
 
-// --- HttpContext and Context Accessors ---
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ICompanyContext, HttpCompanyContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ILoginAuditContextAccessor, HttpLoginAuditContextAccessor>();
 
-// --- Layer Registration ---
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSapIntegration(builder.Configuration);
 builder.Services.AddHanaIntegration(builder.Configuration);
+builder.Services.AddFinancialImportWorkers();
+
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database");
 
 var app = builder.Build();
 
@@ -167,14 +143,13 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        logger.LogInformation("Aplicando migrations automaticamente...");
+        logger.LogInformation("Applying database migrations...");
         var migrator = db.Database.GetService<IMigrator>();
         await migrator.MigrateAsync();
-        logger.LogInformation("Migrations aplicadas com sucesso.");
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "Falha ao aplicar migrations. Tentando EnsureCreated...");
+        logger.LogWarning(ex, "MigrateAsync failed; falling back to EnsureCreated.");
         await db.Database.EnsureCreatedAsync();
     }
 
@@ -182,8 +157,11 @@ using (var scope = app.Services.CreateScope())
     await seeder.SeedAsync();
 }
 
-// --- Middleware Pipeline ---
+app.Services.ProvisionMessagingTopology();
+
+// --- Middleware pipeline ---
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>
@@ -200,7 +178,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", app = "FinancialImport.Api", timestamp = DateTime.UtcNow }));
+app.MapHealthChecks("/health");
 
 app.Run();
