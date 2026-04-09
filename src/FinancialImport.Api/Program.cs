@@ -11,8 +11,7 @@ using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
@@ -143,14 +142,23 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        logger.LogInformation("Applying database migrations...");
-        var migrator = db.Database.GetService<IMigrator>();
-        await migrator.MigrateAsync();
+        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+        if (pending.Count > 0)
+        {
+            logger.LogInformation("Applying {Count} pending migration(s): {Migrations}",
+                pending.Count, string.Join(", ", pending));
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Migrations applied successfully.");
+        }
+        else
+        {
+            logger.LogInformation("No pending migrations.");
+        }
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "MigrateAsync failed; falling back to EnsureCreated.");
-        await db.Database.EnsureCreatedAsync();
+        logger.LogError(ex, "Failed to apply migrations.");
+        throw;
     }
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();

@@ -21,6 +21,7 @@ using FinancialImport.Shared.Abstractions;
 using FinancialImport.Shared.Logging;
 using FinancialImport.Shared.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -43,7 +44,17 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddDbContext<AppDbContext>(options =>
-            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+            options
+                .UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
+                // EF Core 9+ emits PendingModelChangesWarning at runtime
+                // whenever the live model differs from the last
+                // committed snapshot. We treat it as a design-time
+                // concern only: the Migration class itself still drives
+                // schema evolution via its [Migration] attribute, and we
+                // don't want the check to spam startup logs or stop
+                // production deploys. The warning still surfaces in
+                // `dotnet ef migrations add`.
+                .ConfigureWarnings(w => w.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
         // --- Core services ---
         services.AddSingleton<IClock, SystemClock>();
