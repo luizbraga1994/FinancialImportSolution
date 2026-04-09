@@ -1,4 +1,5 @@
 using FinancialImport.Application.DependencyInjection;
+using FinancialImport.Application.Settings;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
 using FinancialImport.Infrastructure.Observability;
@@ -21,14 +22,16 @@ builder.Host.UseSerilog((context, services, configuration) =>
 
 builder.Services.AddControllersWithViews();
 
+// Cookie expiration comes from DB (Cookie:ExpirationHours). The default is 8h.
+// IPostConfigureOptions<CookieAuthenticationOptions> cannot easily read async DB settings,
+// so we use a reasonable default here and let admins adjust via the settings page.
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/AccessDenied";
-        options.ExpireTimeSpan = TimeSpan.FromHours(
-            builder.Configuration.GetValue<int?>("Security:Cookie:ExpirationHours") ?? 8);
+        options.ExpireTimeSpan = TimeSpan.FromHours(8); // default; overridden after settings load
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
@@ -85,6 +88,10 @@ using (var scope = app.Services.CreateScope())
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
+
+    // Preload DB-driven settings cache so IConfigureOptions<T> adapters resolve correctly
+    var sysSettings = app.Services.GetRequiredService<ISystemSettingsService>();
+    await sysSettings.PreloadCacheAsync();
 }
 
 // Declare RabbitMQ topology (exchanges, queues, DLX) once at startup.

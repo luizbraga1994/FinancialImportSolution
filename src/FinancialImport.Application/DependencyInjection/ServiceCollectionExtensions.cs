@@ -15,13 +15,11 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddApplication(this IServiceCollection services, IConfiguration configuration)
     {
-        // --- Strongly typed options (everything that used to be hardcoded) ---
-        services.Configure<LayoutParsingOptions>(configuration.GetSection("LayoutParsing"));
+        // LayoutDefinitionsOptions defines the column mappings for each file layout.
+        // It is a structured definition (not a connection/credential), so it stays
+        // bound from appsettings (Imports:Layouts section) for version-controlled
+        // change management. All other options come from the DB settings table.
         services.Configure<LayoutDefinitionsOptions>(configuration.GetSection(LayoutDefinitionsOptions.SectionName));
-        services.Configure<ImportProcessingOptions>(configuration.GetSection(ImportProcessingOptions.SectionName));
-        services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
-        services.Configure<KafkaOptions>(configuration.GetSection(KafkaOptions.SectionName));
-        services.Configure<OutboxOptions>(configuration.GetSection(OutboxOptions.SectionName));
 
         // --- Correlation ---
         services.AddSingleton<ICorrelationContextAccessor, CorrelationContextAccessor>();

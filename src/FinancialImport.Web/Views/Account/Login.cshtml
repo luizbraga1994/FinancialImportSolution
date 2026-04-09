@@ -250,7 +250,7 @@
                     </div>
                 </div>
 
-                <!-- 2. Base/Empresa - searchable -->
+                <!-- 2. Base/Empresa - searchable dropdown or manual fallback -->
                 <div class="form-group">
                     <label>Base / Empresa <span class="step-num">— passo 2</span></label>
                     <div class="custom-select-wrap" id="companyWrap">
@@ -267,6 +267,13 @@
                             </div>
                             <div class="custom-select-list" id="companyList"></div>
                         </div>
+                    </div>
+                    <!-- Manual entry shown when HANA is unavailable and no dropdown entries exist -->
+                    <div class="input-wrapper" id="companyManualWrap" style="display:none; margin-top:0.5rem;">
+                        <i class="bi bi-keyboard input-icon"></i>
+                        <input type="text" id="companyManualInput"
+                               placeholder="Digite o codigo da base (ex: SBO_EMPRESA)"
+                               autocomplete="off" />
                     </div>
                     <div class="company-loading" id="companyLoading">
                         <span class="spinner-xs"></span> Buscando bases disponiveis...
@@ -308,6 +315,8 @@
         const companyList = document.getElementById('companyList');
         const companyLoading = document.getElementById('companyLoading');
         const companyStatus = document.getElementById('companyStatus');
+        const companyManualWrap = document.getElementById('companyManualWrap');
+        const companyManualInput = document.getElementById('companyManualInput');
         const btnSignin = document.getElementById('btnSignin');
         const step1 = document.getElementById('step1');
         const step2 = document.getElementById('step2');
@@ -319,6 +328,7 @@
         let selectedValue = '';
         let userExists = false;
         let dropdownOpen = false;
+        let manualMode = false;
 
         document.getElementById('loginForm').addEventListener('submit', function (e) {
     if (!selectedValue || !userExists) { 
@@ -338,7 +348,12 @@
 
         function updateSteps() {
             const hasLogin = loginInput.value.trim().length > 0;
-            const hasCompany = selectedValue.length > 0;
+            const manualVal = manualMode ? companyManualInput.value.trim() : '';
+            const hasCompany = selectedValue.length > 0 || manualVal.length > 0;
+            if (manualMode && manualVal.length > 0) {
+                selectedValue = manualVal;
+                companyHidden.value = manualVal;
+            }
             const hasPassword = passwordInput.value.trim().length > 0;
             step1.className = 'step-dot ' + (hasLogin ? 'done' : 'active');
             step2.className = 'step-dot ' + (hasCompany ? 'done' : (hasLogin ? 'active' : ''));
@@ -427,7 +442,30 @@
             companyTrigger.innerHTML = '<span class="placeholder">' + placeholder + '</span>';
             companyTrigger.classList.add('disabled');
             closeDropdown();
+            // Hide manual input and reset
+            manualMode = false;
+            companyManualWrap.style.display = 'none';
+            companyManualInput.value = '';
+            document.getElementById('companyWrap').style.display = '';
         }
+
+        function enableManualEntry(warningText) {
+            manualMode = true;
+            // Hide dropdown, show manual input
+            document.getElementById('companyWrap').style.display = 'none';
+            companyManualWrap.style.display = '';
+            companyManualInput.value = '';
+            companyHidden.value = '';
+            selectedValue = '';
+            setCompanyStatus('warn', warningText);
+            companyManualInput.focus();
+        }
+
+        companyManualInput.addEventListener('input', function () {
+            selectedValue = this.value.trim();
+            companyHidden.value = selectedValue;
+            updateSteps();
+        });
 
         function enablePasswordField(enable) {
             userExists = enable;
@@ -467,6 +505,12 @@
                 // User exists
                 enablePasswordField(true);
 
+                // HANA unavailable + no companies → manual text entry
+                if (data.hanaUnavailable && data.count === 0) {
+                    enableManualEntry(data.hanaWarning || 'HANA indisponivel. Digite o codigo da base manualmente.');
+                    return;
+                }
+
                 if (data.count === 0) {
                     resetCompanySelect('Nenhuma base disponivel');
                     setCompanyStatus('warn', 'Nenhuma base vinculada a este usuario');
@@ -476,7 +520,12 @@
                 companiesData = data.companies;
                 companyTrigger.innerHTML = '<span class="placeholder">Selecione a base...</span>';
                 companyTrigger.classList.remove('disabled');
-                setCompanyStatus('ok', data.count + ' base(s) disponivel(is)');
+                // Amber warning when HANA was unavailable but DB had companies
+                if (data.hanaUnavailable) {
+                    setCompanyStatus('warn', (data.hanaWarning || 'HANA indisponivel') + ' — ' + data.count + ' base(s) no sistema');
+                } else {
+                    setCompanyStatus('ok', data.count + ' base(s) disponivel(is)');
+                }
 
                 // Auto-select if only 1
                 if (data.count === 1) {

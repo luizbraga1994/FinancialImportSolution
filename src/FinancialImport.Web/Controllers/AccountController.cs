@@ -83,28 +83,64 @@ public class AccountController : Controller
                 return Json(new { success = true, userExists = false, companies = Array.Empty<object>(), count = 0 });
             }
 
-            // 2. Get all companies from HANA
-            IReadOnlyCollection<SapCompanyInfo> hanaCompanies;
+            // 2. Get all companies from HANA (optional — falls back to DB-only if HANA unavailable)
+            IReadOnlyCollection<SapCompanyInfo> hanaCompanies = Array.Empty<SapCompanyInfo>();
+            bool hanaAvailable = true;
             try
             {
                 hanaCompanies = await _companyDiscovery.GetAvailableCompaniesAsync(cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Erro ao consultar HANA para listar empresas no login.");
-                return Json(new { success = false, message = "Nao foi possivel conectar ao HANA para listar as empresas." });
+                _logger.LogWarning(ex, "HANA indisponivel durante login de '{Login}' — usando apenas base local.", login);
+                hanaAvailable = false;
+            }
+
+            // 3. Filter: GlobalAdmin sees all, regular user sees only allowed
+            List<object> result;
+
+            if (!hanaAvailable)
+            {
+                if (user.IsGlobalAdmin)
+                {
+                    // GlobalAdmin without HANA: return empty list so the UI offers manual entry
+                    return Json(new
+                    {
+                        success = true,
+                        userExists = true,
+                        companies = Array.Empty<object>(),
+                        count = 0,
+                        hanaUnavailable = true,
+                        hanaWarning = "HANA indisponivel. Digite o codigo da base manualmente."
+                    });
+                }
+
+                // Regular user: show their allowed companies from the local DB (no HANA names)
+                result = user.AllowedCompanies
+                    .Where(c => c.IsActive)
+                    .OrderBy(c => c.CompanyDb)
+                    .Select(c => (object)new { value = c.CompanyDb, text = c.CompanyDb })
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    userExists = true,
+                    companies = result,
+                    count = result.Count,
+                    hanaUnavailable = true,
+                    hanaWarning = "HANA indisponivel. Exibindo apenas bases configuradas no sistema."
+                });
             }
 
             var activeHanaCompanies = hanaCompanies.Where(c => c.IsActive).ToList();
 
-            // 3. Filter: GlobalAdmin sees all, regular user sees only allowed
-            List<object> result;
             if (user.IsGlobalAdmin)
             {
                 result = activeHanaCompanies
                     .OrderBy(c => c.CompanyName)
-                    .Select(c => new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
-                    .ToList<object>();
+                    .Select(c => (object)new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
+                    .ToList();
             }
             else
             {
@@ -116,8 +152,8 @@ public class AccountController : Controller
                 result = activeHanaCompanies
                     .Where(c => allowedDbs.Contains(c.CompanyDb))
                     .OrderBy(c => c.CompanyName)
-                    .Select(c => new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
-                    .ToList<object>();
+                    .Select(c => (object)new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
+                    .ToList();
             }
 
             return Json(new { success = true, userExists = true, companies = result, count = result.Count });

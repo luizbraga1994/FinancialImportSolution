@@ -1,10 +1,12 @@
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Idempotency;
 using FinancialImport.Application.Imports;
+using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Messaging;
 using FinancialImport.Application.Outbox;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
+using FinancialImport.Application.Settings;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.Hashing;
 using FinancialImport.Infrastructure.Imports;
@@ -16,10 +18,15 @@ using FinancialImport.Infrastructure.Messaging.RabbitMq;
 using FinancialImport.Infrastructure.Observability;
 using FinancialImport.Infrastructure.Sap;
 using FinancialImport.Infrastructure.Security;
+using FinancialImport.Infrastructure.Settings;
 using FinancialImport.Infrastructure.Workers;
+using FinancialImport.Integration.Hana.Options;
+using FinancialImport.Integration.Sap.Options;
 using FinancialImport.Shared.Abstractions;
+using FinancialImport.Shared.Imports;
 using FinancialImport.Shared.Logging;
 using FinancialImport.Shared.Messaging;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
@@ -32,8 +39,21 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
+        // --- System settings service (singleton, in-memory cache, DB-backed) ---
+        services.AddSingleton<ISystemSettingsService, DbSystemSettingsService>();
+
+        // --- DB-backed IConfigureOptions<T> for all option classes ---
+        services.AddSingleton<IConfigureOptions<HanaOptions>, DbConfigureHanaOptions>();
+        services.AddSingleton<IConfigureOptions<SapServiceLayerOptions>, DbConfigureSapOptions>();
+        services.AddSingleton<IConfigureOptions<JwtOptions>, DbConfigureJwtOptions>();
+        services.AddSingleton<IConfigureOptions<JwtBearerOptions>, DbConfigureJwtBearerOptions>();
+        services.AddSingleton<IConfigureOptions<RabbitMqOptions>, DbConfigureRabbitMqOptions>();
+        services.AddSingleton<IConfigureOptions<KafkaOptions>, DbConfigureKafkaOptions>();
+        services.AddSingleton<IConfigureOptions<ImportProcessingOptions>, DbConfigureImportOptions>();
+        services.AddSingleton<IConfigureOptions<LayoutParsingOptions>, DbConfigureLayoutOptions>();
+        services.AddSingleton<IConfigureOptions<OutboxOptions>, DbConfigureOutboxOptions>();
+
         services.Configure<MySqlOptions>(configuration.GetSection("MySql"));
-        services.Configure<JwtOptions>(configuration.GetSection("Jwt"));
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? configuration.GetSection("MySql").GetValue<string>("ConnectionString");

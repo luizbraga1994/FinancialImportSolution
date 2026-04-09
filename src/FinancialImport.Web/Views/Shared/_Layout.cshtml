@@ -44,6 +44,9 @@
                     <a href="@Url.Action("Index", "Profile")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Profile" ? "active" : "")" data-loading data-loading-message="Carregando perfis...">
                         <i class="bi bi-shield-lock"></i><span>Perfis</span>
                     </a>
+                    <a href="@Url.Action("Index", "Settings")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Settings" ? "active" : "")" data-loading data-loading-message="Carregando configuracoes...">
+                        <i class="bi bi-gear-fill"></i><span>Configuracoes</span>
+                    </a>
                     <a href="@Url.Action("Index", "Log")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Log" ? "active" : "")" data-loading data-loading-message="Carregando logs...">
                         <i class="bi bi-journal-text"></i><span>Logs</span>
                     </a>

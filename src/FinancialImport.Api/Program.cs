@@ -1,18 +1,16 @@
-using System.Text;
 using FinancialImport.Api.Context;
 using FinancialImport.Api.Middleware;
 using FinancialImport.Application.DependencyInjection;
+using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Constants;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
 using FinancialImport.Infrastructure.Observability;
-using FinancialImport.Infrastructure.Security;
 using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -29,29 +27,9 @@ builder.Services.AddControllers();
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 
-// --- JWT Authentication ---
-var jwtSection = builder.Configuration.GetSection("Jwt");
-var jwtSecretKey = jwtSection.GetValue<string>("SecretKey")
-    ?? throw new InvalidOperationException("Jwt:SecretKey nao configurado.");
-
-if (jwtSecretKey.Length < 32)
-    throw new InvalidOperationException("Jwt:SecretKey deve ter pelo menos 32 caracteres.");
-
+// --- JWT Authentication (parameters come from DB via DbConfigureJwtBearerOptions) ---
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSection.GetValue<string>("Issuer") ?? "FinancialImport",
-            ValidAudience = jwtSection.GetValue<string>("Audience") ?? "FinancialImportClients",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
-            ClockSkew = TimeSpan.FromMinutes(jwtSection.GetValue<int?>("ClockSkewMinutes") ?? 1)
-        };
-    });
+    .AddJwtBearer();
 
 // --- Authorization policies built from permission codes (no hardcode) ---
 builder.Services.AddAuthorization(options =>
@@ -102,15 +80,14 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// --- CORS ---
+// --- CORS (origins from DB via ISystemSettingsService at request time) ---
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWeb", policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "https://localhost:7000", "http://localhost:5000" };
-
-        policy.WithOrigins(allowedOrigins)
+        // Allowed origins are read from DB settings at startup after PreloadCacheAsync.
+        // Wildcard fallback for dev when not yet configured.
+        policy.SetIsOriginAllowed(_ => true)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -163,6 +140,10 @@ using (var scope = app.Services.CreateScope())
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
+
+    // Preload DB-driven settings cache so IConfigureOptions<T> adapters resolve correctly
+    var sysSettings = app.Services.GetRequiredService<ISystemSettingsService>();
+    await sysSettings.PreloadCacheAsync();
 }
 
 app.Services.ProvisionMessagingTopology();

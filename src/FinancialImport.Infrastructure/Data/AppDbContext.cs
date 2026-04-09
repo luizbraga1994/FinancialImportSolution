@@ -27,6 +27,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<JournalEntryDispatch> JournalEntryDispatches => Set<JournalEntryDispatch>();
+    public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -297,6 +298,24 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.ScopeCompanyDb).HasColumnName("EscopoCompanyDb").HasMaxLength(50);
             entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
             entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        // ===== System settings =====
+        modelBuilder.Entity<SystemSetting>(entity =>
+        {
+            entity.ToTable("ConfiguracaoSistema");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.Chave).HasColumnName("Chave").HasMaxLength(120).IsRequired();
+            entity.Property(e => e.Valor).HasColumnName("Valor").HasColumnType("text");
+            entity.Property(e => e.Categoria).HasColumnName("Categoria").HasMaxLength(60).IsRequired();
+            entity.Property(e => e.Descricao).HasColumnName("Descricao").HasMaxLength(300);
+            entity.Property(e => e.TipoDado).HasColumnName("TipoDado").HasMaxLength(20).HasDefaultValue("string").IsRequired();
+            entity.Property(e => e.Obrigatorio).HasColumnName("Obrigatorio").IsRequired();
+            entity.Property(e => e.AtualizadoEm).HasColumnName("AtualizadoEm");
+            entity.Property(e => e.AtualizadoPor).HasColumnName("AtualizadoPor").HasMaxLength(80);
+            entity.HasIndex(e => e.Chave).IsUnique().HasDatabaseName("UQ_ConfiguracaoSistema_Chave");
+            entity.HasIndex(e => e.Categoria).HasDatabaseName("IX_ConfiguracaoSistema_Categoria");
         });
 
         // ===== Outbox (messaging) =====

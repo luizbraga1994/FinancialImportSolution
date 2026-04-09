@@ -1,3 +1,4 @@
+using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Constants;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Infrastructure.Security;
@@ -16,17 +17,21 @@ public sealed class DatabaseSeeder
     private readonly IConfiguration _configuration;
     private readonly ILogger<DatabaseSeeder> _logger;
 
+    private readonly ISystemSettingsService _settingsService;
+
     public DatabaseSeeder(
         AppDbContext dbContext,
         PasswordHasher hasher,
         IClock clock,
         IConfiguration configuration,
+        ISystemSettingsService settingsService,
         ILogger<DatabaseSeeder> logger)
     {
         _dbContext = dbContext;
         _hasher = hasher;
         _clock = clock;
         _configuration = configuration;
+        _settingsService = settingsService;
         _logger = logger;
     }
 
@@ -35,6 +40,7 @@ public sealed class DatabaseSeeder
         await SeedPermissionsAsync(cancellationToken);
         await SeedProfilesAsync(cancellationToken);
         await SeedGlobalAdminAsync(cancellationToken);
+        await SeedDefaultSystemSettingsAsync(cancellationToken);
     }
 
     private async Task SeedPermissionsAsync(CancellationToken cancellationToken)
@@ -181,5 +187,113 @@ public sealed class DatabaseSeeder
         }
 
         _logger.LogInformation("Usuario admin global '{Login}' criado com sucesso.", adminLogin);
+    }
+
+    private async Task SeedDefaultSystemSettingsAsync(CancellationToken cancellationToken)
+    {
+        // Only seed rows that do not yet exist — never overwrite user-configured values.
+        var existing = await _dbContext.SystemSettings
+            .Select(s => s.Chave)
+            .ToHashSetAsync(StringComparer.OrdinalIgnoreCase, cancellationToken);
+
+        var defaults = new List<SystemSetting>
+        {
+            // ── HANA ────────────────────────────────────────────────────────
+            new() { Chave = "Hana:Server",              Categoria = "HANA",       TipoDado = "string",   Obrigatorio = true,  Descricao = "Endereco do servidor SAP HANA (ex: 192.168.1.10)" },
+            new() { Chave = "Hana:Port",                Categoria = "HANA",       TipoDado = "string",   Obrigatorio = false, Valor = "30015", Descricao = "Porta do servidor HANA" },
+            new() { Chave = "Hana:Database",            Categoria = "HANA",       TipoDado = "string",   Obrigatorio = false, Valor = "SBOCOMMON", Descricao = "Nome do banco compartilhado do SBO" },
+            new() { Chave = "Hana:UserID",              Categoria = "HANA",       TipoDado = "string",   Obrigatorio = true,  Descricao = "Usuario de conexao ao HANA" },
+            new() { Chave = "Hana:Password",            Categoria = "HANA",       TipoDado = "password", Obrigatorio = true,  Descricao = "Senha de conexao ao HANA" },
+            new() { Chave = "Hana:MaxPoolSize",         Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "100", Descricao = "Tamanho maximo do pool de conexoes" },
+            new() { Chave = "Hana:MinPoolSize",         Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "10",  Descricao = "Tamanho minimo do pool de conexoes" },
+            new() { Chave = "Hana:ConnectionTimeout",   Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "60",  Descricao = "Timeout de conexao em segundos" },
+            new() { Chave = "Hana:CommandTimeout",      Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "300", Descricao = "Timeout de comando em segundos" },
+            new() { Chave = "Hana:ProviderInvariantName", Categoria = "HANA",     TipoDado = "string",   Obrigatorio = false, Valor = "Sap.Data.Hana", Descricao = "Nome invariante do provider HANA" },
+            new() { Chave = "Hana:ProviderAssemblyPath", Categoria = "HANA",      TipoDado = "string",   Obrigatorio = false, Descricao = "Caminho opcional para o assembly Sap.Data.Hana.dll" },
+
+            // ── SAP Service Layer ────────────────────────────────────────────
+            new() { Chave = "Sap:BaseUrl",              Categoria = "SAP",        TipoDado = "string",   Obrigatorio = true,  Descricao = "URL base da SAP Service Layer (ex: https://hana:50000/b1s/v1)" },
+            new() { Chave = "Sap:UserName",             Categoria = "SAP",        TipoDado = "string",   Obrigatorio = true,  Descricao = "Usuario do SAP Business One" },
+            new() { Chave = "Sap:Password",             Categoria = "SAP",        TipoDado = "password", Obrigatorio = true,  Descricao = "Senha do SAP Business One" },
+            new() { Chave = "Sap:Language",             Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "29",  Descricao = "Codigo de idioma SAP (29 = Portugues)" },
+            new() { Chave = "Sap:IgnoreSslErrors",      Categoria = "SAP",        TipoDado = "bool",     Obrigatorio = false, Valor = "false", Descricao = "Ignorar erros de certificado SSL" },
+            new() { Chave = "Sap:TimeoutSeconds",       Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "180", Descricao = "Timeout de requisicao em segundos" },
+            new() { Chave = "Sap:MaxRetryAttempts",     Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "3",   Descricao = "Numero maximo de tentativas de reconexao" },
+            new() { Chave = "Sap:SessionTimeoutMinutes",Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "25",  Descricao = "Minutos de inatividade antes de renovar sessao SAP" },
+
+            // ── Seguranca (JWT + Cookie) ─────────────────────────────────────
+            new() { Chave = "Jwt:SecretKey",            Categoria = "Seguranca",  TipoDado = "password", Obrigatorio = true,  Descricao = "Chave secreta JWT (minimo 32 caracteres)" },
+            new() { Chave = "Jwt:Issuer",               Categoria = "Seguranca",  TipoDado = "string",   Obrigatorio = false, Valor = "FinancialImport",        Descricao = "Emissor do token JWT" },
+            new() { Chave = "Jwt:Audience",             Categoria = "Seguranca",  TipoDado = "string",   Obrigatorio = false, Valor = "FinancialImportClients", Descricao = "Audiencia do token JWT" },
+            new() { Chave = "Jwt:ExpirationMinutes",    Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "480",  Descricao = "Validade do token JWT em minutos" },
+            new() { Chave = "Jwt:ClockSkewMinutes",     Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "1",    Descricao = "Tolerancia de clock em minutos" },
+            new() { Chave = "Cookie:ExpirationHours",   Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "8",    Descricao = "Horas de validade do cookie de autenticacao" },
+
+            // ── Importacao ───────────────────────────────────────────────────
+            new() { Chave = "Import:MaxFileSizeBytes",   Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "10485760",    Descricao = "Tamanho maximo do arquivo (bytes)" },
+            new() { Chave = "Import:AllowedExtensions",  Categoria = "Importacao", TipoDado = "list",    Obrigatorio = false, Valor = ".csv,.txt,.xlsx", Descricao = "Extensoes permitidas (separadas por virgula)" },
+            new() { Chave = "Import:MemoMaxLength",      Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "254",         Descricao = "Tamanho maximo do memo principal" },
+            new() { Chave = "Import:ReferenceMaxLength", Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "27",          Descricao = "Tamanho maximo da referencia" },
+            new() { Chave = "Import:LineMemoMaxLength",  Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "50",          Descricao = "Tamanho maximo do historico de linha" },
+            new() { Chave = "Import:JournalBalanceTolerance", Categoria = "Importacao", TipoDado = "string", Obrigatorio = false, Valor = "0.01",   Descricao = "Tolerancia de balanco do lancamento contabil" },
+            new() { Chave = "Import:Dedup:IncludeSeqLancamento", Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir SeqLancamento na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeCompanyDb",     Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir CompanyDb na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeReference",     Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir Referencia na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeAccounts",      Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir contas contabeis na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeDates",         Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir datas na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeAmount",        Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir valor na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeMemo",          Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir memo na chave de deduplicacao" },
+            new() { Chave = "Import:Dedup:IncludeBranch",        Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir filial na chave de deduplicacao" },
+
+            // ── Layout ───────────────────────────────────────────────────────
+            new() { Chave = "Layout:DefaultTipoLancLayout1", Categoria = "Layout", TipoDado = "string", Obrigatorio = false, Valor = "D", Descricao = "Tipo de lancamento padrao para o Layout 1 (D=Debito, C=Credito)" },
+
+            // ── Mensageria (RabbitMQ) ────────────────────────────────────────
+            new() { Chave = "RabbitMq:Enabled",          Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",                         Descricao = "Habilitar integracao com RabbitMQ" },
+            new() { Chave = "RabbitMq:HostName",         Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "localhost",                      Descricao = "Host do servidor RabbitMQ" },
+            new() { Chave = "RabbitMq:Port",             Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "5672",                           Descricao = "Porta AMQP do RabbitMQ" },
+            new() { Chave = "RabbitMq:VirtualHost",      Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "/",                              Descricao = "VirtualHost do RabbitMQ" },
+            new() { Chave = "RabbitMq:UserName",         Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Descricao = "Usuario do RabbitMQ" },
+            new() { Chave = "RabbitMq:Password",         Categoria = "Mensageria", TipoDado = "password",Obrigatorio = false, Descricao = "Senha do RabbitMQ" },
+            new() { Chave = "RabbitMq:ExchangeName",     Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.exchange",       Descricao = "Nome do exchange principal" },
+            new() { Chave = "RabbitMq:DeadLetterExchangeName", Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.dlx",       Descricao = "Nome do Dead Letter Exchange" },
+            new() { Chave = "RabbitMq:MaxRetryAttempts", Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "5",                              Descricao = "Tentativas maximas antes do DLQ" },
+
+            // ── Mensageria (Kafka) ───────────────────────────────────────────
+            new() { Chave = "Kafka:Enabled",             Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",           Descricao = "Habilitar integracao com Kafka" },
+            new() { Chave = "Kafka:BootstrapServers",    Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "localhost:9092",   Descricao = "Servidores bootstrap do Kafka" },
+            new() { Chave = "Kafka:ClientId",            Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport",  Descricao = "Client ID do Kafka" },
+
+            // ── Outbox dispatcher ────────────────────────────────────────────
+            new() { Chave = "Outbox:Enabled",                Categoria = "Mensageria", TipoDado = "bool", Obrigatorio = false, Valor = "true", Descricao = "Habilitar o dispatcher de outbox" },
+            new() { Chave = "Outbox:PollingIntervalSeconds",  Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "5",    Descricao = "Intervalo de polling do outbox em segundos" },
+            new() { Chave = "Outbox:BatchSize",               Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "100",  Descricao = "Mensagens processadas por ciclo" },
+            new() { Chave = "Outbox:MaxAttempts",             Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "10",   Descricao = "Tentativas maximas antes de mover para DLQ" },
+            new() { Chave = "Outbox:ClaimTimeoutSeconds",     Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "120",  Descricao = "Timeout de reserva de mensagem em segundos" },
+
+            // ── CORS (API) ───────────────────────────────────────────────────
+            new() { Chave = "Cors:AllowedOrigins",       Categoria = "Seguranca",  TipoDado = "list",   Obrigatorio = false, Valor = "http://localhost:5000,https://localhost:7000", Descricao = "Origens permitidas pelo CORS (separadas por virgula)" },
+        };
+
+        int added = 0;
+        foreach (var setting in defaults)
+        {
+            if (existing.Contains(setting.Chave)) continue;
+            _dbContext.SystemSettings.Add(setting);
+            added++;
+        }
+
+        if (added > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("{Count} configuracoes padrao inseridas em ConfiguracaoSistema.", added);
+        }
+        else
+        {
+            _logger.LogInformation("Configuracoes do sistema ja existem — seed ignorado.");
+        }
+
+        // Invalidate cache so new values are visible immediately
+        _settingsService.InvalidateCache();
     }
 }
