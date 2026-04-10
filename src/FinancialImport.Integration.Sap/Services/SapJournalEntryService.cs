@@ -40,6 +40,13 @@ public sealed class SapJournalEntryService : ISapJournalEntryService
             var response = await client.SendAsync(request, cancellationToken);
             var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
 
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                var errorMsg = ExtractSapError(rawResponse);
+                _logger.LogWarning("SAP session expired for {CompanyDb}: {Error}", session.CompanyDb, errorMsg);
+                return SapResult.SessionExpired(errorMsg, rawResponse);
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 var errorMsg = ExtractSapError(rawResponse);

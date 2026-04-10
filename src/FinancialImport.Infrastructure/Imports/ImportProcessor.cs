@@ -199,6 +199,23 @@ public sealed class ImportProcessor : IImportProcessor
             try
             {
                 sapResult = await _sapService.CreateJournalEntryAsync(sapSession, build.Payload, cancellationToken);
+
+                // Session expired mid-batch — re-login once and retry
+                if (sapResult.IsSessionExpired)
+                {
+                    _logger.LogInformation("SAP session expired mid-batch. Re-authenticating for '{CompanyDb}'...", importFile.CompanyDb);
+                    var relogin = await _sapSessionService.SignInCompanyAsync(
+                        importFile.CompanyDb,
+                        _settings.Get("Sap:UserName") ?? "",
+                        _settings.Get("Sap:Password") ?? "",
+                        cancellationToken);
+
+                    if (relogin.Success)
+                    {
+                        sapSession = relogin.Session!;
+                        sapResult = await _sapService.CreateJournalEntryAsync(sapSession, build.Payload, cancellationToken);
+                    }
+                }
             }
             catch (Exception ex)
             {
