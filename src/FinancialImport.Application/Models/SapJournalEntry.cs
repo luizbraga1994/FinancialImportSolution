@@ -19,9 +19,6 @@ public sealed class SapJournalEntry
     [JsonPropertyName("Reference")]
     public string? Reference { get; set; }
 
-    [JsonPropertyName("BPLId")]
-    public int? BPLID { get; set; }
-
     [JsonPropertyName("JournalEntryLines")]
     public List<SapJournalEntryLine> JournalEntryLines { get; set; } = new();
 }
@@ -39,4 +36,7 @@ public sealed class SapJournalEntryLine
 
     [JsonPropertyName("LineMemo")]
     public string LineMemo { get; set; } = string.Empty;
+
+    [JsonPropertyName("BPLID")]
+    public int? BPLID { get; set; }
 }

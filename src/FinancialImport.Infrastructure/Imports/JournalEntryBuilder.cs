@@ -46,7 +46,6 @@ public sealed class JournalEntryBuilder
             // GroupKeyHash) unique index, NOT by Ref1, so there is no
             // need to leak the hash into a user-visible field.
             Reference = Truncate(firstLine.Reference, _options.ReferenceMaxLength),
-            BPLID = bplId,
             JournalEntryLines = new List<SapJournalEntryLine>()
         };
 
@@ -106,7 +105,8 @@ public sealed class JournalEntryBuilder
                 AccountCode = line.AccountCode,
                 Debit = accountDebit,
                 Credit = accountCredit,
-                LineMemo = memo
+                LineMemo = memo,
+                BPLID = bplId
             };
 
             // Counterparty (ContraAccountCode) — sides flipped
@@ -115,7 +115,8 @@ public sealed class JournalEntryBuilder
                 AccountCode = line.ContraAccountCode,
                 Debit = accountCredit,
                 Credit = accountDebit,
-                LineMemo = memo
+                LineMemo = memo,
+                BPLID = bplId
             };
 
             (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);

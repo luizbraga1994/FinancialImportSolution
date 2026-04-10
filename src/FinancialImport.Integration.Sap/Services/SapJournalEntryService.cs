@@ -8,7 +8,11 @@ namespace FinancialImport.Integration.Sap.Services;
 
 public sealed class SapJournalEntryService : ISapJournalEntryService
 {
-    private static readonly JsonSerializerOptions SapJsonOptions = new() { PropertyNamingPolicy = null };
+    private static readonly JsonSerializerOptions SapJsonOptions = new()
+    {
+        PropertyNamingPolicy = null,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SapJournalEntryService> _logger;

@@ -22,7 +22,11 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
     // SAP Service Layer is case-sensitive on JSON property names (CompanyDB, UserName, etc.).
     // PostAsJsonAsync uses JsonSerializerDefaults.Web which applies camelCase — we must
     // preserve the original PascalCase so SAP recognizes the properties.
-    private static readonly JsonSerializerOptions SapJsonOptions = new() { PropertyNamingPolicy = null };
+    private static readonly JsonSerializerOptions SapJsonOptions = new()
+    {
+        PropertyNamingPolicy = null,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
 
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISapSessionStore _sessionStore;
