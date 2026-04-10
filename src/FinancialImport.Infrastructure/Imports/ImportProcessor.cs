@@ -29,6 +29,7 @@ public sealed class ImportProcessor : IImportProcessor
     private readonly ISapSessionStore _sapSessionStore;
     private readonly ISapCompanySessionService _sapSessionService;
     private readonly ISapJournalEntryService _sapService;
+    private readonly ISapChartOfAccountsService _chartOfAccounts;
     private readonly JournalEntryBuilder _entryBuilder;
     private readonly IUserContext _userContext;
     private readonly IEventPublisher _eventPublisher;
@@ -42,6 +43,7 @@ public sealed class ImportProcessor : IImportProcessor
         ISapSessionStore sapSessionStore,
         ISapCompanySessionService sapSessionService,
         ISapJournalEntryService sapService,
+        ISapChartOfAccountsService chartOfAccounts,
         JournalEntryBuilder entryBuilder,
         IUserContext userContext,
         IEventPublisher eventPublisher,
@@ -54,6 +56,7 @@ public sealed class ImportProcessor : IImportProcessor
         _sapSessionStore = sapSessionStore;
         _sapSessionService = sapSessionService;
         _sapService = sapService;
+        _chartOfAccounts = chartOfAccounts;
         _entryBuilder = entryBuilder;
         _userContext = userContext;
         _eventPublisher = eventPublisher;
@@ -112,6 +115,18 @@ public sealed class ImportProcessor : IImportProcessor
         var branchMappings = await _dbContext.BranchMappings
             .Where(b => b.CompanyDb == importFile.CompanyDb && b.IsActive)
             .ToListAsync(cancellationToken);
+
+        // Fetch chart of accounts to auto-resolve partial codes (e.g. "1612001100002" → "1612001100002-0")
+        IReadOnlyDictionary<string, string> accountCodes;
+        try
+        {
+            accountCodes = await _chartOfAccounts.GetAccountCodesAsync(sapSession, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch ChartOfAccounts — account codes will not be auto-resolved.");
+            accountCodes = new Dictionary<string, string>();
+        }
 
         // Group by GroupKeyHash precomputed at preview time. This
         // means a reprocess hits the same groups, so the unique index
@@ -207,6 +222,15 @@ public sealed class ImportProcessor : IImportProcessor
                 _logger.LogWarning(
                     "Journal entry not balanced file={FileId} group={GroupKey} debit={Debit} credit={Credit}",
                     importFile.Id, dispatch.GroupKey, build.TotalDebit, build.TotalCredit);
+            }
+
+            // Auto-resolve partial account codes to full SAP codes (with check digit)
+            if (accountCodes.Count > 0)
+            {
+                foreach (var line in build.Payload.JournalEntryLines)
+                {
+                    line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accountCodes);
+                }
             }
 
             SapResult sapResult;
