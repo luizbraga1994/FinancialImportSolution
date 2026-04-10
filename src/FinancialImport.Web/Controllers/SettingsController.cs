@@ -41,7 +41,7 @@ public class SettingsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SaveCategory(string categoria, IFormCollection form, CancellationToken ct)
     {
-        var userId = User.FindFirst(FinancialImport.Domain.Constants.ClaimConstants.Login)?.Value ?? "sistema";
+        var userId = User.FindFirst(ClaimConstants.Login)?.Value ?? "sistema";
 
         var settings = await _settings.GetCategoryAsync(categoria, ct);
         var updates = new Dictionary<string, string?>();
