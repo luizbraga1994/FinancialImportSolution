@@ -54,12 +54,12 @@ public abstract class RabbitMqConsumerBase<TPayload> : BackgroundService
         IServiceProvider scopedServices,
         CancellationToken cancellationToken);
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!_options.Enabled)
         {
             _logger.LogInformation("RabbitMQ disabled — {Consumer} skipped.", ConsumerName);
-            return Task.CompletedTask;
+            return;
         }
 
         if (!_options.Channels.TryGetValue(_channelKey, out var channelOptions)
@@ -68,45 +68,65 @@ public abstract class RabbitMqConsumerBase<TPayload> : BackgroundService
             _logger.LogWarning(
                 "RabbitMQ channel '{Channel}' not configured — {Consumer} will not start.",
                 _channelKey, ConsumerName);
-            return Task.CompletedTask;
+            return;
         }
 
-        _channel = _connectionFactory.GetConnection().CreateModel();
-        _channel.BasicQos(prefetchSize: 0, prefetchCount: (ushort)_options.PrefetchCount, global: false);
+        var retryDelay = TimeSpan.FromSeconds(_options.ConnectionRecoveryIntervalSeconds);
 
-        var consumer = new AsyncEventingBasicConsumer(_channel);
-        consumer.Received += async (_, ea) =>
+        while (!stoppingToken.IsCancellationRequested)
         {
-            var deliveryTag = ea.DeliveryTag;
             try
             {
-                await HandleDeliveryAsync(ea, stoppingToken);
-                _channel.BasicAck(deliveryTag, multiple: false);
+                _channel = _connectionFactory.GetConnection().CreateModel();
+                _channel.BasicQos(prefetchSize: 0, prefetchCount: (ushort)_options.PrefetchCount, global: false);
+
+                var consumer = new AsyncEventingBasicConsumer(_channel);
+                consumer.Received += async (_, ea) =>
+                {
+                    var deliveryTag = ea.DeliveryTag;
+                    try
+                    {
+                        await HandleDeliveryAsync(ea, stoppingToken);
+                        _channel.BasicAck(deliveryTag, multiple: false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        _channel.BasicNack(deliveryTag, multiple: false, requeue: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex,
+                            "{Consumer} failed to process message id={MessageId} — sending to DLQ.",
+                            ConsumerName, ea.BasicProperties?.MessageId);
+                        // requeue=false => dead-letter exchange will pick it up thanks to DLX.
+                        _channel.BasicNack(deliveryTag, multiple: false, requeue: false);
+                    }
+                };
+
+                _channel.BasicConsume(
+                    queue: channelOptions.Queue,
+                    autoAck: false,
+                    consumer: consumer);
+
+                _logger.LogInformation(
+                    "{Consumer} started on queue {Queue} (prefetch={Prefetch})",
+                    ConsumerName, channelOptions.Queue, _options.PrefetchCount);
+
+                return;
             }
-            catch (OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _channel.BasicNack(deliveryTag, multiple: false, requeue: true);
+                _logger.LogWarning(ex,
+                    "{Consumer} could not connect to RabbitMQ — retrying in {Seconds}s.",
+                    ConsumerName, (int)retryDelay.TotalSeconds);
+
+                try { _channel?.Close(); } catch { /* best-effort cleanup */ }
+                _channel?.Dispose();
+                _channel = null;
+
+                await Task.Delay(retryDelay, stoppingToken);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex,
-                    "{Consumer} failed to process message id={MessageId} — sending to DLQ.",
-                    ConsumerName, ea.BasicProperties?.MessageId);
-                // requeue=false => dead-letter exchange will pick it up thanks to DLX.
-                _channel.BasicNack(deliveryTag, multiple: false, requeue: false);
-            }
-        };
-
-        _channel.BasicConsume(
-            queue: channelOptions.Queue,
-            autoAck: false,
-            consumer: consumer);
-
-        _logger.LogInformation(
-            "{Consumer} started on queue {Queue} (prefetch={Prefetch})",
-            ConsumerName, channelOptions.Queue, _options.PrefetchCount);
-
-        return Task.CompletedTask;
+        }
     }
 
     private async Task HandleDeliveryAsync(BasicDeliverEventArgs ea, CancellationToken cancellationToken)
