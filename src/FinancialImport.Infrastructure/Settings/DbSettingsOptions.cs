@@ -115,6 +115,48 @@ public sealed class DbConfigureRabbitMqOptions : IConfigureOptions<RabbitMqOptio
         o.InitialRetryDelaySeconds  = int.TryParse(_s.Get("RabbitMq:InitialRetryDelaySeconds"), out var ird) ? ird : 2;
         o.RetryBackoffMultiplier    = double.TryParse(_s.Get("RabbitMq:RetryBackoffMultiplier"), out var rbm) ? rbm : 2.0;
         o.MaxRetryDelaySeconds      = int.TryParse(_s.Get("RabbitMq:MaxRetryDelaySeconds"), out var mrd) ? mrd : 300;
+        o.ConnectionRecoveryIntervalSeconds = int.TryParse(_s.Get("RabbitMq:ConnectionRecoveryIntervalSeconds"), out var cri) ? cri : 10;
+        o.NetworkRecoveryIntervalSeconds    = int.TryParse(_s.Get("RabbitMq:NetworkRecoveryIntervalSeconds"), out var nri) ? nri : 10;
+        o.UseSsl           = bool.TryParse(_s.Get("RabbitMq:UseSsl"), out var ssl) && ssl;
+
+        // --- Channel definitions ---
+        // DB keys follow the pattern: RabbitMq:Channels:<channelKey>:<Property>
+        // e.g. RabbitMq:Channels:import.process.command:Queue
+        const string prefix = "RabbitMq:Channels:";
+        var channelEntries = _s.GetByPrefix(prefix);
+
+        foreach (var (key, value) in channelEntries)
+        {
+            // key = "RabbitMq:Channels:import.process.command:Queue"
+            var remainder = key[prefix.Length..]; // "import.process.command:Queue"
+            var colonIdx = remainder.LastIndexOf(':');
+            if (colonIdx <= 0) continue;
+
+            var channelKey = remainder[..colonIdx];    // "import.process.command"
+            var property   = remainder[(colonIdx + 1)..]; // "Queue"
+
+            if (!o.Channels.TryGetValue(channelKey, out var channelOpts))
+            {
+                channelOpts = new RabbitMqChannelOptions();
+                o.Channels[channelKey] = channelOpts;
+            }
+
+            switch (property)
+            {
+                case "Queue":
+                    channelOpts.Queue = value ?? string.Empty;
+                    break;
+                case "RoutingKey":
+                    channelOpts.RoutingKey = value ?? string.Empty;
+                    break;
+                case "DeadLetterQueue":
+                    channelOpts.DeadLetterQueue = value;
+                    break;
+                case "Durable":
+                    channelOpts.Durable = !bool.TryParse(value, out var dur) || dur;
+                    break;
+            }
+        }
     }
 }
 

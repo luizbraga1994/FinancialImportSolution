@@ -11,6 +11,9 @@ public interface ISystemSettingsService
     /// <summary>Leitura sincrona a partir do cache (requer PreloadCacheAsync antes do primeiro uso).</summary>
     string? Get(string key);
 
+    /// <summary>Retorna todas as entradas do cache cujas chaves iniciam com o prefixo informado.</summary>
+    IReadOnlyDictionary<string, string?> GetByPrefix(string prefix);
+
     /// <summary>Leitura assincrona — garante que o cache esta populado antes de retornar.</summary>
     Task<string?> GetAsync(string key, CancellationToken ct = default);
 

@@ -33,6 +33,18 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
         return value;
     }
 
+    public IReadOnlyDictionary<string, string?> GetByPrefix(string prefix)
+    {
+        var snapshot = _cache;
+        var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in snapshot)
+        {
+            if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                result[key] = value;
+        }
+        return result;
+    }
+
     public async Task<string?> GetAsync(string key, CancellationToken ct = default)
     {
         await EnsureCacheAsync(ct);
