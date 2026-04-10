@@ -20,7 +20,6 @@ using FinancialImport.Infrastructure.Sap;
 using FinancialImport.Infrastructure.Security;
 using FinancialImport.Infrastructure.Settings;
 using FinancialImport.Infrastructure.Workers;
-using FinancialImport.Integration.Hana.Options;
 using FinancialImport.Integration.Sap.Options;
 using FinancialImport.Shared.Abstractions;
 using FinancialImport.Shared.Imports;
@@ -43,24 +42,22 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISystemSettingsService, DbSystemSettingsService>();
 
         // --- DB-backed IConfigureOptions<T> for all option classes ---
-        services.AddSingleton<IConfigureOptions<HanaOptions>, DbConfigureHanaOptions>();
+        // HANA stays in appsettings.json (section HanaDbConnection) since it is the
+        // discovery source consulted before user login. Everything else lives in DB.
         services.AddSingleton<IConfigureOptions<SapServiceLayerOptions>, DbConfigureSapOptions>();
         services.AddSingleton<IConfigureOptions<JwtOptions>, DbConfigureJwtOptions>();
-        services.AddSingleton<IConfigureOptions<JwtBearerOptions>, DbConfigureJwtBearerOptions>();
+        services.AddSingleton<IConfigureNamedOptions<JwtBearerOptions>, DbConfigureJwtBearerOptions>();
         services.AddSingleton<IConfigureOptions<RabbitMqOptions>, DbConfigureRabbitMqOptions>();
         services.AddSingleton<IConfigureOptions<KafkaOptions>, DbConfigureKafkaOptions>();
         services.AddSingleton<IConfigureOptions<ImportProcessingOptions>, DbConfigureImportOptions>();
         services.AddSingleton<IConfigureOptions<LayoutParsingOptions>, DbConfigureLayoutOptions>();
         services.AddSingleton<IConfigureOptions<OutboxOptions>, DbConfigureOutboxOptions>();
 
-        services.Configure<MySqlOptions>(configuration.GetSection("MySql"));
-
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? configuration.GetSection("MySql").GetValue<string>("ConnectionString");
+        var connectionString = configuration.GetConnectionString("DefaultConnection");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(
-                "ConnectionStrings:DefaultConnection ou MySql:ConnectionString nao configurado.");
+                "ConnectionStrings:DefaultConnection nao configurado em appsettings.json.");
         }
 
         services.AddDbContext<AppDbContext>(options =>

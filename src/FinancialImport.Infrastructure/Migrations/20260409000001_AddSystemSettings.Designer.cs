@@ -6,11 +6,14 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace FinancialImport.Infrastructure.Migrations;
-
-[DbContext(typeof(AppDbContext))]
-[Migration("20260409000001_AddSystemSettings")]
-partial class AddSystemSettings
+namespace FinancialImport.Infrastructure.Migrations
 {
-    protected override void BuildTargetModel(ModelBuilder modelBuilder) { }
+    // Minimal designer: only the [Migration] attribute is needed by EF Core's
+    // runtime migration applier. dotnet ef migrations add regenerates this
+    // file against the latest AppDbContextModelSnapshot.
+    [DbContext(typeof(AppDbContext))]
+    [Migration("20260409000001_AddSystemSettings")]
+    partial class AddSystemSettings
+    {
+    }
 }

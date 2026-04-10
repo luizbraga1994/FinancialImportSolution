@@ -198,19 +198,6 @@ public sealed class DatabaseSeeder
 
         var defaults = new List<SystemSetting>
         {
-            // ── HANA ────────────────────────────────────────────────────────
-            new() { Chave = "Hana:Server",              Categoria = "HANA",       TipoDado = "string",   Obrigatorio = true,  Descricao = "Endereco do servidor SAP HANA (ex: 192.168.1.10)" },
-            new() { Chave = "Hana:Port",                Categoria = "HANA",       TipoDado = "string",   Obrigatorio = false, Valor = "30015", Descricao = "Porta do servidor HANA" },
-            new() { Chave = "Hana:Database",            Categoria = "HANA",       TipoDado = "string",   Obrigatorio = false, Valor = "SBOCOMMON", Descricao = "Nome do banco compartilhado do SBO" },
-            new() { Chave = "Hana:UserID",              Categoria = "HANA",       TipoDado = "string",   Obrigatorio = true,  Descricao = "Usuario de conexao ao HANA" },
-            new() { Chave = "Hana:Password",            Categoria = "HANA",       TipoDado = "password", Obrigatorio = true,  Descricao = "Senha de conexao ao HANA" },
-            new() { Chave = "Hana:MaxPoolSize",         Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "100", Descricao = "Tamanho maximo do pool de conexoes" },
-            new() { Chave = "Hana:MinPoolSize",         Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "10",  Descricao = "Tamanho minimo do pool de conexoes" },
-            new() { Chave = "Hana:ConnectionTimeout",   Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "60",  Descricao = "Timeout de conexao em segundos" },
-            new() { Chave = "Hana:CommandTimeout",      Categoria = "HANA",       TipoDado = "int",      Obrigatorio = false, Valor = "300", Descricao = "Timeout de comando em segundos" },
-            new() { Chave = "Hana:ProviderInvariantName", Categoria = "HANA",     TipoDado = "string",   Obrigatorio = false, Valor = "Sap.Data.Hana", Descricao = "Nome invariante do provider HANA" },
-            new() { Chave = "Hana:ProviderAssemblyPath", Categoria = "HANA",      TipoDado = "string",   Obrigatorio = false, Descricao = "Caminho opcional para o assembly Sap.Data.Hana.dll" },
-
             // ── SAP Service Layer ────────────────────────────────────────────
             new() { Chave = "Sap:BaseUrl",              Categoria = "SAP",        TipoDado = "string",   Obrigatorio = true,  Descricao = "URL base da SAP Service Layer (ex: https://hana:50000/b1s/v1)" },
             new() { Chave = "Sap:UserName",             Categoria = "SAP",        TipoDado = "string",   Obrigatorio = true,  Descricao = "Usuario do SAP Business One" },
@@ -226,6 +213,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Jwt:Issuer",               Categoria = "Seguranca",  TipoDado = "string",   Obrigatorio = false, Valor = "FinancialImport",        Descricao = "Emissor do token JWT" },
             new() { Chave = "Jwt:Audience",             Categoria = "Seguranca",  TipoDado = "string",   Obrigatorio = false, Valor = "FinancialImportClients", Descricao = "Audiencia do token JWT" },
             new() { Chave = "Jwt:ExpirationMinutes",    Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "480",  Descricao = "Validade do token JWT em minutos" },
+            new() { Chave = "Jwt:RefreshExpirationMinutes", Categoria = "Seguranca", TipoDado = "int",   Obrigatorio = false, Valor = "1440", Descricao = "Validade do refresh token em minutos" },
             new() { Chave = "Jwt:ClockSkewMinutes",     Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "1",    Descricao = "Tolerancia de clock em minutos" },
             new() { Chave = "Cookie:ExpirationHours",   Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "8",    Descricao = "Horas de validade do cookie de autenticacao" },
 
@@ -257,12 +245,21 @@ public sealed class DatabaseSeeder
             new() { Chave = "RabbitMq:Password",         Categoria = "Mensageria", TipoDado = "password",Obrigatorio = false, Descricao = "Senha do RabbitMQ" },
             new() { Chave = "RabbitMq:ExchangeName",     Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.exchange",       Descricao = "Nome do exchange principal" },
             new() { Chave = "RabbitMq:DeadLetterExchangeName", Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.dlx",       Descricao = "Nome do Dead Letter Exchange" },
+            new() { Chave = "RabbitMq:PrefetchCount",    Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "16",                             Descricao = "Mensagens em prefetch por consumidor" },
             new() { Chave = "RabbitMq:MaxRetryAttempts", Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "5",                              Descricao = "Tentativas maximas antes do DLQ" },
+            new() { Chave = "RabbitMq:InitialRetryDelaySeconds", Categoria = "Mensageria", TipoDado = "int", Obrigatorio = false, Valor = "2",                         Descricao = "Atraso inicial entre tentativas (s)" },
+            new() { Chave = "RabbitMq:RetryBackoffMultiplier",   Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "2",                      Descricao = "Multiplicador exponencial de backoff" },
+            new() { Chave = "RabbitMq:MaxRetryDelaySeconds",     Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "300",                    Descricao = "Atraso maximo entre tentativas (s)" },
 
             // ── Mensageria (Kafka) ───────────────────────────────────────────
             new() { Chave = "Kafka:Enabled",             Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",           Descricao = "Habilitar integracao com Kafka" },
             new() { Chave = "Kafka:BootstrapServers",    Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "localhost:9092",   Descricao = "Servidores bootstrap do Kafka" },
             new() { Chave = "Kafka:ClientId",            Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport",  Descricao = "Client ID do Kafka" },
+            new() { Chave = "Kafka:ConsumerGroupId",     Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport",  Descricao = "Consumer Group ID do Kafka" },
+            new() { Chave = "Kafka:LingerMs",            Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "20",               Descricao = "Linger antes de enviar batch (ms)" },
+            new() { Chave = "Kafka:BatchSize",           Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "32768",            Descricao = "Tamanho do batch em bytes" },
+            new() { Chave = "Kafka:EnableIdempotence",   Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "true",             Descricao = "Habilitar producao idempotente" },
+            new() { Chave = "Kafka:Acks",                Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "all",              Descricao = "Acks do Kafka (all, 1, 0)" },
 
             // ── Outbox dispatcher ────────────────────────────────────────────
             new() { Chave = "Outbox:Enabled",                Categoria = "Mensageria", TipoDado = "bool", Obrigatorio = false, Valor = "true", Descricao = "Habilitar o dispatcher de outbox" },

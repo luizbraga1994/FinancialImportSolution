@@ -1,10 +1,7 @@
 using FinancialImport.Application.Imports;
-using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Layouts.Parsers;
 using FinancialImport.Application.Validators;
 using FinancialImport.Shared.Correlation;
-using FinancialImport.Shared.Imports;
-using FinancialImport.Shared.Messaging;
 using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,11 +12,10 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddApplication(this IServiceCollection services, IConfiguration configuration)
     {
-        // LayoutDefinitionsOptions defines the column mappings for each file layout.
-        // It is a structured definition (not a connection/credential), so it stays
-        // bound from appsettings (Imports:Layouts section) for version-controlled
-        // change management. All other options come from the DB settings table.
-        services.Configure<LayoutDefinitionsOptions>(configuration.GetSection(LayoutDefinitionsOptions.SectionName));
+        // No appsettings binding here. All strongly-typed options are DB-backed
+        // via DbConfigureXxxOptions registered in Infrastructure. The only
+        // exception is HanaOptions, bound in Integration.Hana from the
+        // HanaDbConnection section of appsettings.
 
         // --- Correlation ---
         services.AddSingleton<ICorrelationContextAccessor, CorrelationContextAccessor>();

@@ -1,14 +1,13 @@
 @using FinancialImport.Domain.Entities
 @{
     ViewData["Title"] = "Configuracoes do Sistema";
-    var activeCategory = ViewBag.ActiveCategory as string ?? "HANA";
+    var activeCategory = ViewBag.ActiveCategory as string ?? "SAP";
     var categories = ViewBag.Categories as string[] ?? Array.Empty<string>();
     var grouped = ViewBag.Grouped as Dictionary<string, List<SystemSetting>> ?? new();
     var currentSettings = grouped.TryGetValue(activeCategory, out var s) ? s : new List<SystemSetting>();
 
     string CategoryIcon(string cat) => cat switch
     {
-        "HANA"       => "bi-database-fill",
         "SAP"        => "bi-cloud-fill",
         "Seguranca"  => "bi-shield-lock-fill",
         "Importacao" => "bi-upload",

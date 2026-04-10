@@ -12,7 +12,7 @@ public class SettingsController : Controller
     private readonly ILogger<SettingsController> _logger;
 
     private static readonly string[] Categories =
-        ["HANA", "SAP", "Seguranca", "Importacao", "Mensageria", "Layout"];
+        ["SAP", "Seguranca", "Importacao", "Mensageria", "Layout"];
 
     public SettingsController(ISystemSettingsService settings, ILogger<SettingsController> logger)
     {
@@ -63,18 +63,6 @@ public class SettingsController : Controller
         }
 
         return RedirectToAction(nameof(Index), new { categoria });
-    }
-
-    [HttpPost]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> TestHana(CancellationToken ct)
-    {
-        // Invalidate cache so latest DB values are used
-        _settings.InvalidateCache();
-        await _settings.PreloadCacheAsync(ct);
-
-        TempData["Info"] = "Cache de configuracoes recarregado. Teste a conexao HANA fazendo login.";
-        return RedirectToAction(nameof(Index), new { categoria = "HANA" });
     }
 
     [HttpPost]

@@ -2,7 +2,6 @@ using System.Text;
 using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Settings;
 using FinancialImport.Infrastructure.Security;
-using FinancialImport.Integration.Hana.Options;
 using FinancialImport.Integration.Sap.Options;
 using FinancialImport.Shared.Imports;
 using FinancialImport.Shared.Messaging;
@@ -12,29 +11,11 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace FinancialImport.Infrastructure.Settings;
 
-// ---------------------------------------------------------------------------
-// HANA
-// ---------------------------------------------------------------------------
-public sealed class DbConfigureHanaOptions : IConfigureOptions<HanaOptions>
-{
-    private readonly ISystemSettingsService _s;
-    public DbConfigureHanaOptions(ISystemSettingsService s) => _s = s;
-
-    public void Configure(HanaOptions o)
-    {
-        o.Server               = _s.Get("Hana:Server") ?? "";
-        o.Port                 = _s.Get("Hana:Port") ?? "30015";
-        o.Database             = _s.Get("Hana:Database") ?? "SBOCOMMON";
-        o.UserID               = _s.Get("Hana:UserID") ?? "";
-        o.Password             = _s.Get("Hana:Password") ?? "";
-        o.MaxPoolSize          = int.TryParse(_s.Get("Hana:MaxPoolSize"), out var mp) ? mp : 100;
-        o.MinPoolSize          = int.TryParse(_s.Get("Hana:MinPoolSize"), out var mnp) ? mnp : 10;
-        o.ConnectionTimeout    = int.TryParse(_s.Get("Hana:ConnectionTimeout"), out var ct) ? ct : 60;
-        o.CommandTimeout       = int.TryParse(_s.Get("Hana:CommandTimeout"), out var cmd) ? cmd : 300;
-        o.ProviderInvariantName = _s.Get("Hana:ProviderInvariantName") ?? "Sap.Data.Hana";
-        o.ProviderAssemblyPath  = _s.Get("Hana:ProviderAssemblyPath");
-    }
-}
+// NOTE: HANA connection settings remain in appsettings.json (section HanaDbConnection)
+// because HANA is the "discovery" source — we read the list of SAP companies from it
+// before the user has even logged in, and the MySQL settings cache may not be fully
+// loaded yet on fresh startup. All other integration settings (SAP, JWT, messaging,
+// imports, layout) live in the ConfiguracaoSistema table and are edited via the UI.
 
 // ---------------------------------------------------------------------------
 // SAP Service Layer
@@ -58,12 +39,20 @@ public sealed class DbConfigureSapOptions : IConfigureOptions<SapServiceLayerOpt
 }
 
 // ---------------------------------------------------------------------------
-// JWT Bearer (API)
+// JWT Bearer (API). JwtBearerOptions is a NAMED option indexed by the
+// authentication scheme ("Bearer" by default), so we must implement
+// IConfigureNamedOptions<T> and only configure when the name matches.
 // ---------------------------------------------------------------------------
-public sealed class DbConfigureJwtBearerOptions : IConfigureOptions<JwtBearerOptions>
+public sealed class DbConfigureJwtBearerOptions : IConfigureNamedOptions<JwtBearerOptions>
 {
     private readonly ISystemSettingsService _s;
     public DbConfigureJwtBearerOptions(ISystemSettingsService s) => _s = s;
+
+    public void Configure(string? name, JwtBearerOptions o)
+    {
+        if (name != JwtBearerDefaults.AuthenticationScheme) return;
+        Configure(o);
+    }
 
     public void Configure(JwtBearerOptions o)
     {
