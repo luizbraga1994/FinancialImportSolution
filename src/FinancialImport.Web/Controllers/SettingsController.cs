@@ -48,10 +48,21 @@ public class SettingsController : Controller
 
         foreach (var setting in settings)
         {
+            if (setting.TipoDado == "bool")
+            {
+                // Hidden input sends "false", checkbox sends "true".
+                // When checked, BOTH arrive. Check if "true" is present.
+                var isChecked = form[setting.Chave].Any(v => v == "true");
+                updates[setting.Chave] = isChecked ? "true" : "false";
+                continue;
+            }
+
             var formValue = form[setting.Chave].FirstOrDefault();
+
             // For password fields: empty means "keep existing"
             if (setting.TipoDado == "password" && string.IsNullOrEmpty(formValue))
                 continue;
+
             updates[setting.Chave] = string.IsNullOrWhiteSpace(formValue) ? null : formValue.Trim();
         }
 
