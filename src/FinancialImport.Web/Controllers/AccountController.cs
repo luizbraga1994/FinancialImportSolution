@@ -4,6 +4,7 @@ using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Integration.Sap.Options;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -11,6 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Web.Controllers;
 
@@ -27,6 +29,8 @@ public class AccountController : Controller
 {
     private readonly IApplicationAuthService _authService;
     private readonly ISapCompanyDiscoveryService _companyDiscovery;
+    private readonly ISapCompanySessionService _sapSessionService;
+    private readonly SapServiceLayerOptions _sapOptions;
     private readonly AppDbContext _dbContext;
     private readonly ILoginAuditContextAccessor _loginAuditContextAccessor;
     private readonly ILogger<AccountController> _logger;
@@ -34,12 +38,16 @@ public class AccountController : Controller
     public AccountController(
         IApplicationAuthService authService,
         ISapCompanyDiscoveryService companyDiscovery,
+        ISapCompanySessionService sapSessionService,
+        IOptions<SapServiceLayerOptions> sapOptions,
         AppDbContext dbContext,
         ILoginAuditContextAccessor loginAuditContextAccessor,
         ILogger<AccountController> logger)
     {
         _authService = authService;
         _companyDiscovery = companyDiscovery;
+        _sapSessionService = sapSessionService;
+        _sapOptions = sapOptions.Value;
         _dbContext = dbContext;
         _loginAuditContextAccessor = loginAuditContextAccessor;
         _logger = logger;
@@ -237,6 +245,25 @@ public class AccountController : Controller
                 principal);
 
             _logger.LogInformation("Usuario '{Login}' autenticado na base '{CompanyDb}'.", model.Login, model.CompanyDb);
+
+            // 5. Auto-establish SAP Service Layer session (so the user
+            //    can confirm imports immediately without visiting Empresas).
+            try
+            {
+                var sapResult = await _sapSessionService.SignInCompanyAsync(
+                    model.CompanyDb, _sapOptions.UserName, _sapOptions.Password, cancellationToken);
+
+                if (sapResult.Success)
+                    _logger.LogInformation("Sessao SAP estabelecida para '{CompanyDb}'.", model.CompanyDb);
+                else
+                    _logger.LogWarning("Falha ao conectar ao SAP para '{CompanyDb}': {Error}", model.CompanyDb, sapResult.ErrorMessage);
+            }
+            catch (Exception sapEx)
+            {
+                // SAP connection failure should NOT block login — the user
+                // can still browse/upload. They'll see a warning at confirm time.
+                _logger.LogWarning(sapEx, "Nao foi possivel estabelecer sessao SAP durante login para '{CompanyDb}'.", model.CompanyDb);
+            }
 
             if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
                 return Redirect(model.ReturnUrl);
