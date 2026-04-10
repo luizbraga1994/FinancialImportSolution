@@ -62,10 +62,16 @@ public sealed class SapJournalEntryService : ISapJournalEntryService
         {
             using var doc = JsonDocument.Parse(rawResponse);
             if (doc.RootElement.TryGetProperty("error", out var err) &&
-                err.TryGetProperty("message", out var msg) &&
-                msg.TryGetProperty("value", out var val))
+                err.TryGetProperty("message", out var msg))
             {
-                return val.GetString() ?? rawResponse;
+                // v2 format: "message": "Error text"
+                if (msg.ValueKind == JsonValueKind.String)
+                    return msg.GetString() ?? rawResponse;
+
+                // v1 format: "message": { "value": "Error text" }
+                if (msg.ValueKind == JsonValueKind.Object &&
+                    msg.TryGetProperty("value", out var val))
+                    return val.GetString() ?? rawResponse;
             }
         }
         catch (JsonException) { }
