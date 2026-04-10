@@ -91,12 +91,26 @@ public sealed class OutboxDispatcherWorker : BackgroundService
                 {
                     case "rabbitmq":
                         if (rabbit == null || !_rabbitOptions.Enabled)
-                            throw new InvalidOperationException("RabbitMQ publisher is not enabled.");
+                        {
+                            // Broker intentionally disabled — mark as dispatched so
+                            // the outbox does not retry forever. The message was
+                            // "delivered to nowhere" which is the correct behavior
+                            // when the integration is turned off.
+                            _logger.LogDebug(
+                                "RabbitMQ disabled — auto-completing outbox message {Id}.", message.Id);
+                            await repo.MarkDispatchedAsync(message.Id, cancellationToken);
+                            continue;
+                        }
                         rabbit.Publish(message);
                         break;
                     case "kafka":
                         if (kafka == null || !kafka.IsEnabled)
-                            throw new InvalidOperationException("Kafka producer is not enabled.");
+                        {
+                            _logger.LogDebug(
+                                "Kafka disabled — auto-completing outbox message {Id}.", message.Id);
+                            await repo.MarkDispatchedAsync(message.Id, cancellationToken);
+                            continue;
+                        }
                         await kafka.PublishAsync(message, cancellationToken);
                         break;
                     default:

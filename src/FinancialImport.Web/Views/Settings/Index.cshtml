@@ -116,7 +116,8 @@
                                             <input type="password" class="form-control settings-input"
                                                    id="field_@setting.Chave.Replace(":", "_")"
                                                    name="@setting.Chave"
-                                                   placeholder="@(string.IsNullOrWhiteSpace(setting.Valor) ? "Nao configurado" : "••••••••")"
+                                                   value="@setting.Valor"
+                                                   placeholder="@(string.IsNullOrWhiteSpace(setting.Valor) ? "Nao configurado" : "")"
                                                    autocomplete="new-password" />
                                             <button type="button" class="btn btn-outline-secondary btn-sm px-2"
                                                     onclick="togglePwd(this)" tabindex="-1">
