@@ -54,6 +54,12 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
             var language = int.TryParse(_settings.Get("Sap:Language"), out var lang) ? lang : 29;
 
+            _logger.LogDebug(
+                "SAP Login payload: CompanyDB={CompanyDb}, UserName={User}, Password={HasPassword}, Language={Language}, BaseAddress={BaseAddress}",
+                companyDb, sapUserName,
+                string.IsNullOrEmpty(sapPassword) ? "EMPTY" : $"SET({sapPassword.Length} chars)",
+                language, client.BaseAddress?.ToString() ?? "NULL");
+
             // Login payload — same structure as PortalSapB1.ServiceLayerAdapter
             var payload = new
             {
