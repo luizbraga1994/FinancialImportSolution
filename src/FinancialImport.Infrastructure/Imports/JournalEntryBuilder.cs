@@ -35,43 +35,95 @@ public sealed class JournalEntryBuilder
             ReferenceDate = firstLine.PostingDate,
             DueDate = firstLine.DueDate,
             TaxDate = firstLine.DocumentDate,
-            Memo = Truncate(
-                BuildMemo(firstLine),
-                _options.MemoMaxLength),
-            // Use the GroupKeyHash as SAP Reference so the SAP side has
-            // a deterministic identifier and duplicates can be spotted
-            // even if the integration retries.
-            Reference = Truncate(groupKeyHash, _options.ReferenceMaxLength),
+            // Memo (= "Observacoes" in SAP B1) shows the human-readable
+            // Referencia from the import file. Dates already appear in
+            // the journal header — appending them here would just be
+            // visual noise.
+            Memo = Truncate(firstLine.Reference, _options.MemoMaxLength),
+            // SAP Reference field (Ref1) carries the same business
+            // reference, truncated to its column width. Idempotency is
+            // enforced by the LancamentoSapDispatch (CompanyDb,
+            // GroupKeyHash) unique index, NOT by Ref1, so there is no
+            // need to leak the hash into a user-visible field.
+            Reference = Truncate(firstLine.Reference, _options.ReferenceMaxLength),
             BPLID = bplId,
             JournalEntryLines = new List<SapJournalEntryLine>()
         };
 
+        // Build debits and credits in two passes so the resulting SAP
+        // journal lists ALL debits first then ALL credits — matching the
+        // visual order users expect when reviewing entries in SAP B1.
+        var debitLines = new List<SapJournalEntryLine>(lines.Count);
+        var creditLines = new List<SapJournalEntryLine>(lines.Count);
+
         foreach (var line in lines)
         {
-            // Account-side entry
-            var debit = line.DebitAmount ?? 0m;
-            var credit = line.CreditAmount ?? 0m;
+            // Resolve amount + direction. Each input row becomes a pair
+            // of SAP journal lines (ContaContabil + ContraAccountCode)
+            // whose sides MUST be mutually exclusive — never debit+credit
+            // on the same line.
+            //
+            // Direction rules:
+            //   - DebitAmount populated  → ContaContabil = debit
+            //   - CreditAmount populated → ContaContabil = credit
+            //   - Both populated with the same value (common user error
+            //     when the template has both columns) → default to
+            //     ContaContabil = debit (standard general-journal entry)
+            //   - Both zero/null → skip line
+            var debitAmount = line.DebitAmount ?? 0m;
+            var creditAmount = line.CreditAmount ?? 0m;
 
-            if (debit == 0m && credit == 0m)
+            decimal accountDebit;
+            decimal accountCredit;
+
+            if (debitAmount > 0m)
+            {
+                accountDebit = debitAmount;
+                accountCredit = 0m;
+            }
+            else if (creditAmount > 0m)
+            {
+                accountDebit = 0m;
+                accountCredit = creditAmount;
+            }
+            else if (line.Amount > 0m)
+            {
+                // Fallback: neither credit nor debit column was parsed
+                // but the Amount field is populated — treat as debit.
+                accountDebit = line.Amount;
+                accountCredit = 0m;
+            }
+            else
+            {
                 continue;
+            }
 
-            payload.JournalEntryLines.Add(new SapJournalEntryLine
+            var memo = Truncate(line.LineMemo, _options.LineMemoMaxLength);
+
+            // Main account (ContaContabil)
+            var mainLine = new SapJournalEntryLine
             {
                 AccountCode = line.AccountCode,
-                Debit = debit,
-                Credit = credit,
-                LineMemo = Truncate(line.LineMemo, _options.LineMemoMaxLength)
-            });
+                Debit = accountDebit,
+                Credit = accountCredit,
+                LineMemo = memo
+            };
 
-            // Counterparty line: flipped debit/credit
-            payload.JournalEntryLines.Add(new SapJournalEntryLine
+            // Counterparty (ContraAccountCode) — sides flipped
+            var contraLine = new SapJournalEntryLine
             {
                 AccountCode = line.ContraAccountCode,
-                Debit = credit,
-                Credit = debit,
-                LineMemo = Truncate(line.LineMemo, _options.LineMemoMaxLength)
-            });
+                Debit = accountCredit,
+                Credit = accountDebit,
+                LineMemo = memo
+            };
+
+            (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
+            (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);
         }
+
+        payload.JournalEntryLines.AddRange(debitLines);
+        payload.JournalEntryLines.AddRange(creditLines);
 
         var totalDebit = payload.JournalEntryLines.Sum(l => l.Debit);
         var totalCredit = payload.JournalEntryLines.Sum(l => l.Credit);
@@ -88,9 +140,6 @@ public sealed class JournalEntryBuilder
             IsBalanced = balanced
         };
     }
-
-    private static string BuildMemo(ImportLine firstLine)
-        => $"{firstLine.Reference} - Venc:{firstLine.DueDate:dd/MM/yyyy} - Doc:{firstLine.DocumentDate:dd/MM/yyyy}";
 
     private static string Truncate(string? value, int max)
     {

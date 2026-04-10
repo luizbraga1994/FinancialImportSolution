@@ -61,21 +61,40 @@ public class BusinessKeyBuilderTests
     }
 
     [Fact]
-    public void GroupKey_should_differ_per_seq_lancamento()
+    public void GroupKey_should_merge_lines_with_same_reference_and_dates()
     {
+        // Lines sharing Referencia + dates must end up in the SAME SAP
+        // journal entry, regardless of their individual SeqLancamento
+        // (SeqLancamento is a line-level control identifier only).
         var builder = Create();
         var (_, hashA) = builder.BuildGroupKey(
             "TESTDB", "REF",
             new DateTime(2026, 1, 1),
             new DateTime(2026, 1, 1),
-            new DateTime(2026, 1, 1),
-            "AAA");
+            new DateTime(2026, 1, 1));
         var (_, hashB) = builder.BuildGroupKey(
             "TESTDB", "REF",
             new DateTime(2026, 1, 1),
             new DateTime(2026, 1, 1),
+            new DateTime(2026, 1, 1));
+
+        hashA.Should().Be(hashB);
+    }
+
+    [Fact]
+    public void GroupKey_should_differ_for_different_references()
+    {
+        var builder = Create();
+        var (_, hashA) = builder.BuildGroupKey(
+            "TESTDB", "REF-A",
             new DateTime(2026, 1, 1),
-            "BBB");
+            new DateTime(2026, 1, 1),
+            new DateTime(2026, 1, 1));
+        var (_, hashB) = builder.BuildGroupKey(
+            "TESTDB", "REF-B",
+            new DateTime(2026, 1, 1),
+            new DateTime(2026, 1, 1),
+            new DateTime(2026, 1, 1));
 
         hashA.Should().NotBe(hashB);
     }
@@ -88,14 +107,12 @@ public class BusinessKeyBuilderTests
             "TESTDB", "REF-001",
             new DateTime(2026, 2, 10),
             new DateTime(2026, 2, 20),
-            new DateTime(2026, 2, 10),
-            "SEQ-1");
+            new DateTime(2026, 2, 10));
         var (_, second) = builder.BuildGroupKey(
             "TESTDB", "REF-001",
             new DateTime(2026, 2, 10),
             new DateTime(2026, 2, 20),
-            new DateTime(2026, 2, 10),
-            "SEQ-1");
+            new DateTime(2026, 2, 10));
 
         first.Should().Be(second);
     }

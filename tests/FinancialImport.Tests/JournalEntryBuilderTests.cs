@@ -61,6 +61,59 @@ public class JournalEntryBuilderTests
     }
 
     [Fact]
+    public void Build_should_default_to_debit_when_both_columns_are_filled()
+    {
+        // Reproduces the user-reported case: spreadsheet has both
+        // Valor Credito and Valor Debito populated with the same value.
+        // Expected: ContaContabil = debit (1503.22), ContraAccount = credit (1503.22).
+        // No SAP line may have BOTH debit and credit set.
+        var builder = Create();
+        var lines = new List<ImportLine>
+        {
+            Line(debit: 1503.22m, credit: 1503.22m, account: "1612001100002", contra: "4999200000008")
+        };
+
+        var result = builder.Build("key", "hash", lines, bplId: 1);
+
+        result.Payload.JournalEntryLines.Should().HaveCount(2);
+
+        // The builder orders ALL debit lines first, then ALL credit lines.
+        var debitRow = result.Payload.JournalEntryLines.Single(l => l.Debit > 0m);
+        var creditRow = result.Payload.JournalEntryLines.Single(l => l.Credit > 0m);
+
+        debitRow.AccountCode.Should().Be("1612001100002");
+        debitRow.Debit.Should().Be(1503.22m);
+        debitRow.Credit.Should().Be(0m);
+
+        creditRow.AccountCode.Should().Be("4999200000008");
+        creditRow.Debit.Should().Be(0m);
+        creditRow.Credit.Should().Be(1503.22m);
+
+        result.TotalDebit.Should().Be(1503.22m);
+        result.TotalCredit.Should().Be(1503.22m);
+        result.IsBalanced.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_should_merge_multiple_lines_with_same_reference_into_one_journal()
+    {
+        // 9 input lines (all sharing one Referencia) → 18 SAP lines in
+        // a single journal entry, balance = sum of all amounts.
+        var builder = Create();
+        var amounts = new[] { 1503.22m, 1500m, 800m, 1200m, 110m, 111m, 222m, 333m, 444m };
+        var lines = amounts
+            .Select(a => Line(debit: a, credit: a, account: "1612001100002", contra: "4999200000008"))
+            .ToList();
+
+        var result = builder.Build("key", "hash", lines, bplId: 1);
+
+        result.Payload.JournalEntryLines.Should().HaveCount(amounts.Length * 2);
+        result.TotalDebit.Should().Be(amounts.Sum());
+        result.TotalCredit.Should().Be(amounts.Sum());
+        result.IsBalanced.Should().BeTrue();
+    }
+
+    [Fact]
     public void Build_should_truncate_long_memos_to_configured_lengths()
     {
         var builder = Create(memoMax: 20, refMax: 10, lineMemoMax: 15);

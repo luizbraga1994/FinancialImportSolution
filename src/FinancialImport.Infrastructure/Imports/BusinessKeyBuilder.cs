@@ -61,17 +61,20 @@ public sealed class BusinessKeyBuilder
 
     /// <summary>
     /// Stable group key used to merge lines into a single SAP
-    /// JournalEntry. Two lines with the same Reference, dates and the
-    /// same SeqLancamento end up in the same group, while lines with
-    /// different SeqLancamento are dispatched as independent journals.
+    /// JournalEntry. Lines sharing the same <c>Referencia</c> and the
+    /// same set of dates land in the SAME journal entry, regardless of
+    /// <c>SeqLancamento</c>. SeqLancamento is only a line-level control
+    /// identifier (used for deduplication via BusinessKey); it must
+    /// NOT split a logical journal into multiple physical entries,
+    /// otherwise a 12-row spreadsheet with 2 distinct Referencias would
+    /// produce 12 SAP journals instead of 2.
     /// </summary>
     public (string key, string hash) BuildGroupKey(
         string companyDb,
         string reference,
         DateTime postingDate,
         DateTime dueDate,
-        DateTime documentDate,
-        string? seqLancamento)
+        DateTime documentDate)
     {
         var sb = new StringBuilder();
         Append(sb, companyDb);
@@ -79,8 +82,6 @@ public sealed class BusinessKeyBuilder
         Append(sb, postingDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         Append(sb, dueDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         Append(sb, documentDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        if (!string.IsNullOrWhiteSpace(seqLancamento))
-            Append(sb, "seq=" + seqLancamento);
         var key = sb.ToString();
         var hash = Sha256Hex(key);
         return (key, hash);

@@ -286,8 +286,10 @@ public sealed class ImportProcessor : IImportProcessor
 
     private static string BuildGroupKeyLabel(ImportLine firstLine)
     {
-        var seqPart = string.IsNullOrWhiteSpace(firstLine.SeqLancamento) ? "" : $"|seq={firstLine.SeqLancamento}";
-        return $"{firstLine.Reference}|{firstLine.PostingDate:yyyy-MM-dd}|{firstLine.DueDate:yyyy-MM-dd}|{firstLine.DocumentDate:yyyy-MM-dd}{seqPart}";
+        // Human-readable label stored in LancamentoSapDispatch.GroupKey for
+        // troubleshooting. SeqLancamento is intentionally excluded — the
+        // group merges all lines that share the same Referencia + dates.
+        return $"{firstLine.Reference}|{firstLine.PostingDate:yyyy-MM-dd}|{firstLine.DueDate:yyyy-MM-dd}|{firstLine.DocumentDate:yyyy-MM-dd}";
     }
 
     private static int? ResolveBplId(ImportLine line, ImportFile importFile, List<BranchMapping> mappings)

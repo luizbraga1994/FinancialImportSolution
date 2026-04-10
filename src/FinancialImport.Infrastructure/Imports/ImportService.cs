@@ -189,8 +189,7 @@ public sealed class ImportService : IImportService
                 info.Source.Referencia,
                 info.Source.DataLancamento,
                 info.Source.DataVencimento != DateTime.MinValue ? info.Source.DataVencimento : info.Source.DataLancamento,
-                info.Source.DataDocumento != DateTime.MinValue ? info.Source.DataDocumento : info.Source.DataLancamento,
-                seqLancamento);
+                info.Source.DataDocumento != DateTime.MinValue ? info.Source.DataDocumento : info.Source.DataLancamento);
 
             lines.Add(new ImportLine
             {
