@@ -98,7 +98,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
         }
 
         await db.SaveChangesAsync(ct);
-        InvalidateCache();
+        await ReloadCacheAsync(ct);
         _logger.LogInformation("Configuracao '{Key}' atualizada por '{User}'.", key, updatedBy);
     }
 
@@ -137,7 +137,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
         }
 
         await db.SaveChangesAsync(ct);
-        InvalidateCache();
+        await ReloadCacheAsync(ct);
         _logger.LogInformation("{Count} configuracoes atualizadas por '{User}'.", values.Count, updatedBy);
     }
 
@@ -149,6 +149,16 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
     public void InvalidateCache()
     {
         _cacheLoadedAt = DateTime.MinValue;
+    }
+
+    /// <summary>
+    /// Forces an immediate cache reload so synchronous <see cref="Get"/>
+    /// callers see updated values right away (not just after TTL expiry).
+    /// </summary>
+    private async Task ReloadCacheAsync(CancellationToken ct)
+    {
+        _cacheLoadedAt = DateTime.MinValue;
+        await LoadCacheAsync(ct);
     }
 
     private async Task EnsureCacheAsync(CancellationToken ct)

@@ -63,7 +63,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
                 Language = language
             };
 
-            var response = await client.PostAsJsonAsync("b1s/v1/Login", payload, cancellationToken);
+            var response = await client.PostAsJsonAsync("Login", payload, cancellationToken);
             var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -119,7 +119,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
         try
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
-            var request = new HttpRequestMessage(HttpMethod.Post, "b1s/v1/Logout");
+            var request = new HttpRequestMessage(HttpMethod.Post, "Logout");
             request.Headers.Add("B1SESSION", session.SessionId);
             if (!string.IsNullOrWhiteSpace(session.RouteId))
                 request.Headers.Add("ROUTEID", session.RouteId);

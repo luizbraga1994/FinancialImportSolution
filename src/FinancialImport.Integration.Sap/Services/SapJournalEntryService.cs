@@ -24,7 +24,7 @@ public sealed class SapJournalEntryService : ISapJournalEntryService
         try
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
-            var request = new HttpRequestMessage(HttpMethod.Post, "/b1s/v1/JournalEntries");
+            var request = new HttpRequestMessage(HttpMethod.Post, "JournalEntries");
             request.Headers.Add("B1SESSION", session.SessionId);
             if (!string.IsNullOrWhiteSpace(session.RouteId))
             {
