@@ -281,6 +281,19 @@ public sealed class DatabaseSeeder
             new() { Chave = "Kafka:EnableIdempotence",   Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "true",             Descricao = "Habilitar producao idempotente" },
             new() { Chave = "Kafka:Acks",                Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "all",              Descricao = "Acks do Kafka (all, 1, 0)" },
 
+            // ── Mensageria (Kafka Topics) ───────────────────────────────────
+            new() { Chave = "Kafka:Topics:import.events:Topic",        Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.import-events",   Descricao = "Topic Kafka para eventos de importacao" },
+            new() { Chave = "Kafka:Topics:import.events:Partitions",   Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "3",                               Descricao = "Particoes do topic de importacao" },
+
+            new() { Chave = "Kafka:Topics:sap.events:Topic",           Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.sap-events",      Descricao = "Topic Kafka para eventos SAP" },
+            new() { Chave = "Kafka:Topics:sap.events:Partitions",      Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "3",                               Descricao = "Particoes do topic SAP" },
+
+            new() { Chave = "Kafka:Topics:security.events:Topic",      Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.security-events",  Descricao = "Topic Kafka para eventos de seguranca" },
+            new() { Chave = "Kafka:Topics:security.events:Partitions", Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "3",                               Descricao = "Particoes do topic de seguranca" },
+
+            new() { Chave = "Kafka:Topics:audit.events:Topic",         Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.audit-events",     Descricao = "Topic Kafka para eventos de auditoria" },
+            new() { Chave = "Kafka:Topics:audit.events:Partitions",    Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "3",                               Descricao = "Particoes do topic de auditoria" },
+
             // ── Outbox dispatcher ────────────────────────────────────────────
             new() { Chave = "Outbox:Enabled",                Categoria = "Mensageria", TipoDado = "bool", Obrigatorio = false, Valor = "true", Descricao = "Habilitar o dispatcher de outbox" },
             new() { Chave = "Outbox:PollingIntervalSeconds",  Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "5",    Descricao = "Intervalo de polling do outbox em segundos" },
