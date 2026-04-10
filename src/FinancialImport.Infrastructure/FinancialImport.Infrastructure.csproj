@@ -21,6 +21,8 @@
     <ProjectReference Include="..\FinancialImport.Application\FinancialImport.Application.csproj" />
     <ProjectReference Include="..\FinancialImport.Domain\FinancialImport.Domain.csproj" />
     <ProjectReference Include="..\FinancialImport.Shared\FinancialImport.Shared.csproj" />
+    <ProjectReference Include="..\FinancialImport.Integration.Hana\FinancialImport.Integration.Hana.csproj" />
+    <ProjectReference Include="..\FinancialImport.Integration.Sap\FinancialImport.Integration.Sap.csproj" />
   </ItemGroup>
 
   <ItemGroup>

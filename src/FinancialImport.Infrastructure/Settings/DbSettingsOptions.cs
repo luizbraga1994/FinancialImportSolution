@@ -1,7 +1,6 @@
 using System.Text;
 using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Settings;
-using FinancialImport.Infrastructure.Messaging;
 using FinancialImport.Infrastructure.Security;
 using FinancialImport.Integration.Hana.Options;
 using FinancialImport.Integration.Sap.Options;
@@ -10,7 +9,6 @@ using FinancialImport.Shared.Messaging;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using OutboxOptions = FinancialImport.Shared.Messaging.OutboxOptions;
 
 namespace FinancialImport.Infrastructure.Settings;
 
