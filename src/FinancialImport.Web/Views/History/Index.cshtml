@@ -95,7 +95,7 @@
                                         <a asp-controller="Import" asp-action="Preview" asp-route-id="@import.Id" class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-eye"></i> Ver
                                         </a>
-                                        @if (import.Status.ToString() != "Processing")
+                                        @if (import.Status.ToString() != "Completed")
                                         {
                                             <form asp-controller="History" asp-action="Delete" asp-route-id="@import.Id" method="post" class="d-inline">
                                                 @Html.AntiForgeryToken()

@@ -85,12 +85,6 @@ public class HistoryController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        if (importFile.Status == ImportStatus.Processing)
-        {
-            TempData["Error"] = "Nao e possivel excluir uma importacao em processamento.";
-            return RedirectToAction(nameof(Index));
-        }
-
         _dbContext.ImportFiles.Remove(importFile);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
