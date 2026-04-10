@@ -30,6 +30,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Infrastructure.DependencyInjection;
@@ -136,8 +137,23 @@ public static class ServiceCollectionExtensions
         var options = provider.GetRequiredService<IOptions<RabbitMqOptions>>();
         if (!options.Value.Enabled) return provider;
 
-        var provisioner = provider.GetRequiredService<RabbitMqTopologyProvisioner>();
-        provisioner.Provision();
+        try
+        {
+            var provisioner = provider.GetRequiredService<RabbitMqTopologyProvisioner>();
+            provisioner.Provision();
+        }
+        catch (Exception ex)
+        {
+            // RabbitMQ unreachable at startup must NOT crash the app.
+            // The outbox dispatcher will retry delivery later; topology
+            // will be provisioned on the first successful connection.
+            var logger = provider.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("FinancialImport.Messaging");
+            logger.LogWarning(ex,
+                "RabbitMQ topology provisioning failed (broker unreachable?). " +
+                "The app will continue; the outbox dispatcher retries delivery automatically.");
+        }
+
         return provider;
     }
 }
