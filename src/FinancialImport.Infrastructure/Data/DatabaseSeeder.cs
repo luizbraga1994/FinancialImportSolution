@@ -250,6 +250,26 @@ public sealed class DatabaseSeeder
             new() { Chave = "RabbitMq:InitialRetryDelaySeconds", Categoria = "Mensageria", TipoDado = "int", Obrigatorio = false, Valor = "2",                         Descricao = "Atraso inicial entre tentativas (s)" },
             new() { Chave = "RabbitMq:RetryBackoffMultiplier",   Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "2",                      Descricao = "Multiplicador exponencial de backoff" },
             new() { Chave = "RabbitMq:MaxRetryDelaySeconds",     Categoria = "Mensageria", TipoDado = "int",    Obrigatorio = false, Valor = "300",                    Descricao = "Atraso maximo entre tentativas (s)" },
+            new() { Chave = "RabbitMq:ConnectionRecoveryIntervalSeconds", Categoria = "Mensageria", TipoDado = "int", Obrigatorio = false, Valor = "10",  Descricao = "Intervalo de recuperacao de conexao (s)" },
+            new() { Chave = "RabbitMq:NetworkRecoveryIntervalSeconds",    Categoria = "Mensageria", TipoDado = "int", Obrigatorio = false, Valor = "10",  Descricao = "Intervalo de recuperacao de rede (s)" },
+            new() { Chave = "RabbitMq:UseSsl",                            Categoria = "Mensageria", TipoDado = "bool", Obrigatorio = false, Valor = "false", Descricao = "Usar SSL na conexao com RabbitMQ" },
+
+            // ── Mensageria (RabbitMQ Channels) ──────────────────────────────
+            new() { Chave = "RabbitMq:Channels:import.process.command:Queue",      Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.import-process",   Descricao = "Fila do comando de processamento de importacao" },
+            new() { Chave = "RabbitMq:Channels:import.process.command:RoutingKey",  Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "import.process.command",           Descricao = "Routing key do comando de processamento" },
+            new() { Chave = "RabbitMq:Channels:import.process.command:Durable",     Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "true",                            Descricao = "Fila duravel para processamento" },
+
+            new() { Chave = "RabbitMq:Channels:import.reprocess.command:Queue",     Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.import-reprocess", Descricao = "Fila do comando de reprocessamento" },
+            new() { Chave = "RabbitMq:Channels:import.reprocess.command:RoutingKey", Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "import.reprocess.command",        Descricao = "Routing key do comando de reprocessamento" },
+            new() { Chave = "RabbitMq:Channels:import.reprocess.command:Durable",    Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "true",                            Descricao = "Fila duravel para reprocessamento" },
+
+            new() { Chave = "RabbitMq:Channels:sap.dispatch.command:Queue",         Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.sap-dispatch",     Descricao = "Fila do comando de despacho SAP" },
+            new() { Chave = "RabbitMq:Channels:sap.dispatch.command:RoutingKey",    Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "sap.dispatch.command",             Descricao = "Routing key do comando de despacho SAP" },
+            new() { Chave = "RabbitMq:Channels:sap.dispatch.command:Durable",       Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "true",                            Descricao = "Fila duravel para despacho SAP" },
+
+            new() { Chave = "RabbitMq:Channels:audit.write.command:Queue",          Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "financialimport.audit-write",      Descricao = "Fila do comando de escrita de auditoria" },
+            new() { Chave = "RabbitMq:Channels:audit.write.command:RoutingKey",     Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "audit.write.command",              Descricao = "Routing key do comando de auditoria" },
+            new() { Chave = "RabbitMq:Channels:audit.write.command:Durable",        Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "true",                            Descricao = "Fila duravel para auditoria" },
 
             // ── Mensageria (Kafka) ───────────────────────────────────────────
             new() { Chave = "Kafka:Enabled",             Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",           Descricao = "Habilitar integracao com Kafka" },
