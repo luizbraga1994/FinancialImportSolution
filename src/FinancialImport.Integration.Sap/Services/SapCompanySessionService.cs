@@ -19,6 +19,11 @@ namespace FinancialImport.Integration.Sap.Services;
 /// </summary>
 public sealed class SapCompanySessionService : ISapCompanySessionService
 {
+    // SAP Service Layer is case-sensitive on JSON property names (CompanyDB, UserName, etc.).
+    // PostAsJsonAsync uses JsonSerializerDefaults.Web which applies camelCase — we must
+    // preserve the original PascalCase so SAP recognizes the properties.
+    private static readonly JsonSerializerOptions SapJsonOptions = new() { PropertyNamingPolicy = null };
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISapSessionStore _sessionStore;
     private readonly IUserContext _userContext;
@@ -69,7 +74,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
                 Language = language
             };
 
-            var response = await client.PostAsJsonAsync("Login", payload, cancellationToken);
+            var response = await client.PostAsJsonAsync("Login", payload, SapJsonOptions, cancellationToken);
             var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)

@@ -8,6 +8,8 @@ namespace FinancialImport.Integration.Sap.Services;
 
 public sealed class SapJournalEntryService : ISapJournalEntryService
 {
+    private static readonly JsonSerializerOptions SapJsonOptions = new() { PropertyNamingPolicy = null };
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SapJournalEntryService> _logger;
 
@@ -30,10 +32,10 @@ public sealed class SapJournalEntryService : ISapJournalEntryService
             {
                 request.Headers.Add("ROUTEID", session.RouteId);
             }
-            request.Content = JsonContent.Create(payload);
+            request.Content = JsonContent.Create(payload, mediaType: null, SapJsonOptions);
 
             _logger.LogDebug("SAP JournalEntry request para {CompanyDb}: {Payload}",
-                session.CompanyDb, JsonSerializer.Serialize(payload));
+                session.CompanyDb, JsonSerializer.Serialize(payload, SapJsonOptions));
 
             var response = await client.SendAsync(request, cancellationToken);
             var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
