@@ -30,6 +30,7 @@ public class ImportPreviewViewModel
 public class ImportPreviewGroup
 {
     public string Reference { get; set; } = string.Empty;
+    public DateTime PostingDate { get; set; }
     public int LineCount { get; set; }
     public decimal TotalCredit { get; set; }
     public decimal TotalDebit { get; set; }
@@ -163,15 +164,21 @@ public class ImportController : Controller
         }
 
         var groups = importFile.Lines
-            .GroupBy(l => l.Reference ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(g => g.Key)
-            .Select(g => new ImportPreviewGroup
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty, StringComparer.Ordinal)
+            .OrderBy(g => g.First().PostingDate)
+            .ThenBy(g => g.First().Reference ?? string.Empty)
+            .Select(g =>
             {
-                Reference = g.Key,
-                LineCount = g.Count(),
-                TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
-                TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
-                Lines = g.OrderBy(l => l.Id).ToList()
+                var first = g.First();
+                return new ImportPreviewGroup
+                {
+                    Reference = first.Reference ?? string.Empty,
+                    PostingDate = first.PostingDate,
+                    LineCount = g.Count(),
+                    TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
+                    TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
+                    Lines = g.OrderBy(l => l.Id).ToList()
+                };
             })
             .ToList();
 
