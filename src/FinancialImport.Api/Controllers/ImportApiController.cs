@@ -1,12 +1,13 @@
+using FinancialImport.Api.Dtos;
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Imports;
 using FinancialImport.Domain.Constants;
 using FinancialImport.Infrastructure.Data;
-using FinancialImport.Infrastructure.Imports;
-using FinancialImport.Api.Dtos;
+using FinancialImport.Shared.Imports;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Api.Controllers;
 
@@ -16,25 +17,25 @@ namespace FinancialImport.Api.Controllers;
 public sealed class ImportApiController : ControllerBase
 {
     private readonly IImportService _importService;
-    private readonly IImportRepository _importRepository;
+    private readonly IImportFileReader _fileReader;
     private readonly ICompanyContext _companyContext;
     private readonly AppDbContext _dbContext;
-    private readonly IHashService _hashService;
+    private readonly ImportProcessingOptions _processingOptions;
     private readonly ILogger<ImportApiController> _logger;
 
     public ImportApiController(
         IImportService importService,
-        IImportRepository importRepository,
+        IImportFileReader fileReader,
         ICompanyContext companyContext,
         AppDbContext dbContext,
-        IHashService hashService,
+        IOptions<ImportProcessingOptions> processingOptions,
         ILogger<ImportApiController> logger)
     {
         _importService = importService;
-        _importRepository = importRepository;
+        _fileReader = fileReader;
         _companyContext = companyContext;
         _dbContext = dbContext;
-        _hashService = hashService;
+        _processingOptions = processingOptions.Value;
         _logger = logger;
     }
 
@@ -49,21 +50,33 @@ public sealed class ImportApiController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(ApiResponse<ImportPreviewResponse>.Fail("Arquivo nao fornecido."));
 
-        const long maxFileSize = 10 * 1024 * 1024; // 10 MB
-        if (file.Length > maxFileSize)
-            return BadRequest(ApiResponse<ImportPreviewResponse>.Fail("Arquivo excede o tamanho maximo de 10 MB."));
+        if (file.Length > _processingOptions.MaxFileSizeBytes)
+        {
+            var maxMb = _processingOptions.MaxFileSizeBytes / (1024.0 * 1024.0);
+            return BadRequest(ApiResponse<ImportPreviewResponse>.Fail(
+                $"Arquivo excede o tamanho maximo de {maxMb:F1} MB."));
+        }
 
-        var allowedExtensions = new[] { ".csv", ".txt", ".xlsx" };
         var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(extension) || !allowedExtensions.Contains(extension))
-            return BadRequest(ApiResponse<ImportPreviewResponse>.Fail("Extensao de arquivo nao permitida. Use CSV, TXT ou XLSX."));
+        if (string.IsNullOrWhiteSpace(extension) ||
+            !_processingOptions.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        {
+            return BadRequest(ApiResponse<ImportPreviewResponse>.Fail(
+                $"Extensao '{extension}' nao permitida. Use: {string.Join(", ", _processingOptions.AllowedExtensions)}"));
+        }
 
-        var context = await ImportFileReader.ReadAsync(file, cancellationToken);
+        ImportFileContext context;
+        await using (var stream = file.OpenReadStream())
+        {
+            context = await _fileReader.ReadAsync(stream, file.FileName, cancellationToken);
+        }
         if (!string.IsNullOrWhiteSpace(layout)) context.DetectedLayout = layout;
         context.BranchDefault = branchDefault;
         context.UseBranchFromFile = useBranchFromFile;
 
         var result = await _importService.PreviewAsync(context, cancellationToken);
+
+        Response.Headers["X-Correlation-Id"] = result.CorrelationId ?? string.Empty;
 
         return Ok(ApiResponse<ImportPreviewResponse>.Ok(new ImportPreviewResponse
         {
@@ -82,15 +95,17 @@ public sealed class ImportApiController : ControllerBase
         long importFileId,
         CancellationToken cancellationToken)
     {
-        var result = await _importService.ProcessAsync(importFileId, cancellationToken);
+        var result = await _importService.ConfirmAsync(importFileId, cancellationToken);
+        Response.Headers["X-Correlation-Id"] = result.CorrelationId ?? string.Empty;
 
+        var sync = result.SynchronousResult;
         return Ok(ApiResponse<ImportProcessResponse>.Ok(new ImportProcessResponse
         {
-            ImportFileId = result.ImportFileId,
-            Imported = result.Imported,
-            Duplicated = result.Duplicated,
-            Invalid = result.Invalid,
-            SapErrors = result.SapErrors
+            ImportFileId = importFileId,
+            Imported = sync?.Imported ?? 0,
+            Duplicated = sync?.Duplicated ?? 0,
+            Invalid = sync?.Invalid ?? 0,
+            SapErrors = sync?.SapErrors ?? 0
         }));
     }
 
@@ -100,15 +115,17 @@ public sealed class ImportApiController : ControllerBase
         long importFileId,
         CancellationToken cancellationToken)
     {
-        var result = await _importService.ProcessAsync(importFileId, cancellationToken);
+        var result = await _importService.ReprocessAsync(importFileId, cancellationToken);
+        Response.Headers["X-Correlation-Id"] = result.CorrelationId ?? string.Empty;
 
+        var sync = result.SynchronousResult;
         return Ok(ApiResponse<ImportProcessResponse>.Ok(new ImportProcessResponse
         {
-            ImportFileId = result.ImportFileId,
-            Imported = result.Imported,
-            Duplicated = result.Duplicated,
-            Invalid = result.Invalid,
-            SapErrors = result.SapErrors
+            ImportFileId = importFileId,
+            Imported = sync?.Imported ?? 0,
+            Duplicated = sync?.Duplicated ?? 0,
+            Invalid = sync?.Invalid ?? 0,
+            SapErrors = sync?.SapErrors ?? 0
         }));
     }
 
@@ -118,6 +135,9 @@ public sealed class ImportApiController : ControllerBase
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? companyDb = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null,
         CancellationToken cancellationToken = default)
     {
         pageSize = Math.Clamp(pageSize, 1, 100);
@@ -127,9 +147,12 @@ public sealed class ImportApiController : ControllerBase
 
         var currentCompany = companyDb ?? _companyContext.CompanyDb;
         if (!string.IsNullOrWhiteSpace(currentCompany))
-        {
             query = query.Where(f => f.CompanyDb == currentCompany);
-        }
+        if (!string.IsNullOrWhiteSpace(status) &&
+            Enum.TryParse<Domain.Enums.ImportStatus>(status, true, out var parsedStatus))
+            query = query.Where(f => f.Status == parsedStatus);
+        if (fromUtc.HasValue) query = query.Where(f => f.ImportedAt >= fromUtc.Value);
+        if (toUtc.HasValue) query = query.Where(f => f.ImportedAt <= toUtc.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
@@ -209,5 +232,4 @@ public sealed class ImportApiController : ControllerBase
             PageSize = pageSize
         }));
     }
-
 }

@@ -4,6 +4,7 @@ using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Application.Settings;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -27,6 +28,8 @@ public class AccountController : Controller
 {
     private readonly IApplicationAuthService _authService;
     private readonly ISapCompanyDiscoveryService _companyDiscovery;
+    private readonly ISapCompanySessionService _sapSessionService;
+    private readonly ISystemSettingsService _settings;
     private readonly AppDbContext _dbContext;
     private readonly ILoginAuditContextAccessor _loginAuditContextAccessor;
     private readonly ILogger<AccountController> _logger;
@@ -34,12 +37,16 @@ public class AccountController : Controller
     public AccountController(
         IApplicationAuthService authService,
         ISapCompanyDiscoveryService companyDiscovery,
+        ISapCompanySessionService sapSessionService,
+        ISystemSettingsService settings,
         AppDbContext dbContext,
         ILoginAuditContextAccessor loginAuditContextAccessor,
         ILogger<AccountController> logger)
     {
         _authService = authService;
         _companyDiscovery = companyDiscovery;
+        _sapSessionService = sapSessionService;
+        _settings = settings;
         _dbContext = dbContext;
         _loginAuditContextAccessor = loginAuditContextAccessor;
         _logger = logger;
@@ -83,28 +90,64 @@ public class AccountController : Controller
                 return Json(new { success = true, userExists = false, companies = Array.Empty<object>(), count = 0 });
             }
 
-            // 2. Get all companies from HANA
-            IReadOnlyCollection<SapCompanyInfo> hanaCompanies;
+            // 2. Get all companies from HANA (optional — falls back to DB-only if HANA unavailable)
+            IReadOnlyCollection<SapCompanyInfo> hanaCompanies = Array.Empty<SapCompanyInfo>();
+            bool hanaAvailable = true;
             try
             {
                 hanaCompanies = await _companyDiscovery.GetAvailableCompaniesAsync(cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Erro ao consultar HANA para listar empresas no login.");
-                return Json(new { success = false, message = "Nao foi possivel conectar ao HANA para listar as empresas." });
+                _logger.LogWarning(ex, "HANA indisponivel durante login de '{Login}' — usando apenas base local.", login);
+                hanaAvailable = false;
+            }
+
+            // 3. Filter: GlobalAdmin sees all, regular user sees only allowed
+            List<object> result;
+
+            if (!hanaAvailable)
+            {
+                if (user.IsGlobalAdmin)
+                {
+                    // GlobalAdmin without HANA: return empty list so the UI offers manual entry
+                    return Json(new
+                    {
+                        success = true,
+                        userExists = true,
+                        companies = Array.Empty<object>(),
+                        count = 0,
+                        hanaUnavailable = true,
+                        hanaWarning = "HANA indisponivel. Digite o codigo da base manualmente."
+                    });
+                }
+
+                // Regular user: show their allowed companies from the local DB (no HANA names)
+                result = user.AllowedCompanies
+                    .Where(c => c.IsActive)
+                    .OrderBy(c => c.CompanyDb)
+                    .Select(c => (object)new { value = c.CompanyDb, text = c.CompanyDb })
+                    .ToList();
+
+                return Json(new
+                {
+                    success = true,
+                    userExists = true,
+                    companies = result,
+                    count = result.Count,
+                    hanaUnavailable = true,
+                    hanaWarning = "HANA indisponivel. Exibindo apenas bases configuradas no sistema."
+                });
             }
 
             var activeHanaCompanies = hanaCompanies.Where(c => c.IsActive).ToList();
 
-            // 3. Filter: GlobalAdmin sees all, regular user sees only allowed
-            List<object> result;
             if (user.IsGlobalAdmin)
             {
                 result = activeHanaCompanies
                     .OrderBy(c => c.CompanyName)
-                    .Select(c => new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
-                    .ToList<object>();
+                    .Select(c => (object)new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
+                    .ToList();
             }
             else
             {
@@ -116,8 +159,8 @@ public class AccountController : Controller
                 result = activeHanaCompanies
                     .Where(c => allowedDbs.Contains(c.CompanyDb))
                     .OrderBy(c => c.CompanyName)
-                    .Select(c => new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
-                    .ToList<object>();
+                    .Select(c => (object)new { value = c.CompanyDb, text = $"{c.CompanyName} ({c.CompanyDb})" })
+                    .ToList();
             }
 
             return Json(new { success = true, userExists = true, companies = result, count = result.Count });
@@ -201,6 +244,28 @@ public class AccountController : Controller
                 principal);
 
             _logger.LogInformation("Usuario '{Login}' autenticado na base '{CompanyDb}'.", model.Login, model.CompanyDb);
+
+            // 5. Auto-establish SAP Service Layer session (so the user
+            //    can confirm imports immediately without visiting Empresas).
+            try
+            {
+                var sapResult = await _sapSessionService.SignInCompanyAsync(
+                    model.CompanyDb,
+                    _settings.Get("Sap:UserName") ?? "",
+                    _settings.Get("Sap:Password") ?? "",
+                    cancellationToken);
+
+                if (sapResult.Success)
+                    _logger.LogInformation("Sessao SAP estabelecida para '{CompanyDb}'.", model.CompanyDb);
+                else
+                    _logger.LogWarning("Falha ao conectar ao SAP para '{CompanyDb}': {Error}", model.CompanyDb, sapResult.ErrorMessage);
+            }
+            catch (Exception sapEx)
+            {
+                // SAP connection failure should NOT block login — the user
+                // can still browse/upload. They'll see a warning at confirm time.
+                _logger.LogWarning(sapEx, "Nao foi possivel estabelecer sessao SAP durante login para '{CompanyDb}'.", model.CompanyDb);
+            }
 
             if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
                 return Redirect(model.ReturnUrl);

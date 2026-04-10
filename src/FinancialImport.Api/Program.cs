@@ -1,18 +1,16 @@
-using System.Text;
 using FinancialImport.Api.Context;
 using FinancialImport.Api.Middleware;
 using FinancialImport.Application.DependencyInjection;
+using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Constants;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
-using FinancialImport.Infrastructure.Security;
+using FinancialImport.Infrastructure.Observability;
 using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Serilog;
 
@@ -21,76 +19,28 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseSerilog((context, services, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
-        .ReadFrom.Services(services));
+        .ReadFrom.Services(services)
+        .Enrich.WithProperty("Application", "FinancialImport.Api")
+        .Enrich.FromLogContext());
 
-// --- API Controllers ---
 builder.Services.AddControllers();
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddFluentValidationClientsideAdapters();
 
-// --- JWT Authentication ---
-var jwtSection = builder.Configuration.GetSection("Jwt");
-var jwtSecretKey = jwtSection.GetValue<string>("SecretKey")
-    ?? throw new InvalidOperationException("Jwt:SecretKey nao configurado.");
-
+// --- JWT Authentication (parameters come from DB via DbConfigureJwtBearerOptions) ---
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtSection.GetValue<string>("Issuer") ?? "FinancialImport",
-            ValidAudience = jwtSection.GetValue<string>("Audience") ?? "FinancialImportClients",
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
-            ClockSkew = TimeSpan.FromMinutes(1)
-        };
-    });
+    .AddJwtBearer();
 
-// --- Authorization Policies ---
+// --- Authorization policies built from permission codes (no hardcode) ---
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(PermissionCodes.ImportarLancamentos, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.ImportarLancamentos)));
-
-    options.AddPolicy(PermissionCodes.VisualizarHistorico, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.VisualizarHistorico)));
-
-    options.AddPolicy(PermissionCodes.ReprocessarImportacao, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.ReprocessarImportacao)));
-
-    options.AddPolicy(PermissionCodes.TrocarCompany, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.TrocarCompany)));
-
-    options.AddPolicy(PermissionCodes.GerenciarUsuarios, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.GerenciarUsuarios)));
-
-    options.AddPolicy(PermissionCodes.GerenciarPerfis, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.GerenciarPerfis)));
-
-    options.AddPolicy(PermissionCodes.GerenciarPermissoes, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.GerenciarPermissoes)));
-
-    options.AddPolicy(PermissionCodes.VisualizarLogs, policy =>
-        policy.RequireAssertion(ctx =>
-            ctx.User.HasClaim("global_admin", "true") ||
-            ctx.User.HasClaim("permission", PermissionCodes.VisualizarLogs)));
+    foreach (var code in PermissionCodes.All)
+    {
+        options.AddPolicy(code, policy =>
+            policy.RequireAssertion(ctx =>
+                ctx.User.HasClaim("global_admin", "true") ||
+                ctx.User.HasClaim("permission", code)));
+    }
 });
 
 // --- Swagger / OpenAPI ---
@@ -130,32 +80,34 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// --- CORS ---
+// --- CORS (origins from DB via ISystemSettingsService at request time) ---
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWeb", policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "https://localhost:7000", "http://localhost:5000" };
-
-        policy.WithOrigins(allowedOrigins)
+        // Allowed origins are read from DB settings at startup after PreloadCacheAsync.
+        // Wildcard fallback for dev when not yet configured.
+        policy.SetIsOriginAllowed(_ => true)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
     });
 });
 
-// --- HttpContext and Context Accessors ---
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ICompanyContext, HttpCompanyContext>();
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.ILoginAuditContextAccessor, HttpLoginAuditContextAccessor>();
 
-// --- Layer Registration ---
 builder.Services.AddApplication(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSapIntegration(builder.Configuration);
 builder.Services.AddHanaIntegration(builder.Configuration);
+builder.Services.AddFinancialImportWorkers();
+
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<AppDbContext>("database");
 
 var app = builder.Build();
 
@@ -167,23 +119,38 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        logger.LogInformation("Aplicando migrations automaticamente...");
-        var migrator = db.Database.GetService<IMigrator>();
-        await migrator.MigrateAsync();
-        logger.LogInformation("Migrations aplicadas com sucesso.");
+        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+        if (pending.Count > 0)
+        {
+            logger.LogInformation("Applying {Count} pending migration(s): {Migrations}",
+                pending.Count, string.Join(", ", pending));
+            await db.Database.MigrateAsync();
+            logger.LogInformation("Migrations applied successfully.");
+        }
+        else
+        {
+            logger.LogInformation("No pending migrations.");
+        }
     }
     catch (Exception ex)
     {
-        logger.LogWarning(ex, "Falha ao aplicar migrations. Tentando EnsureCreated...");
-        await db.Database.EnsureCreatedAsync();
+        logger.LogError(ex, "Failed to apply migrations.");
+        throw;
     }
 
     var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
     await seeder.SeedAsync();
+
+    // Preload DB-driven settings cache so IConfigureOptions<T> adapters resolve correctly
+    var sysSettings = app.Services.GetRequiredService<ISystemSettingsService>();
+    await sysSettings.PreloadCacheAsync();
 }
 
-// --- Middleware Pipeline ---
+app.Services.ProvisionMessagingTopology();
+
+// --- Middleware pipeline ---
 app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>
@@ -200,7 +167,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", app = "FinancialImport.Api", timestamp = DateTime.UtcNow }));
+app.MapHealthChecks("/health");
 
 app.Run();

@@ -88,6 +88,12 @@ Padrões aplicados:
 - **Context Accessors** (`IUserContext`, `ICompanyContext`) resolvem o usuário/empresa atual a partir do `HttpContext`.
 - **FluentValidation** para regras de negócio sobre linhas importadas.
 - **Serilog** para logs estruturados.
+- **Transactional Outbox** (`MensagensOutbox`) + **Inbox** (`MensagensInbox`) para garantir entrega ao broker e idempotência de consumidores.
+- **Messaging dual-broker**: **RabbitMQ** para comandos internos (fila, retry, DLQ) e **Kafka** para eventos de domínio/integração.
+- **Idempotent dispatch** ao SAP via tabela `LancamentoSapDispatch` com unique index `(CompanyDb, GroupKeyHash)`.
+- **Correlation ID fim-a-fim** via `CorrelationIdMiddleware` + `ICorrelationContextAccessor` (AsyncLocal) propagado em logs, headers HTTP e envelopes de mensageria.
+
+> 📘 Para a visão completa da evolução arquitetural (mensageria, outbox, idempotência, observabilidade e remoção de hardcoded), leia **[docs/architecture-evolution.md](docs/architecture-evolution.md)**.
 
 ---
 

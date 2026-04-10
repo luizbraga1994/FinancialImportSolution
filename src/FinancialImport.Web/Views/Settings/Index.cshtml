@@ -1,0 +1,254 @@
+@using FinancialImport.Domain.Entities
+@{
+    ViewData["Title"] = "Configuracoes do Sistema";
+    var activeCategory = ViewBag.ActiveCategory as string ?? "SAP";
+    var categories = ViewBag.Categories as string[] ?? Array.Empty<string>();
+    var grouped = ViewBag.Grouped as Dictionary<string, List<SystemSetting>> ?? new();
+    var currentSettings = grouped.TryGetValue(activeCategory, out var s) ? s : new List<SystemSetting>();
+
+    string CategoryIcon(string cat) => cat switch
+    {
+        "SAP"        => "bi-cloud-fill",
+        "Seguranca"  => "bi-shield-lock-fill",
+        "Importacao" => "bi-upload",
+        "Mensageria" => "bi-broadcast",
+        "Layout"     => "bi-layout-text-sidebar",
+        _            => "bi-gear-fill"
+    };
+}
+
+<div class="page-header mb-4">
+    <div class="d-flex align-items-center gap-3">
+        <div class="page-icon"><i class="bi bi-gear-fill"></i></div>
+        <div>
+            <h1 class="page-title">Configuracoes do Sistema</h1>
+            <p class="page-subtitle">Gerencie as configuracoes de integracao, seguranca e processamento</p>
+        </div>
+        <div class="ms-auto">
+            <form asp-action="ReloadCache" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Recarregar Cache
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (TempData["Info"] != null)
+{
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        <i class="bi bi-info-circle-fill me-2"></i>@TempData["Info"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-0">
+    <!-- Category tabs (left) -->
+    <div class="col-md-3 col-lg-2">
+        <div class="settings-nav">
+            @foreach (var cat in categories)
+            {
+                <a href="@Url.Action("Index", new { categoria = cat })"
+                   class="settings-nav-item @(cat == activeCategory ? "active" : "")">
+                    <i class="bi @CategoryIcon(cat)"></i>
+                    <span>@cat</span>
+                    @if (grouped.TryGetValue(cat, out var catSettings))
+                    {
+                        var missing = catSettings.Count(x => x.Obrigatorio && string.IsNullOrWhiteSpace(x.Valor));
+                        if (missing > 0)
+                        {
+                            <span class="badge bg-danger ms-auto">@missing</span>
+                        }
+                    }
+                </a>
+            }
+        </div>
+    </div>
+
+    <!-- Settings form (right) -->
+    <div class="col-md-9 col-lg-10 ps-md-4">
+        <form asp-action="SaveCategory" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="categoria" value="@activeCategory" />
+
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <i class="bi @CategoryIcon(activeCategory)"></i>
+                    <span>@activeCategory</span>
+                </div>
+
+                @if (!currentSettings.Any())
+                {
+                    <div class="empty-state p-4 text-center text-muted">
+                        <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                        Nenhuma configuracao encontrada nesta categoria.
+                    </div>
+                }
+                else
+                {
+                    <div class="settings-fields">
+                        @foreach (var setting in currentSettings)
+                        {
+                            <div class="settings-field @(setting.Obrigatorio && string.IsNullOrWhiteSpace(setting.Valor) ? "field-missing" : "")">
+                                <label class="settings-label" for="field_@setting.Chave.Replace(":", "_")">
+                                    @setting.Chave
+                                    @if (setting.Obrigatorio)
+                                    {
+                                        <span class="badge bg-danger ms-1" style="font-size:0.65rem">Obrigatorio</span>
+                                    }
+                                </label>
+                                @if (!string.IsNullOrWhiteSpace(setting.Descricao))
+                                {
+                                    <div class="settings-desc">@setting.Descricao</div>
+                                }
+                                <div class="settings-input-wrap">
+                                    @if (setting.TipoDado == "password")
+                                    {
+                                        @* Use type="text" + CSS masking instead of type="password"
+                                           to prevent browsers (Chrome especially) from auto-filling
+                                           and hiding the real value on toggle. *@
+                                        <div class="input-group">
+                                            <input type="text" class="form-control settings-input pwd-masked"
+                                                   id="field_@setting.Chave.Replace(":", "_")"
+                                                   name="@setting.Chave"
+                                                   value="@setting.Valor"
+                                                   placeholder="@(string.IsNullOrWhiteSpace(setting.Valor) ? "Nao configurado" : "")"
+                                                   autocomplete="off"
+                                                   spellcheck="false" />
+                                            <button type="button" class="btn btn-outline-secondary btn-sm px-2"
+                                                    onclick="togglePwd(this)" tabindex="-1"
+                                                    title="Mostrar/ocultar senha">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(setting.Valor))
+                                        {
+                                            <div class="settings-hint"><i class="bi bi-check-circle text-success me-1"></i>Valor configurado. Deixe em branco para manter.</div>
+                                        }
+                                    }
+                                    else if (setting.TipoDado == "bool")
+                                    {
+                                        <div class="form-check form-switch mt-1">
+                                            <input type="hidden" name="@setting.Chave" value="false" />
+                                            <input class="form-check-input" type="checkbox" role="switch"
+                                                   id="field_@setting.Chave.Replace(":", "_")"
+                                                   name="@setting.Chave"
+                                                   value="true"
+                                                   @(setting.Valor == "true" ? "checked" : "") />
+                                            <label class="form-check-label" for="field_@setting.Chave.Replace(":", "_")">
+                                                @(setting.Valor == "true" ? "Habilitado" : "Desabilitado")
+                                            </label>
+                                        </div>
+                                    }
+                                    else if (setting.TipoDado == "int")
+                                    {
+                                        <input type="number" class="form-control settings-input"
+                                               id="field_@setting.Chave.Replace(":", "_")"
+                                               name="@setting.Chave"
+                                               value="@setting.Valor" />
+                                    }
+                                    else
+                                    {
+                                        <input type="text" class="form-control settings-input"
+                                               id="field_@setting.Chave.Replace(":", "_")"
+                                               name="@setting.Chave"
+                                               value="@setting.Valor"
+                                               placeholder="@(setting.Obrigatorio ? "Obrigatorio" : "Opcional")" />
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="settings-card-footer">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-floppy-fill me-1"></i>Salvar @activeCategory
+                    </button>
+                    <a href="@Url.Action("Index", new { categoria = activeCategory })"
+                       class="btn btn-outline-secondary ms-2">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Cancelar
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .settings-nav {
+        display: flex; flex-direction: column; gap: 2px;
+        background: var(--bs-body-bg); border-radius: 10px;
+        padding: 6px; border: 1px solid var(--bs-border-color);
+    }
+    .settings-nav-item {
+        display: flex; align-items: center; gap: 10px;
+        padding: 10px 14px; border-radius: 8px; text-decoration: none;
+        color: var(--bs-body-color); font-size: 0.875rem; font-weight: 500;
+        transition: all 0.15s;
+    }
+    .settings-nav-item:hover { background: var(--bs-secondary-bg); }
+    .settings-nav-item.active { background: var(--bs-primary); color: #fff; }
+    .settings-nav-item i { font-size: 1rem; width: 18px; text-align: center; }
+
+    .settings-card {
+        background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);
+        border-radius: 12px; overflow: hidden;
+    }
+    .settings-card-header {
+        display: flex; align-items: center; gap: 10px;
+        padding: 16px 20px; font-size: 1rem; font-weight: 600;
+        border-bottom: 1px solid var(--bs-border-color);
+        background: var(--bs-secondary-bg);
+    }
+    .settings-fields { padding: 4px 0; }
+    .settings-field {
+        padding: 16px 20px; border-bottom: 1px solid var(--bs-border-color-translucent);
+    }
+    .settings-field:last-child { border-bottom: none; }
+    .settings-field.field-missing { background: rgba(220, 53, 69, 0.04); }
+    .settings-label { font-size: 0.8125rem; font-weight: 600; color: var(--bs-secondary-color); margin-bottom: 4px; display: block; }
+    .settings-desc { font-size: 0.78rem; color: var(--bs-secondary-color); margin-bottom: 6px; line-height: 1.4; }
+    .settings-hint { font-size: 0.75rem; color: var(--bs-secondary-color); margin-top: 4px; }
+    .settings-input { font-size: 0.875rem; }
+    .settings-input-wrap { max-width: 480px; }
+    .settings-card-footer {
+        padding: 16px 20px; border-top: 1px solid var(--bs-border-color);
+        background: var(--bs-secondary-bg);
+    }
+
+    /* CSS-based password masking — works on Chrome/Edge/Safari without
+       triggering browser auto-fill or password manager interference.
+       Firefox falls back to showing the text (acceptable for admin page). */
+    .pwd-masked {
+        -webkit-text-security: disc;
+        text-security: disc;
+    }
+    .pwd-visible {
+        -webkit-text-security: none !important;
+        text-security: none !important;
+    }
+</style>
+
+<script>
+    function togglePwd(btn) {
+        const input = btn.closest('.input-group').querySelector('input');
+        const icon = btn.querySelector('i');
+        const isMasked = input.classList.contains('pwd-masked') && !input.classList.contains('pwd-visible');
+        if (isMasked) {
+            input.classList.add('pwd-visible');
+            icon.className = 'bi bi-eye-slash';
+        } else {
+            input.classList.remove('pwd-visible');
+            icon.className = 'bi bi-eye';
+        }
+    }
+</script>

@@ -1,22 +1,28 @@
-using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
-using FinancialImport.Integration.Sap.Options;
+using FinancialImport.Application.Settings;
 using FinancialImport.Shared.Abstractions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Integration.Sap.Services;
 
+/// <summary>
+/// Manages SAP B1 Service Layer sessions. Reads credentials dynamically
+/// from ISystemSettingsService so that admin-UI changes take effect
+/// immediately — no restart required.
+///
+/// Follows the same Login/Cookie/Retry pattern from PortalSapB1's
+/// ServiceLayerAdapter, adapted to the FinancialImport architecture.
+/// </summary>
 public sealed class SapCompanySessionService : ISapCompanySessionService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISapSessionStore _sessionStore;
     private readonly IUserContext _userContext;
-    private readonly SapServiceLayerOptions _options;
+    private readonly ISystemSettingsService _settings;
     private readonly IClock _clock;
     private readonly ILogger<SapCompanySessionService> _logger;
 
@@ -24,48 +30,57 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
         IHttpClientFactory httpClientFactory,
         ISapSessionStore sessionStore,
         IUserContext userContext,
-        IOptions<SapServiceLayerOptions> options,
+        ISystemSettingsService settings,
         IClock clock,
         ILogger<SapCompanySessionService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _sessionStore = sessionStore;
         _userContext = userContext;
-        _options = options.Value;
+        _settings = settings;
         _clock = clock;
         _logger = logger;
     }
 
-    public async Task<SapLoginResult> SignInCompanyAsync(string companyDb, string sapUserName, string sapPassword, CancellationToken cancellationToken = default)
+    public async Task<SapLoginResult> SignInCompanyAsync(
+        string companyDb, string sapUserName, string sapPassword,
+        CancellationToken cancellationToken = default)
     {
-        var userId = _userContext.UserId ?? throw new InvalidOperationException("Usuario nao autenticado.");
+        var userId = _userContext.UserId
+            ?? throw new InvalidOperationException("Usuario nao autenticado.");
 
         try
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
+            var language = int.TryParse(_settings.Get("Sap:Language"), out var lang) ? lang : 29;
+
+            // Login payload — same structure as PortalSapB1.ServiceLayerAdapter
             var payload = new
             {
                 CompanyDB = companyDb,
                 UserName = sapUserName,
-                Password = sapPassword
+                Password = sapPassword,
+                Language = language
             };
 
-            var response = await client.PostAsJsonAsync("/b1s/v1/Login", payload, cancellationToken);
+            var response = await client.PostAsJsonAsync("b1s/v1/Login", payload, cancellationToken);
             var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("SAP Login falhou para {CompanyDb}/{User}: {Status} - {Body}", companyDb, sapUserName, response.StatusCode, rawResponse);
-                return SapLoginResult.Fail($"SAP retornou {(int)response.StatusCode}: {ExtractSapError(rawResponse)}");
+                _logger.LogWarning("SAP Login falhou para {CompanyDb}/{User}: {Status} - {Body}",
+                    companyDb, sapUserName, response.StatusCode, rawResponse);
+                return SapLoginResult.Fail(
+                    $"SAP retornou {(int)response.StatusCode}: {ExtractSapError(rawResponse)}");
             }
 
             var sessionId = ExtractSessionId(response, rawResponse);
             var routeId = ExtractRouteId(response);
 
             if (string.IsNullOrWhiteSpace(sessionId))
-            {
                 return SapLoginResult.Fail("Nao foi possivel obter SessionId do SAP.");
-            }
+
+            var sessionTimeout = int.TryParse(_settings.Get("Sap:SessionTimeoutMinutes"), out var stm) ? stm : 25;
 
             var session = new SapSessionContext
             {
@@ -73,18 +88,22 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
                 CompanyName = companyDb,
                 SessionId = sessionId,
                 RouteId = routeId,
-                ExpiresAt = _clock.Now.AddMinutes(_options.SessionDurationMinutes),
+                ExpiresAt = _clock.Now.AddMinutes(sessionTimeout),
                 SapUserName = sapUserName
             };
 
             await _sessionStore.UpsertSessionAsync(userId, session, cancellationToken);
 
-            _logger.LogInformation("SAP Login OK para {CompanyDb}/{User}", companyDb, sapUserName);
+            _logger.LogInformation(
+                "SAP Login OK para {CompanyDb}/{User} (SessionId={SessionId}, RouteId={RouteId})",
+                companyDb, sapUserName, sessionId, routeId ?? "n/a");
+
             return SapLoginResult.Ok(session);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao autenticar no SAP Service Layer para {CompanyDb}/{User}", companyDb, sapUserName);
+            _logger.LogError(ex, "Erro ao autenticar no SAP Service Layer para {CompanyDb}/{User}",
+                companyDb, sapUserName);
             return SapLoginResult.Fail($"Erro de comunicacao com SAP: {ex.Message}");
         }
     }
@@ -100,12 +119,10 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
         try
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
-            var request = new HttpRequestMessage(HttpMethod.Post, "/b1s/v1/Logout");
+            var request = new HttpRequestMessage(HttpMethod.Post, "b1s/v1/Logout");
             request.Headers.Add("B1SESSION", session.SessionId);
             if (!string.IsNullOrWhiteSpace(session.RouteId))
-            {
                 request.Headers.Add("ROUTEID", session.RouteId);
-            }
             await client.SendAsync(request, cancellationToken);
         }
         catch (Exception ex)
@@ -125,6 +142,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
 
     private static string ExtractSessionId(HttpResponseMessage response, string rawResponse)
     {
+        // Try JSON body first (standard response format)
         try
         {
             using var doc = JsonDocument.Parse(rawResponse);
@@ -133,14 +151,13 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
         }
         catch (JsonException) { }
 
+        // Fallback: Set-Cookie header (B1SESSION cookie)
         if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
         {
             foreach (var cookie in cookies)
             {
                 if (cookie.StartsWith("B1SESSION=", StringComparison.OrdinalIgnoreCase))
-                {
                     return cookie.Split('=', ';')[1];
-                }
             }
         }
 
@@ -149,16 +166,19 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
 
     private static string? ExtractRouteId(HttpResponseMessage response)
     {
+        // JSON body
+        // (some SL versions return RouteId in the Login response body)
+
+        // Set-Cookie header
         if (response.Headers.TryGetValues("Set-Cookie", out var cookies))
         {
             foreach (var cookie in cookies)
             {
                 if (cookie.StartsWith("ROUTEID=", StringComparison.OrdinalIgnoreCase))
-                {
                     return cookie.Split('=', ';')[1];
-                }
             }
         }
+
         return null;
     }
 
@@ -175,6 +195,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
             }
         }
         catch (JsonException) { }
+
         return rawResponse;
     }
 }
