@@ -45,6 +45,13 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.addEventListener('click', function (e) {
             const message = this.getAttribute('data-loading-message') || 'Carregando...';
             showLoading(message);
+
+            // File-download links (data-download) never trigger a navigation
+            // event, so the overlay would stay forever. Auto-dismiss after a
+            // short delay — the browser handles the download in parallel.
+            if (this.hasAttribute('data-download')) {
+                setTimeout(hideLoading, 1500);
+            }
         });
     });
 
