@@ -1,5 +1,6 @@
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Domain.Entities;
+using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -68,5 +69,36 @@ public class HistoryController : Controller
         }
 
         return View(imports);
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(long id, CancellationToken cancellationToken)
+    {
+        var companyDb = _companyContext.CompanyDb;
+        var importFile = await _dbContext.ImportFiles
+            .FirstOrDefaultAsync(f => f.Id == id && f.CompanyDb == companyDb, cancellationToken);
+
+        if (importFile == null)
+        {
+            TempData["Error"] = "Importacao nao encontrada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (importFile.Status == ImportStatus.Processing)
+        {
+            TempData["Error"] = "Nao e possivel excluir uma importacao em processamento.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        _dbContext.ImportFiles.Remove(importFile);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Importacao {Id} ({FileName}) excluida por '{User}' na company '{CompanyDb}'.",
+            id, importFile.OriginalFileName, User.FindFirst("login")?.Value, companyDb);
+
+        TempData["Success"] = $"Importacao '{importFile.OriginalFileName}' excluida com sucesso.";
+        return RedirectToAction(nameof(Index));
     }
 }

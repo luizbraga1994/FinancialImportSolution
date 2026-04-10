@@ -20,6 +20,14 @@
         </a>
     </div>
     <div class="card-body p-0">
+        @if (TempData["Success"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show m-3 d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <div>@TempData["Success"]</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        }
         @if (TempData["Error"] != null)
         {
             <div class="alert alert-warning m-3">
@@ -82,9 +90,21 @@
                                 <td class="text-center text-primary">@import.ImportedLines</td>
                                 <td class="text-center text-danger">@import.LinesWithError</td>
                                 <td class="text-end pe-4">
-                                    <a asp-controller="Import" asp-action="Preview" asp-route-id="@import.Id" class="btn btn-sm btn-outline-primary">
-                                        <i class="bi bi-eye"></i> Ver
-                                    </a>
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        <a asp-controller="Import" asp-action="Preview" asp-route-id="@import.Id" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i> Ver
+                                        </a>
+                                        @if (import.Status.ToString() != "Processing")
+                                        {
+                                            <form asp-controller="History" asp-action="Delete" asp-route-id="@import.Id" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                        onclick="return confirm('Excluir importacao \'@import.OriginalFileName\'? Todas as linhas serao removidas. Esta acao nao pode ser desfeita.');">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
                                 </td>
                             </tr>
                         }
