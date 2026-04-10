@@ -4,6 +4,7 @@ using FinancialImport.Application.Imports;
 using FinancialImport.Application.Messaging;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
+using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
@@ -26,10 +27,12 @@ public sealed class ImportProcessor : IImportProcessor
     private readonly AppDbContext _dbContext;
     private readonly IImportRepository _repository;
     private readonly ISapSessionStore _sapSessionStore;
+    private readonly ISapCompanySessionService _sapSessionService;
     private readonly ISapJournalEntryService _sapService;
     private readonly JournalEntryBuilder _entryBuilder;
     private readonly IUserContext _userContext;
     private readonly IEventPublisher _eventPublisher;
+    private readonly ISystemSettingsService _settings;
     private readonly IAuditLogger _audit;
     private readonly ILogger<ImportProcessor> _logger;
 
@@ -37,20 +40,24 @@ public sealed class ImportProcessor : IImportProcessor
         AppDbContext dbContext,
         IImportRepository repository,
         ISapSessionStore sapSessionStore,
+        ISapCompanySessionService sapSessionService,
         ISapJournalEntryService sapService,
         JournalEntryBuilder entryBuilder,
         IUserContext userContext,
         IEventPublisher eventPublisher,
+        ISystemSettingsService settings,
         IAuditLogger audit,
         ILogger<ImportProcessor> logger)
     {
         _dbContext = dbContext;
         _repository = repository;
         _sapSessionStore = sapSessionStore;
+        _sapSessionService = sapSessionService;
         _sapService = sapService;
         _entryBuilder = entryBuilder;
         _userContext = userContext;
         _eventPublisher = eventPublisher;
+        _settings = settings;
         _audit = audit;
         _logger = logger;
     }
@@ -66,12 +73,29 @@ public sealed class ImportProcessor : IImportProcessor
         var importFile = await _repository.GetImportFileWithLinesAsync(importFileId, cancellationToken)
             ?? throw new KeyNotFoundException($"Arquivo de importacao {importFileId} nao encontrado.");
 
+        // Try to get an existing active session; if missing or expired,
+        // auto-login using the SAP credentials from DB settings — same
+        // pattern as PortalSapB1.ServiceLayerAdapter.GetSessionAsync().
         var sapSession = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
-        if (sapSession == null)
-            throw new InvalidOperationException("Sessao SAP nao ativa. Faca login na company antes de processar.");
 
-        if (!sapSession.CompanyDb.Equals(importFile.CompanyDb, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Sessao SAP ativa para company diferente do arquivo.");
+        if (sapSession == null || !sapSession.CompanyDb.Equals(importFile.CompanyDb, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Sessao SAP ausente ou para company diferente. Tentando login automatico em '{CompanyDb}'...",
+                importFile.CompanyDb);
+
+            var loginResult = await _sapSessionService.SignInCompanyAsync(
+                importFile.CompanyDb,
+                _settings.Get("Sap:UserName") ?? "",
+                _settings.Get("Sap:Password") ?? "",
+                cancellationToken);
+
+            if (!loginResult.Success)
+                throw new InvalidOperationException(
+                    $"Nao foi possivel conectar ao SAP para '{importFile.CompanyDb}': {loginResult.ErrorMessage}");
+
+            sapSession = loginResult.Session!;
+        }
 
         importFile.Status = ImportStatus.Processing;
         importFile.ProcessingStartedAtUtc = start;

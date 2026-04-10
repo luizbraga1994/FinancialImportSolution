@@ -4,7 +4,7 @@ using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
 using FinancialImport.Infrastructure.Data;
-using FinancialImport.Integration.Sap.Options;
+using FinancialImport.Application.Settings;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -12,7 +12,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Web.Controllers;
 
@@ -30,7 +29,7 @@ public class AccountController : Controller
     private readonly IApplicationAuthService _authService;
     private readonly ISapCompanyDiscoveryService _companyDiscovery;
     private readonly ISapCompanySessionService _sapSessionService;
-    private readonly SapServiceLayerOptions _sapOptions;
+    private readonly ISystemSettingsService _settings;
     private readonly AppDbContext _dbContext;
     private readonly ILoginAuditContextAccessor _loginAuditContextAccessor;
     private readonly ILogger<AccountController> _logger;
@@ -39,7 +38,7 @@ public class AccountController : Controller
         IApplicationAuthService authService,
         ISapCompanyDiscoveryService companyDiscovery,
         ISapCompanySessionService sapSessionService,
-        IOptions<SapServiceLayerOptions> sapOptions,
+        ISystemSettingsService settings,
         AppDbContext dbContext,
         ILoginAuditContextAccessor loginAuditContextAccessor,
         ILogger<AccountController> logger)
@@ -47,7 +46,7 @@ public class AccountController : Controller
         _authService = authService;
         _companyDiscovery = companyDiscovery;
         _sapSessionService = sapSessionService;
-        _sapOptions = sapOptions.Value;
+        _settings = settings;
         _dbContext = dbContext;
         _loginAuditContextAccessor = loginAuditContextAccessor;
         _logger = logger;
@@ -251,7 +250,10 @@ public class AccountController : Controller
             try
             {
                 var sapResult = await _sapSessionService.SignInCompanyAsync(
-                    model.CompanyDb, _sapOptions.UserName, _sapOptions.Password, cancellationToken);
+                    model.CompanyDb,
+                    _settings.Get("Sap:UserName") ?? "",
+                    _settings.Get("Sap:Password") ?? "",
+                    cancellationToken);
 
                 if (sapResult.Success)
                     _logger.LogInformation("Sessao SAP estabelecida para '{CompanyDb}'.", model.CompanyDb);

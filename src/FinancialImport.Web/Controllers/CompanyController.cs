@@ -1,8 +1,7 @@
 using FinancialImport.Application.Sap;
-using FinancialImport.Integration.Sap.Options;
+using FinancialImport.Application.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 
 namespace FinancialImport.Web.Controllers;
 
@@ -11,16 +10,16 @@ public class CompanyController : Controller
 {
     private readonly ISapCompanyDiscoveryService _discoveryService;
     private readonly ISapCompanySessionService _sessionService;
-    private readonly SapServiceLayerOptions _sapOptions;
+    private readonly ISystemSettingsService _settings;
 
     public CompanyController(
         ISapCompanyDiscoveryService discoveryService,
         ISapCompanySessionService sessionService,
-        IOptions<SapServiceLayerOptions> sapOptions)
+        ISystemSettingsService settings)
     {
         _discoveryService = discoveryService;
         _sessionService = sessionService;
-        _sapOptions = sapOptions.Value;
+        _settings = settings;
     }
 
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
@@ -34,7 +33,10 @@ public class CompanyController : Controller
     public async Task<IActionResult> Select(string companyDb, CancellationToken cancellationToken)
     {
         var result = await _sessionService.SignInCompanyAsync(
-            companyDb, _sapOptions.UserName, _sapOptions.Password, cancellationToken);
+            companyDb,
+            _settings.Get("Sap:UserName") ?? "",
+            _settings.Get("Sap:Password") ?? "",
+            cancellationToken);
 
         if (!result.Success)
         {
