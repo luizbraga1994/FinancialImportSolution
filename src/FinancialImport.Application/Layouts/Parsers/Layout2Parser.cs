@@ -47,7 +47,7 @@ public sealed class Layout2Parser : ILayoutImportParser
         var dataDocumentoCol = FindColumn(context.Headers, new[] { "Data Documento", "DataDocumento", "DocumentDate", "TaxDate" });
         var observacaoCol = FindColumn(context.Headers, new[] { "Observacao", "Observacao Linha", "Memo", "Historico", "Observação" });
         var referenciaCol = FindColumn(context.Headers, new[] { "Referencia", "Referência", "Reference", "Observacao" });
-        var filialCol = FindColumn(context.Headers, new[] { "Filial", "Branch", "BranchCode", "BPLID" });
+        var filialCol = FindColumn(context.Headers, new[] { "Filial", "Branch", "BranchCode", "BPLID", "BPLId" });
         var seqLancamentoCol = FindColumn(context.Headers, new[] { "Seq Lancamento", "SeqLancamento", "Sequence" });
 
         foreach (var row in context.Rows)

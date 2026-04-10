@@ -19,7 +19,7 @@ public sealed class SapJournalEntry
     [JsonPropertyName("Reference")]
     public string? Reference { get; set; }
 
-    [JsonPropertyName("BPLID")]
+    [JsonPropertyName("BPLId")]
     public int? BPLID { get; set; }
 
     [JsonPropertyName("JournalEntryLines")]
