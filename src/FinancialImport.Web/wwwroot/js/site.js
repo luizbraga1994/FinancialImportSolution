@@ -1,23 +1,43 @@
 ﻿// Loading overlay functions
-function showLoading(message = 'Processando...') {
+function showLoading(message = 'Processando...', cancelUrl = null) {
     let overlay = document.getElementById('loadingOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'loadingOverlay';
         overlay.className = 'loading-overlay';
-        overlay.innerHTML = `
-            <div class="loading-content">
-                <div class="loading-spinner"></div>
-                <div class="loading-message">${message}</div>
-            </div>
-        `;
         document.body.appendChild(overlay);
-    } else {
-        const msgElement = overlay.querySelector('.loading-message');
-        if (msgElement) msgElement.textContent = message;
-        overlay.classList.remove('hidden');
     }
+
+    var cancelHtml = '';
+    if (cancelUrl) {
+        cancelHtml = `<button class="btn btn-outline-danger btn-sm mt-3" onclick="cancelProcessing('${cancelUrl}')">
+            <i class="bi bi-x-circle me-1"></i> Cancelar processamento
+        </button>`;
+    }
+    overlay.innerHTML = `
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-message">${message}</div>
+            ${cancelHtml}
+        </div>
+    `;
+    overlay.classList.remove('hidden');
     overlay.classList.add('active');
+}
+
+function cancelProcessing(url) {
+    var btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Cancelando...';
+    fetch(url, { method: 'POST' })
+        .then(function () {
+            var msg = document.querySelector('.loading-message');
+            if (msg) msg.textContent = 'Cancelamento solicitado. Aguarde...';
+        })
+        .catch(function () {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Cancelar processamento';
+        });
 }
 
 function hideLoading() {
@@ -35,7 +55,8 @@ document.addEventListener('DOMContentLoaded', function () {
     forms.forEach(form => {
         form.addEventListener('submit', function () {
             const message = form.getAttribute('data-loading-message') || 'Enviando...';
-            showLoading(message);
+            const cancelUrl = form.getAttribute('data-cancel-url') || null;
+            showLoading(message, cancelUrl);
         });
     });
 

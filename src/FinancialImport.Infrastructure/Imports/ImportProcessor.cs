@@ -127,6 +127,20 @@ public sealed class ImportProcessor : IImportProcessor
         foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Check if the user requested cancellation via the UI
+            var currentStatus = await _dbContext.ImportFiles
+                .AsNoTracking()
+                .Where(f => f.Id == importFileId)
+                .Select(f => f.Status)
+                .FirstAsync(cancellationToken);
+
+            if (currentStatus == ImportStatus.Cancelled)
+            {
+                _logger.LogInformation("Import {FileId} cancelled by user after {Imported} groups.", importFileId, imported);
+                break;
+            }
+
             var groupLines = group.OrderBy(l => l.Id).ToList();
 
             // Check the dispatch table — if this group already has a
@@ -274,13 +288,23 @@ public sealed class ImportProcessor : IImportProcessor
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        // Reload to detect if status was set to Cancelled during processing
+        await _dbContext.Entry(importFile).ReloadAsync(cancellationToken);
+
         importFile.ImportedLines = imported;
         importFile.LinesWithError = sapErrors;
         importFile.ProcessingCompletedAtUtc = DateTime.UtcNow;
 
-        importFile.Status = sapErrors > 0
-            ? (imported > 0 ? ImportStatus.PartiallyCompleted : ImportStatus.Failed)
-            : (imported > 0 ? ImportStatus.Completed : ImportStatus.Failed);
+        if (importFile.Status == ImportStatus.Cancelled)
+        {
+            // Keep Cancelled status; imported lines stay as Imported
+        }
+        else
+        {
+            importFile.Status = sapErrors > 0
+                ? (imported > 0 ? ImportStatus.PartiallyCompleted : ImportStatus.Failed)
+                : (imported > 0 ? ImportStatus.Completed : ImportStatus.Failed);
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 

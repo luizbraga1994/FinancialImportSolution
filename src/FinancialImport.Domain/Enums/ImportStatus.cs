@@ -8,5 +8,6 @@ public enum ImportStatus
     Completed = 3,
     Failed = 4,
     Rejected = 5,
-    PartiallyCompleted = 6
+    PartiallyCompleted = 6,
+    Cancelled = 7
 }

@@ -238,6 +238,26 @@ public class ImportController : Controller
     }
 
     [HttpPost]
+    [IgnoreAntiforgeryToken]
+    public async Task<IActionResult> Cancel(long id, CancellationToken cancellationToken)
+    {
+        var importFile = await _dbContext.ImportFiles
+            .FirstOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        if (importFile == null)
+            return NotFound();
+
+        if (importFile.Status != ImportStatus.Processing)
+            return BadRequest("Importacao nao esta em processamento.");
+
+        importFile.Status = ImportStatus.Cancelled;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Importacao {Id} cancelada pelo usuario.", id);
+        return Ok();
+    }
+
+    [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reprocess(long id, CancellationToken cancellationToken)
     {

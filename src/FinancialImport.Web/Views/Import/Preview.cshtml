@@ -11,6 +11,7 @@
     var statusBadgeClass = Model.Status == ImportStatus.Completed ? "bg-success-subtle text-success-emphasis"
         : Model.Status == ImportStatus.PartiallyCompleted ? "bg-warning-subtle text-warning-emphasis"
         : Model.Status == ImportStatus.Failed ? "bg-danger-subtle text-danger-emphasis"
+        : Model.Status == ImportStatus.Cancelled ? "bg-secondary-subtle text-secondary-emphasis"
         : Model.Status == ImportStatus.Processing ? "bg-info-subtle text-info-emphasis"
         : "bg-secondary-subtle text-secondary-emphasis";
 }
@@ -245,7 +246,7 @@
     </a>
     @if (canConfirm)
     {
-        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Enviando ao SAP...">
+        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Enviando ao SAP..." data-cancel-url="/Import/Cancel/@Model.ImportFileId">
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-primary px-4"
                     onclick="return confirm('Confirmar envio de @Model.ValidLines linha(s) ao SAP em @Model.Groups.Count lancamento(s)?');">
