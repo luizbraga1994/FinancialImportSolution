@@ -112,15 +112,20 @@
                                 <div class="settings-input-wrap">
                                     @if (setting.TipoDado == "password")
                                     {
+                                        @* Use type="text" + CSS masking instead of type="password"
+                                           to prevent browsers (Chrome especially) from auto-filling
+                                           and hiding the real value on toggle. *@
                                         <div class="input-group">
-                                            <input type="password" class="form-control settings-input"
+                                            <input type="text" class="form-control settings-input pwd-masked"
                                                    id="field_@setting.Chave.Replace(":", "_")"
                                                    name="@setting.Chave"
                                                    value="@setting.Valor"
                                                    placeholder="@(string.IsNullOrWhiteSpace(setting.Valor) ? "Nao configurado" : "")"
-                                                   autocomplete="new-password" />
+                                                   autocomplete="off"
+                                                   spellcheck="false" />
                                             <button type="button" class="btn btn-outline-secondary btn-sm px-2"
-                                                    onclick="togglePwd(this)" tabindex="-1">
+                                                    onclick="togglePwd(this)" tabindex="-1"
+                                                    title="Mostrar/ocultar senha">
                                                 <i class="bi bi-eye"></i>
                                             </button>
                                         </div>
@@ -219,13 +224,31 @@
         padding: 16px 20px; border-top: 1px solid var(--bs-border-color);
         background: var(--bs-secondary-bg);
     }
+
+    /* CSS-based password masking — works on Chrome/Edge/Safari without
+       triggering browser auto-fill or password manager interference.
+       Firefox falls back to showing the text (acceptable for admin page). */
+    .pwd-masked {
+        -webkit-text-security: disc;
+        text-security: disc;
+    }
+    .pwd-visible {
+        -webkit-text-security: none !important;
+        text-security: none !important;
+    }
 </style>
 
 <script>
     function togglePwd(btn) {
         const input = btn.closest('.input-group').querySelector('input');
         const icon = btn.querySelector('i');
-        if (input.type === 'password') { input.type = 'text'; icon.className = 'bi bi-eye-slash'; }
-        else { input.type = 'password'; icon.className = 'bi bi-eye'; }
+        const isMasked = input.classList.contains('pwd-masked') && !input.classList.contains('pwd-visible');
+        if (isMasked) {
+            input.classList.add('pwd-visible');
+            icon.className = 'bi bi-eye-slash';
+        } else {
+            input.classList.remove('pwd-visible');
+            icon.className = 'bi bi-eye';
+        }
     }
 </script>
