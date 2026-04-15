@@ -236,7 +236,7 @@ public sealed class DbConfigureImportOptions : IConfigureOptions<ImportProcessin
         o.MaxFileSizeBytes   = long.TryParse(_s.Get("Import:MaxFileSizeBytes"), out var mfs) ? mfs : 10_485_760;
         o.MemoMaxLength      = int.TryParse(_s.Get("Import:MemoMaxLength"), out var mml) ? mml : 254;
         o.ReferenceMaxLength = int.TryParse(_s.Get("Import:ReferenceMaxLength"), out var rml) ? rml : 27;
-        o.LineMemoMaxLength  = int.TryParse(_s.Get("Import:LineMemoMaxLength"), out var lml) ? lml : 50;
+        o.LineMemoMaxLength  = int.TryParse(_s.Get("Import:LineMemoMaxLength"), out var lml) ? lml : 254;
         o.JournalBalanceTolerance = decimal.TryParse(_s.Get("Import:JournalBalanceTolerance"), out var jbt) ? jbt : 0.01m;
 
         var ext = _s.Get("Import:AllowedExtensions");

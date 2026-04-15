@@ -31,7 +31,7 @@ public sealed class ImportProcessingOptions
     public int ReferenceMaxLength { get; set; } = 27;
 
     /// <summary>SAP Journal Entry line memo maximum length.</summary>
-    public int LineMemoMaxLength { get; set; } = 50;
+    public int LineMemoMaxLength { get; set; } = 254;
 
     /// <summary>
     /// Fields used to build the business key for deduplication. The
