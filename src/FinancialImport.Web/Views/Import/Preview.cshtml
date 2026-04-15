@@ -7,7 +7,11 @@
     var canConfirm = Model.ValidLines > 0
         && Model.Status != ImportStatus.Completed
         && Model.Status != ImportStatus.PartiallyCompleted
-        && Model.Status != ImportStatus.Processing;
+        && Model.Status != ImportStatus.Processing
+        && Model.Status != ImportStatus.Failed;
+    var canReprocess = Model.Status == ImportStatus.Failed
+        || Model.Status == ImportStatus.PartiallyCompleted
+        || Model.Status == ImportStatus.Cancelled;
     var statusBadgeClass = Model.Status == ImportStatus.Completed ? "bg-success-subtle text-success-emphasis"
         : Model.Status == ImportStatus.PartiallyCompleted ? "bg-warning-subtle text-warning-emphasis"
         : Model.Status == ImportStatus.Failed ? "bg-danger-subtle text-danger-emphasis"
@@ -286,6 +290,16 @@ else
     <a asp-action="Index" class="btn btn-light">
         <i class="bi bi-x-lg me-1"></i> Cancelar
     </a>
+    @if (canReprocess)
+    {
+        <form asp-action="Reprocess" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Reprocessando..." data-cancel-url="/Import/Cancel/@Model.ImportFileId">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-warning px-4"
+                    onclick="return confirm('Reprocessar linhas com erro? O sistema vai tentar reenviar ao SAP apenas os lancamentos que falharam.');">
+                <i class="bi bi-arrow-clockwise me-1"></i> Reprocessar
+            </button>
+        </form>
+    }
     @if (canConfirm)
     {
         <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Enviando ao SAP..." data-cancel-url="/Import/Cancel/@Model.ImportFileId">
@@ -296,7 +310,7 @@ else
             </button>
         </form>
     }
-    else
+    else if (!canReprocess)
     {
         <button type="button" class="btn btn-primary px-4" disabled
                 title="Nao ha linhas validas para confirmar ou ja foi processado.">
