@@ -55,6 +55,17 @@ public sealed class JournalEntryBuilder
         var debitLines = new List<SapJournalEntryLine>(lines.Count);
         var creditLines = new List<SapJournalEntryLine>(lines.Count);
 
+        // Detect "pre-balanced" input: the file already contains both
+        // debit and credit rows that balance within the group. In that
+        // case, emitting a ContraAccount line per input would duplicate
+        // the movement. We only generate contra lines when the input
+        // has one-sided rows that need the counterparty to balance.
+        var groupDebitTotal = lines.Sum(l => l.DebitAmount ?? 0m);
+        var groupCreditTotal = lines.Sum(l => l.CreditAmount ?? 0m);
+        var alreadyBalanced = groupDebitTotal > 0m
+            && groupCreditTotal > 0m
+            && Math.Abs(groupDebitTotal - groupCreditTotal) <= _options.JournalBalanceTolerance;
+
         foreach (var line in lines)
         {
             // Resolve amount + direction. Each input row becomes a pair
@@ -109,18 +120,25 @@ public sealed class JournalEntryBuilder
                 BPLID = bplId
             };
 
-            // Counterparty (ContraAccountCode) — sides flipped
-            var contraLine = new SapJournalEntryLine
-            {
-                AccountCode = line.ContraAccountCode,
-                Debit = accountCredit,
-                Credit = accountDebit,
-                LineMemo = memo,
-                BPLID = bplId
-            };
-
             (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
-            (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);
+
+            // Only emit the counterparty line when the input is one-sided.
+            // For pre-balanced input files (both D and C rows present
+            // totaling the same value), the contra line would duplicate
+            // the movement and corrupt the journal.
+            if (!alreadyBalanced)
+            {
+                var contraLine = new SapJournalEntryLine
+                {
+                    AccountCode = line.ContraAccountCode,
+                    Debit = accountCredit,
+                    Credit = accountDebit,
+                    LineMemo = memo,
+                    BPLID = bplId
+                };
+
+                (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);
+            }
         }
 
         payload.JournalEntryLines.AddRange(debitLines);
