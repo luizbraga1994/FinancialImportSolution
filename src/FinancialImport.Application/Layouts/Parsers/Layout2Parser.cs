@@ -37,16 +37,20 @@ public sealed class Layout2Parser : ILayoutImportParser
     {
         var result = new List<LancamentoContabilImportado>();
 
-        // Mapeamento flexivel de colunas
+        // Mapeamento flexivel de colunas.
+        // Importante: "Observacao" e alias APENAS para Referencia (nome legado).
+        // O memo/historico da linha SEMPRE vem de "Observacao Linha" ou aliases
+        // semanticamente distintos (Memo, Historico). Isso evita que um arquivo
+        // com apenas "Observacao" dupe valor em Reference E LineMemo.
         var contaContabilCol = FindColumn(context.Headers, new[] { "Conta Contabil", "Conta Contábil", "ContaContabil", "AccountCode" });
         var contaContrapartidaCol = FindColumn(context.Headers, new[] { "Conta Contrapartida", "ContaContrapartida", "CounterpartAccount", "ContraAccount" });
         var valorCreditoCol = FindColumn(context.Headers, new[] { "Valor Credito", "Credito", "Credit", "CreditAmount" });
         var valorDebitoCol = FindColumn(context.Headers, new[] { "Valor Debito", "Debito", "Debit", "DebitAmount" });
         var dataLancamentoCol = FindColumn(context.Headers, new[] { "Data Lancamento", "DataLancamento", "PostingDate", "Data Lançamento" });
-        var dataVencimentoCol = FindColumn(context.Headers, new[] { "Data Vencimento", "DataVencimento", "DueDate", "Data Vencimento" });
+        var dataVencimentoCol = FindColumn(context.Headers, new[] { "Data Vencimento", "DataVencimento", "DueDate" });
         var dataDocumentoCol = FindColumn(context.Headers, new[] { "Data Documento", "DataDocumento", "DocumentDate", "TaxDate" });
-        var observacaoCol = FindColumn(context.Headers, new[] { "Observacao", "Observacao Linha", "Memo", "Historico", "Observação" });
-        var referenciaCol = FindColumn(context.Headers, new[] { "Referencia", "Referência", "Reference", "Observacao" });
+        var observacaoLinhaCol = FindColumn(context.Headers, new[] { "Observacao Linha", "ObservacaoLinha", "Memo", "Historico", "LineMemo" });
+        var referenciaCol = FindColumn(context.Headers, new[] { "Referencia", "Referência", "Reference", "Observacao", "Observação" });
         var filialCol = FindColumn(context.Headers, new[] { "Filial", "Branch", "BranchCode", "BPLID", "BPLId" });
         var seqLancamentoCol = FindColumn(context.Headers, new[] { "Seq Lancamento", "SeqLancamento", "Sequence" });
 
@@ -56,9 +60,15 @@ public sealed class Layout2Parser : ILayoutImportParser
             var debito = row.GetDecimal(valorDebitoCol ?? "Valor Debito");
             var valor = credito > 0 ? credito : debito;
 
-            var referencia = !string.IsNullOrWhiteSpace(row.Get(referenciaCol ?? "Observacao"))
-                ? row.Get(referenciaCol ?? "Observacao") ?? string.Empty
-                : row.Get(observacaoCol ?? "Observacao Linha") ?? string.Empty;
+            // Referencia vem apenas da coluna de referencia (ou do alias legado Observacao).
+            // Se ambas existirem no arquivo, prefere a coluna explicita.
+            var referencia = row.Get(referenciaCol ?? "Referencia") ?? string.Empty;
+
+            // LineMemo (historico) vem da coluna semanticamente distinta. Se o arquivo
+            // so tem uma coluna "Observacao" e essa virou a Referencia, LineMemo fica vazio.
+            var lineMemo = observacaoLinhaCol != null
+                ? row.Get(observacaoLinhaCol) ?? string.Empty
+                : string.Empty;
 
             result.Add(new LancamentoContabilImportado
             {
@@ -77,7 +87,7 @@ public sealed class Layout2Parser : ILayoutImportParser
                 Valor = valor,
                 ValorCredito = credito > 0 ? credito : null,
                 ValorDebito = debito > 0 ? debito : null,
-                HistoricoLinha = row.GetRequired(observacaoCol ?? "Observacao Linha"),
+                HistoricoLinha = lineMemo,
                 Filial = row.Get(filialCol ?? "Filial"),
                 CamposOriginais = context.Headers.ToDictionary(h => h, h => row.Get(h))
             });

@@ -1,5 +1,6 @@
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Imports;
+using FinancialImport.Application.Sap;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
@@ -25,6 +26,18 @@ public class ImportPreviewViewModel
     public List<ImportPreviewGroup> Groups { get; set; } = new();
     public ImportStatus Status { get; set; }
     public string? CorrelationId { get; set; }
+
+    /// <summary>
+    /// Account codes in the file that do NOT exist in the SAP chart of accounts.
+    /// Empty if the chart of accounts could not be fetched (no SAP session yet).
+    /// </summary>
+    public IReadOnlyCollection<string> InvalidAccountCodes { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// True when we fetched the chart of accounts and validated every code.
+    /// Used by the UI to differentiate "accounts OK" from "not checked yet".
+    /// </summary>
+    public bool AccountsValidated { get; set; }
 }
 
 public class ImportPreviewGroup
@@ -45,6 +58,8 @@ public class ImportController : Controller
     private readonly AppDbContext _dbContext;
     private readonly ICompanyContext _companyContext;
     private readonly ImportProcessingOptions _processingOptions;
+    private readonly ISapSessionStore _sapSessionStore;
+    private readonly ISapChartOfAccountsService _chartOfAccounts;
     private readonly ILogger<ImportController> _logger;
 
     public ImportController(
@@ -53,6 +68,8 @@ public class ImportController : Controller
         AppDbContext dbContext,
         ICompanyContext companyContext,
         IOptions<ImportProcessingOptions> processingOptions,
+        ISapSessionStore sapSessionStore,
+        ISapChartOfAccountsService chartOfAccounts,
         ILogger<ImportController> logger)
     {
         _importService = importService;
@@ -60,6 +77,8 @@ public class ImportController : Controller
         _dbContext = dbContext;
         _companyContext = companyContext;
         _processingOptions = processingOptions.Value;
+        _sapSessionStore = sapSessionStore;
+        _chartOfAccounts = chartOfAccounts;
         _logger = logger;
     }
 
@@ -182,6 +201,44 @@ public class ImportController : Controller
             })
             .ToList();
 
+        // Best-effort account validation against the SAP chart of accounts.
+        // Only runs when a SAP session already exists for this user + company,
+        // so the preview page loads fast for users that haven't logged in to
+        // SAP yet. Invalid codes shown here give the user a chance to fix the
+        // file before confirming (avoiding a run that fails group-by-group).
+        var invalidAccounts = new List<string>();
+        var accountsValidated = false;
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id")?.Value;
+            if (long.TryParse(userIdClaim, out var userId))
+            {
+                var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+                if (session != null && session.CompanyDb.Equals(importFile.CompanyDb, StringComparison.OrdinalIgnoreCase))
+                {
+                    var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
+                    if (accounts.Count > 0)
+                    {
+                        var codesInFile = importFile.Lines
+                            .SelectMany(l => new[] { l.AccountCode, l.ContraAccountCode })
+                            .Where(c => !string.IsNullOrWhiteSpace(c))
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
+                        invalidAccounts = codesInFile
+                            .Where(c => !accounts.ContainsKey(c))
+                            .OrderBy(c => c)
+                            .ToList();
+                        accountsValidated = true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falha ao validar contas contra o plano de contas do SAP no preview (nao-critico).");
+        }
+
         var model = new ImportPreviewViewModel
         {
             ImportFileId = importFile.Id,
@@ -194,6 +251,8 @@ public class ImportController : Controller
             Groups = groups,
             Status = importFile.Status,
             CorrelationId = importFile.CorrelationId,
+            InvalidAccountCodes = invalidAccounts,
+            AccountsValidated = accountsValidated,
             Errors = importFile.Lines
                 .Where(l => !string.IsNullOrWhiteSpace(l.ValidationMessage))
                 .Select(l => l.ValidationMessage!)

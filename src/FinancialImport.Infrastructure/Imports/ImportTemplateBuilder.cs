@@ -31,24 +31,12 @@ public static class ImportTemplateBuilder
             "Seq Lancamento"
         };
 
-        // Sample rows: one credit + one debit, both with SeqLancamento populated
-        // so the user sees the field is optional-but-recommended.
+        // Sample rows: show a pre-balanced multi-line group so users see how
+        // to detail a journal entry (credits + debits totaling the same value
+        // in the same Referencia = single SAP journal with multiple lines).
         var sample = new object?[][]
         {
-            new object?[]
-            {
-                "VENDA_CREDITO_001",
-                "1612001100002",
-                "4999200000008",
-                1503.22m,
-                0m,
-                new DateTime(2026, 2, 18),
-                new DateTime(2026, 2, 18),
-                new DateTime(2026, 2, 18),
-                "VR REF JUROS S/ EMPRESTIMO CREDITO PESSOAL CCB N. 16119",
-                1,
-                "001"
-            },
+            // --- Group 1: single one-sided row (classic debit+contra) ---
             new object?[]
             {
                 "PAG_FORNECEDOR_045",
@@ -61,7 +49,53 @@ public static class ImportTemplateBuilder
                 new DateTime(2026, 2, 19),
                 "PAGAMENTO NF 12345 FORNECEDOR XYZ LTDA",
                 1,
+                "001"
+            },
+            // --- Group 2: pre-balanced detailed entry (3 rows → 3 SAP lines) ---
+            // Row 1: Valor Credito = 1503,22 on ContaContabil 1612 → SAP: 1612 Debit 1503,22
+            new object?[]
+            {
+                "VENDA_CREDITO_001",
+                "1612001100002",
+                "4999200000008",
+                1503.22m,
+                0m,
+                new DateTime(2026, 2, 18),
+                new DateTime(2026, 2, 18),
+                new DateTime(2026, 2, 18),
+                "VR REF JUROS S/ EMPRESTIMO CREDITO PESSOAL CCB N. 16119",
+                1,
                 "002"
+            },
+            // Row 2: Valor Debito = 1500 on Contrapartida 4999 → SAP: 4999 Credit 1500
+            new object?[]
+            {
+                "VENDA_CREDITO_001",
+                "1612001100002",
+                "4999200000008",
+                0m,
+                1500.00m,
+                new DateTime(2026, 2, 18),
+                new DateTime(2026, 2, 18),
+                new DateTime(2026, 2, 18),
+                "VR REF JUROS S/ EMPRESTIMO",
+                1,
+                "003"
+            },
+            // Row 3: Valor Debito = 3,22 on Contrapartida 3281 → SAP: 3281 Credit 3,22
+            new object?[]
+            {
+                "VENDA_CREDITO_001",
+                "1612001100002",
+                "3281020050001",
+                0m,
+                3.22m,
+                new DateTime(2026, 2, 18),
+                new DateTime(2026, 2, 18),
+                new DateTime(2026, 2, 18),
+                "Taxa",
+                1,
+                "004"
             }
         };
 
@@ -116,11 +150,11 @@ public static class ImportTemplateBuilder
         var instr = workbook.Worksheets.Add("Instrucoes");
         var instructions = new (string Field, string Description, string Required)[]
         {
-            ("Referencia",          "Identificador unico do lancamento. Usado como chave de deduplicacao e enviado ao SAP como Ref1/Ref2.", "Obrigatorio"),
-            ("Conta Contabil",      "Codigo da conta contabil principal (debito ou credito).", "Obrigatorio"),
+            ("Referencia",          "Identificador do lancamento. Linhas com a MESMA Referencia + datas iguais sao agrupadas em UM lancamento SAP.", "Obrigatorio"),
+            ("Conta Contabil",      "Codigo da conta contabil principal. O digito verificador (-0, -1, etc) e resolvido automaticamente.", "Obrigatorio"),
             ("Conta Contrapartida", "Codigo da conta contabil de contrapartida.", "Obrigatorio"),
-            ("Valor Credito",       "Valor a credito. Preencha APENAS um dos campos (Credito ou Debito) por linha.", "Condicional"),
-            ("Valor Debito",        "Valor a debito. Preencha APENAS um dos campos (Credito ou Debito) por linha.", "Condicional"),
+            ("Valor Credito",       "Se preenchido, a linha SAP usa a CONTA CONTABIL no DEBITO. Preencha apenas Credito OU Debito por linha.", "Condicional"),
+            ("Valor Debito",        "Se preenchido, a linha SAP usa a CONTRAPARTIDA no CREDITO. Preencha apenas Credito OU Debito por linha.", "Condicional"),
             ("Data Lancamento",     "Data do lancamento contabil (formato dd/MM/yyyy).", "Obrigatorio"),
             ("Data Vencimento",     "Data de vencimento do documento. Se omitida, usa Data Lancamento.", "Opcional"),
             ("Data Documento",      "Data do documento fiscal. Se omitida, usa Data Lancamento.", "Opcional"),
@@ -153,6 +187,49 @@ public static class ImportTemplateBuilder
         instr.Column(3).Width = 14;
         instr.Range(2, 2, instructions.Length + 1, 2).Style.Alignment.WrapText = true;
         instr.SheetView.FreezeRows(1);
+
+        // ─── How-it-works block ──────────────────────────────────────────────
+        var row = instructions.Length + 3;
+        instr.Cell(row, 1).Value = "COMO FUNCIONA O AGRUPAMENTO";
+        instr.Cell(row, 1).Style.Font.Bold = true;
+        instr.Cell(row, 1).Style.Fill.BackgroundColor = XLColor.FromArgb(250, 204, 21);
+        instr.Range(row, 1, row, 3).Merge();
+        row++;
+
+        var howTo = new[]
+        {
+            "• Linhas com MESMA Referencia + MESMAS datas formam UM lancamento SAP.",
+            "",
+            "MODO SIMPLES (1 linha do Excel → 2 linhas SAP):",
+            "Quando o grupo tem apenas valores a credito OU apenas a debito,",
+            "o sistema gera a linha principal na Conta Contabil e a contrapartida",
+            "na Conta Contrapartida automaticamente para balancear.",
+            "",
+            "MODO DETALHADO (N linhas do Excel → N linhas SAP):",
+            "Quando o grupo tem linhas de credito E debito que totalizam o mesmo",
+            "valor, cada linha do Excel vira UMA linha SAP:",
+            "  - Linha com Valor Credito preenchido → SAP usa Conta Contabil no DEBITO",
+            "  - Linha com Valor Debito preenchido → SAP usa Contrapartida no CREDITO",
+            "",
+            "EXEMPLO DO MODO DETALHADO (ver aba Layout2):",
+            "3 linhas com mesma Referencia 'VENDA_CREDITO_001':",
+            "  - Credito 1503,22 em 1612 → SAP: 1612 Debito 1503,22",
+            "  - Debito 1500,00 em 4999 → SAP: 4999 Credito 1500,00",
+            "  - Debito    3,22 em 3281 → SAP: 3281 Credito    3,22",
+            "Total: 1503,22 D = 1503,22 C (balanceado)",
+            "",
+            "AUTO-COMPLETE DE CONTAS:",
+            "O sistema busca o plano de contas do SAP e resolve automaticamente",
+            "o digito verificador. Voce pode escrever '1612001100002' ou",
+            "'1612001100002-0' — ambos funcionam."
+        };
+
+        foreach (var text in howTo)
+        {
+            instr.Cell(row, 1).Value = text;
+            instr.Range(row, 1, row, 3).Merge();
+            row++;
+        }
 
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
