@@ -44,55 +44,67 @@ public sealed class SapChartOfAccountsService : ISapChartOfAccountsService
 
         var accounts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var client = _httpClientFactory.CreateClient("SapServiceLayer");
-        int skip = 0;
-        const int top = 5000;
 
-        while (true)
+        // SAP Service Layer v2 uses @odata.nextLink pagination. The default
+        // page size is small (~20), so we ask for the maximum the server
+        // supports via the Prefer header. If the server returns nextLink,
+        // we follow it until there are no more pages.
+        const int pageSize = 500;
+        string? nextUrl = $"ChartOfAccounts?$select=Code,Name";
+        int pageCount = 0;
+
+        while (!string.IsNullOrWhiteSpace(nextUrl))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var request = new HttpRequestMessage(HttpMethod.Get,
-                $"ChartOfAccounts?$select=Code,Name&$top={top}&$skip={skip}");
+            var request = new HttpRequestMessage(HttpMethod.Get, nextUrl);
             request.Headers.Add("B1SESSION", session.SessionId);
             if (!string.IsNullOrWhiteSpace(session.RouteId))
                 request.Headers.Add("ROUTEID", session.RouteId);
+            request.Headers.Add("Prefer", $"odata.maxpagesize={pageSize}");
 
             var response = await client.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Failed to fetch ChartOfAccounts: {Status}", response.StatusCode);
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogWarning("Failed to fetch ChartOfAccounts page {Page}: {Status} - {Body}",
+                    pageCount, response.StatusCode, body);
                 break;
             }
 
             var json = await response.Content.ReadAsStringAsync(cancellationToken);
             using var doc = JsonDocument.Parse(json);
 
-            var values = doc.RootElement.GetProperty("value");
-            if (values.GetArrayLength() == 0) break;
+            if (!doc.RootElement.TryGetProperty("value", out var values))
+                break;
 
             foreach (var item in values.EnumerateArray())
             {
                 var code = item.GetProperty("Code").GetString();
-                if (!string.IsNullOrWhiteSpace(code))
+                if (string.IsNullOrWhiteSpace(code)) continue;
+
+                // Map the full code (e.g. "1612001100002-0")
+                accounts[code] = code;
+
+                // Also map the code without check digit (e.g. "1612001100002" → "1612001100002-0")
+                var dashIdx = code.LastIndexOf('-');
+                if (dashIdx > 0)
                 {
-                    // Map both the full code and the code without check digit
-                    accounts[code] = code;
-                    var dashIdx = code.LastIndexOf('-');
-                    if (dashIdx > 0)
-                    {
-                        var withoutCheckDigit = code[..dashIdx];
-                        // Only add if not already mapped (avoid collisions)
-                        accounts.TryAdd(withoutCheckDigit, code);
-                    }
+                    var withoutCheckDigit = code[..dashIdx];
+                    accounts.TryAdd(withoutCheckDigit, code);
                 }
             }
 
-            skip += top;
-            if (values.GetArrayLength() < top) break;
+            pageCount++;
+
+            // Follow @odata.nextLink if present; otherwise stop.
+            nextUrl = doc.RootElement.TryGetProperty("@odata.nextLink", out var nl)
+                ? nl.GetString()
+                : null;
         }
 
-        _logger.LogInformation("ChartOfAccounts loaded: {Count} accounts for {CompanyDb}.",
-            accounts.Count, session.CompanyDb);
+        _logger.LogInformation("ChartOfAccounts loaded: {Count} accounts ({Pages} pages) for {CompanyDb}.",
+            accounts.Count, pageCount, session.CompanyDb);
 
         _cache[session.CompanyDb] = new CacheEntry(accounts, DateTime.UtcNow);
         return accounts;
