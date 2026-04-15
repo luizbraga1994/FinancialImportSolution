@@ -234,6 +234,7 @@ public sealed class ImportProcessor : IImportProcessor
             }
 
             SapResult sapResult;
+            Exception? sapException = null;
             try
             {
                 sapResult = await _sapService.CreateJournalEntryAsync(sapSession, build.Payload, cancellationToken);
@@ -253,10 +254,19 @@ public sealed class ImportProcessor : IImportProcessor
                         sapSession = relogin.Session!;
                         sapResult = await _sapService.CreateJournalEntryAsync(sapSession, build.Payload, cancellationToken);
                     }
+                    else
+                    {
+                        _logger.LogError("Re-authentication to SAP failed for '{CompanyDb}': {Error}",
+                            importFile.CompanyDb, relogin.ErrorMessage);
+                    }
                 }
             }
             catch (Exception ex)
             {
+                sapException = ex;
+                _logger.LogError(ex,
+                    "Exception while dispatching group {GroupKey} for file {FileId} (company {CompanyDb}).",
+                    dispatch.GroupKey, importFile.Id, importFile.CompanyDb);
                 sapResult = SapResult.Fail($"Erro de comunicacao: {ex.Message}");
             }
 
@@ -298,6 +308,41 @@ public sealed class ImportProcessor : IImportProcessor
                     line.SapReturnMessage = dispatch.LastError;
                     sapErrors++;
                 }
+
+                // Per-group audit log with the FULL error details so users can see
+                // exactly which group failed and why, without digging through app logs.
+                var detailsBuilder = new System.Text.StringBuilder();
+                detailsBuilder.AppendLine($"Grupo: {dispatch.GroupKey}");
+                detailsBuilder.AppendLine($"Tentativa: {dispatch.AttemptCount}");
+                detailsBuilder.AppendLine($"Linhas afetadas: {groupLines.Count}");
+                detailsBuilder.AppendLine($"Debito total: {build.TotalDebit:N2}");
+                detailsBuilder.AppendLine($"Credito total: {build.TotalCredit:N2}");
+                detailsBuilder.AppendLine($"Contas utilizadas: {string.Join(", ", build.Payload.JournalEntryLines.Select(l => l.AccountCode).Distinct())}");
+                detailsBuilder.AppendLine();
+                detailsBuilder.AppendLine("--- Resposta completa do SAP ---");
+                detailsBuilder.AppendLine(sapResult.RawResponse ?? "(sem corpo de resposta)");
+                if (sapException != null)
+                {
+                    detailsBuilder.AppendLine();
+                    detailsBuilder.AppendLine("--- Exception capturada ---");
+                    detailsBuilder.AppendLine(sapException.ToString());
+                }
+
+                await _audit.WriteAsync(new AuditLogEntry
+                {
+                    Level = LogSeverities.Error,
+                    Category = LogCategories.Integration,
+                    Source = nameof(ImportProcessor),
+                    Operation = "DispatchJournalEntry",
+                    Message = $"SAP rejeitou lancamento do grupo '{dispatch.GroupKey}': {dispatch.LastError}",
+                    Details = detailsBuilder.ToString(),
+                    StackTrace = sapException?.StackTrace,
+                    ImportFileId = importFile.Id,
+                    CompanyDb = importFile.CompanyDb,
+                    CorrelationId = importFile.CorrelationId,
+                    BusinessKey = dispatch.GroupKeyHash,
+                    StatusAfter = dispatch.Status.ToString()
+                }, cancellationToken);
 
                 await _eventPublisher.PublishAsync(new SapDispatchFailedEvent
                 {
