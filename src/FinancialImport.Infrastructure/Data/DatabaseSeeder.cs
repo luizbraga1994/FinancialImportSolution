@@ -221,7 +221,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Import:MaxFileSizeBytes",   Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "10485760",    Descricao = "Tamanho maximo do arquivo (bytes)" },
             new() { Chave = "Import:AllowedExtensions",  Categoria = "Importacao", TipoDado = "list",    Obrigatorio = false, Valor = ".csv,.txt,.xlsx", Descricao = "Extensoes permitidas (separadas por virgula)" },
             new() { Chave = "Import:MemoMaxLength",      Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "254",         Descricao = "Tamanho maximo do memo principal" },
-            new() { Chave = "Import:ReferenceMaxLength", Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "27",          Descricao = "Tamanho maximo da referencia" },
+            new() { Chave = "Import:ReferenceMaxLength", Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "200",         Descricao = "Tamanho maximo da referencia (OJDT.Ref1/Ref2)" },
             new() { Chave = "Import:LineMemoMaxLength",  Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "254",         Descricao = "Tamanho maximo do historico de linha" },
             new() { Chave = "Import:JournalBalanceTolerance", Categoria = "Importacao", TipoDado = "string", Obrigatorio = false, Valor = "0.01",   Descricao = "Tolerancia de balanco do lancamento contabil" },
             new() { Chave = "Import:Dedup:IncludeSeqLancamento", Categoria = "Importacao", TipoDado = "bool", Obrigatorio = false, Valor = "true",  Descricao = "Incluir SeqLancamento na chave de deduplicacao" },
