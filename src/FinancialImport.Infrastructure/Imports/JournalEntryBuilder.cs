@@ -74,12 +74,39 @@ public sealed class JournalEntryBuilder
 
             if (alreadyBalanced)
             {
-                // Pre-balanced detailed input: each CSV row = 1 SAP line.
-                // User convention:
-                //   - "Valor Credito" populated → SAP line uses ContaContabil on DEBIT side
-                //   - "Valor Debito" populated  → SAP line uses Contrapartida on CREDIT side
-                // This matches how users describe the flow in their spreadsheets.
-                if (creditAmount > 0m)
+                // Pre-balanced detailed input.
+                //
+                // Two sub-cases:
+                // (a) BOTH columns populated on the same row → classic 2-line entry:
+                //     ContaContabil receives Debito, Contrapartida receives Credito.
+                //     Used when the user fills a one-shot entry on a single row
+                //     (e.g. "Pagamento fornecedor: 1131 Debit 2750 / 1211 Credit 2750").
+                //
+                // (b) Only ONE column populated on the row → 1 SAP line:
+                //     - "Valor Credito" populated → ContaContabil on DEBIT side
+                //     - "Valor Debito" populated  → Contrapartida on CREDIT side
+                //     Used when the user details a journal across multiple rows
+                //     that together balance (e.g. split interest + principal).
+                if (creditAmount > 0m && debitAmount > 0m)
+                {
+                    debitLines.Add(new SapJournalEntryLine
+                    {
+                        AccountCode = line.AccountCode,
+                        Debit = debitAmount,
+                        Credit = 0m,
+                        LineMemo = memo,
+                        BPLID = bplId
+                    });
+                    creditLines.Add(new SapJournalEntryLine
+                    {
+                        AccountCode = line.ContraAccountCode,
+                        Debit = 0m,
+                        Credit = creditAmount,
+                        LineMemo = memo,
+                        BPLID = bplId
+                    });
+                }
+                else if (creditAmount > 0m)
                 {
                     debitLines.Add(new SapJournalEntryLine
                     {
