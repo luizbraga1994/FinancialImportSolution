@@ -376,7 +376,7 @@ public class ImportController : Controller
         var file = await _dbContext.ImportFiles
             .AsNoTracking()
             .Where(f => f.Id == id)
-            .Select(f => new { f.Id, f.Status, f.TotalLines, f.ValidLines, f.ImportedLines, f.LinesWithError, f.OriginalFileName, f.ProcessingStartedAtUtc })
+            .Select(f => new { f.Id, f.Status, f.TotalLines, f.ValidLines, f.ImportedLines, f.LinesWithError, f.OriginalFileName, f.ProcessingStartedAtUtc, f.ProcessingCompletedAtUtc })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (file == null)
