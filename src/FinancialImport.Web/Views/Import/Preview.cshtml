@@ -201,16 +201,24 @@ else
                     var group = Model.Groups[i];
                     var collapseId = $"collapse-{i}";
                     var headingId = $"heading-{i}";
-                    <div class="accordion-item">
-                        <h2 class="accordion-header" id="@headingId">
-                            <button class="accordion-button collapsed" type="button"
+                    <div class="accordion-item @(group.IsExcluded ? "opacity-50" : "")">
+                        <h2 class="accordion-header d-flex align-items-center" id="@headingId">
+                            <button class="accordion-button collapsed flex-grow-1" type="button"
                                     data-bs-toggle="collapse" data-bs-target="#@collapseId"
                                     aria-expanded="false" aria-controls="@collapseId">
                                 <div class="d-flex align-items-center justify-content-between w-100 me-3">
                                     <div>
-                                        <code class="fw-semibold">@(string.IsNullOrWhiteSpace(group.Reference) ? "(sem referencia)" : group.Reference)</code>
+                                        <code class="fw-semibold @(group.IsExcluded ? "text-decoration-line-through text-muted" : "")">@(string.IsNullOrWhiteSpace(group.Reference) ? "(sem referencia)" : group.Reference)</code>
                                         <span class="badge bg-primary-subtle text-primary-emphasis ms-2">@group.PostingDate.ToString("dd/MM/yyyy")</span>
                                         <span class="badge bg-light text-dark border ms-2">@group.LineCount linha(s)</span>
+                                        @if (group.IsExcluded)
+                                        {
+                                            <span class="badge bg-danger-subtle text-danger-emphasis ms-2"><i class="bi bi-slash-circle me-1"></i>Excluido</span>
+                                        }
+                                        else if (group.IsImported)
+                                        {
+                                            <span class="badge bg-success-subtle text-success-emphasis ms-2"><i class="bi bi-check-circle me-1"></i>Enviado ao SAP</span>
+                                        }
                                     </div>
                                     <div class="small text-muted d-none d-md-block">
                                         D: <strong>@group.TotalDebit.ToString("N2")</strong>
@@ -219,6 +227,18 @@ else
                                     </div>
                                 </div>
                             </button>
+                            @if (!group.IsExcluded && !group.IsImported && Model.Status != ImportStatus.Processing && Model.Status != ImportStatus.Completed)
+                            {
+                                <form asp-action="ExcludeGroup" asp-route-id="@Model.ImportFileId" method="post" class="ms-1 me-2">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="groupKeyHash" value="@group.GroupKeyHash" />
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"
+                                            title="Excluir grupo inteiro (@group.LineCount linha(s))"
+                                            onclick="return confirm('Excluir o grupo @group.Reference do @group.PostingDate.ToString(&quot;dd/MM/yyyy&quot;)?\n\n@group.LineCount linha(s) nao serao enviadas ao SAP.');">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            }
                         </h2>
                         <div id="@collapseId" class="accordion-collapse collapse"
                              aria-labelledby="@headingId" data-bs-parent="#groupsAccordion">
@@ -236,6 +256,7 @@ else
                                                 <th>Historico</th>
                                                 <th>Filial</th>
                                                 <th>Mensagem</th>
+                                                <th class="text-center" style="width: 40px;"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -246,8 +267,13 @@ else
                                                     : line.Status == ImportLineStatus.Duplicated ? "bg-warning-subtle text-warning-emphasis"
                                                     : line.Status == ImportLineStatus.Imported ? "bg-primary-subtle text-primary-emphasis"
                                                     : line.Status == ImportLineStatus.SapError ? "bg-danger-subtle text-danger-emphasis"
+                                                    : line.Status == ImportLineStatus.Excluded ? "bg-secondary-subtle text-secondary-emphasis"
                                                     : "bg-secondary-subtle text-secondary-emphasis";
-                                                <tr>
+                                                var rowClass = line.Status == ImportLineStatus.Excluded ? "text-muted text-decoration-line-through" : "";
+                                                var canExcludeLine = (line.Status == ImportLineStatus.Valid || line.Status == ImportLineStatus.SapError)
+                                                                     && Model.Status != ImportStatus.Processing
+                                                                     && Model.Status != ImportStatus.Completed;
+                                                <tr class="@rowClass">
                                                     <td>
                                                         <span class="badge @rowBadge">@line.Status</span>
                                                     </td>
@@ -261,7 +287,7 @@ else
                                                     <td class="small text-muted">
                                                         @if (!string.IsNullOrWhiteSpace(line.ValidationMessage))
                                                         {
-                                                            <span class="text-danger">@line.ValidationMessage</span>
+                                                            <span class="@(line.Status == ImportLineStatus.Excluded ? "text-muted" : "text-danger")">@line.ValidationMessage</span>
                                                         }
                                                         else if (!string.IsNullOrWhiteSpace(line.SapReturnMessage))
                                                         {
@@ -270,6 +296,20 @@ else
                                                         else
                                                         {
                                                             <span>-</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        @if (canExcludeLine)
+                                                        {
+                                                            <form asp-action="ExcludeLine" asp-route-id="@Model.ImportFileId" method="post" class="d-inline">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="lineId" value="@line.Id" />
+                                                                <button type="submit" class="btn btn-sm btn-link text-danger p-0"
+                                                                        title="Excluir esta linha"
+                                                                        onclick="return confirm('Excluir apenas esta linha? Se o grupo ficar desbalanceado (D != C), o SAP pode rejeitar o lancamento inteiro.');">
+                                                                    <i class="bi bi-x-circle"></i>
+                                                                </button>
+                                                            </form>
                                                         }
                                                     </td>
                                                 </tr>

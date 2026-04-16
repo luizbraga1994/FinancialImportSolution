@@ -48,6 +48,15 @@ public class ImportPreviewGroup
     public decimal TotalCredit { get; set; }
     public decimal TotalDebit { get; set; }
     public List<ImportLine> Lines { get; set; } = new();
+
+    /// <summary>Hash used by the exclude-group endpoint to target this group.</summary>
+    public string GroupKeyHash { get; set; } = string.Empty;
+
+    /// <summary>True when every line in this group has been excluded by the operator.</summary>
+    public bool IsExcluded { get; set; }
+
+    /// <summary>True when the group has at least one line successfully imported.</summary>
+    public bool IsImported { get; set; }
 }
 
 [Authorize]
@@ -196,6 +205,9 @@ public class ImportController : Controller
                     LineCount = g.Count(),
                     TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
                     TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
+                    GroupKeyHash = g.Key,
+                    IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
+                    IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
                     Lines = g.OrderBy(l => l.Id).ToList()
                 };
             })
@@ -333,5 +345,123 @@ public class ImportController : Controller
             TempData["Error"] = ex.Message;
             return RedirectToAction(nameof(Preview), new { id });
         }
+    }
+
+    /// <summary>
+    /// Marks all lines of a given GroupKeyHash as Excluded so they are skipped
+    /// when the import is confirmed. Useful when the operator reviews the
+    /// preview and wants to cherry-pick which journal entries to send to SAP.
+    /// Only lines in Valid or SapError status can be excluded — Imported and
+    /// Invalid/Duplicated lines are left untouched.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExcludeGroup(long id, string groupKeyHash, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(groupKeyHash))
+        {
+            TempData["Error"] = "Identificador do grupo nao informado.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        var importFile = await _dbContext.ImportFiles
+            .Include(f => f.Lines)
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        if (importFile == null)
+        {
+            TempData["Error"] = "Importacao nao encontrada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (importFile.Status == ImportStatus.Processing)
+        {
+            TempData["Error"] = "Nao e possivel excluir grupos enquanto a importacao esta em processamento.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        var affected = importFile.Lines
+            .Where(l => l.GroupKeyHash == groupKeyHash
+                     && (l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError))
+            .ToList();
+
+        if (affected.Count == 0)
+        {
+            TempData["Error"] = "Nenhuma linha elegivel para exclusao neste grupo.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        var reference = affected[0].Reference ?? "(sem referencia)";
+        foreach (var line in affected)
+        {
+            line.Status = ImportLineStatus.Excluded;
+            line.ValidationMessage = "Excluido pelo operador antes do envio ao SAP.";
+        }
+
+        // Recount so the header counters stay accurate
+        importFile.ValidLines = importFile.Lines.Count(l => l.Status == ImportLineStatus.Valid);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Grupo '{GroupKey}' ({Count} linha(s)) excluido do arquivo {FileId} por '{User}'.",
+            reference, affected.Count, id, User.FindFirst("login")?.Value);
+
+        TempData["Success"] = $"Grupo '{reference}' excluido ({affected.Count} linha(s)). Essas linhas nao serao enviadas ao SAP.";
+        return RedirectToAction(nameof(Preview), new { id });
+    }
+
+    /// <summary>
+    /// Excludes a single import line (one Excel row) from the journal.
+    /// The remaining lines in the same group still go to SAP. Excluding
+    /// a debit without excluding the matching credit (or vice-versa)
+    /// leaves the group unbalanced — the ImportProcessor will log a
+    /// warning but still attempt the dispatch.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ExcludeLine(long id, long lineId, CancellationToken cancellationToken)
+    {
+        var importFile = await _dbContext.ImportFiles
+            .Include(f => f.Lines)
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        if (importFile == null)
+        {
+            TempData["Error"] = "Importacao nao encontrada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (importFile.Status == ImportStatus.Processing)
+        {
+            TempData["Error"] = "Nao e possivel excluir linhas enquanto a importacao esta em processamento.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        var line = importFile.Lines.FirstOrDefault(l => l.Id == lineId);
+        if (line == null)
+        {
+            TempData["Error"] = "Linha nao encontrada.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        if (line.Status != ImportLineStatus.Valid && line.Status != ImportLineStatus.SapError)
+        {
+            TempData["Error"] = $"Linha com status '{line.Status}' nao pode ser excluida.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        line.Status = ImportLineStatus.Excluded;
+        line.ValidationMessage = "Excluida pelo operador antes do envio ao SAP.";
+
+        importFile.ValidLines = importFile.Lines.Count(l => l.Status == ImportLineStatus.Valid);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Linha {LineId} (grupo {GroupKey}) excluida do arquivo {FileId} por '{User}'.",
+            lineId, line.Reference, id, User.FindFirst("login")?.Value);
+
+        TempData["Success"] = $"Linha excluida com sucesso. Atencao: se o grupo '{line.Reference}' ficar desbalanceado, o SAP pode rejeitar o lancamento inteiro.";
+        return RedirectToAction(nameof(Preview), new { id });
     }
 }

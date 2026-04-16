@@ -7,5 +7,6 @@ public enum ImportLineStatus
     Invalid = 2,
     Duplicated = 3,
     Imported = 4,
-    SapError = 5
+    SapError = 5,
+    Excluded = 6
 }
