@@ -1,0 +1,337 @@
+@{
+    ViewData["Title"] = "Instrucoes de Importacao";
+}
+
+<div class="mb-4">
+    <a asp-action="Index" class="btn btn-light btn-sm mb-3">
+        <i class="bi bi-arrow-left me-1"></i> Voltar
+    </a>
+    <h5 class="fw-bold mb-1">Instrucoes de Importacao</h5>
+    <p class="text-muted mb-0" style="font-size: 0.85rem;">
+        Guia completo para importacao de lancamentos contabeis ao SAP Business One
+    </p>
+</div>
+
+<div class="row g-4">
+    <!-- Sidebar -->
+    <div class="col-md-3">
+        <div class="card border-0 position-sticky" style="top: 80px;">
+            <div class="card-body p-0">
+                <nav class="nav flex-column small">
+                    <a class="nav-link active" href="#visao-geral"><i class="bi bi-house me-2"></i>Visao Geral</a>
+                    <a class="nav-link" href="#template"><i class="bi bi-file-earmark-excel me-2"></i>Template Excel</a>
+                    <a class="nav-link" href="#colunas"><i class="bi bi-table me-2"></i>Colunas</a>
+                    <a class="nav-link" href="#agrupamento"><i class="bi bi-collection me-2"></i>Agrupamento</a>
+                    <a class="nav-link" href="#modo-simples"><i class="bi bi-1-circle me-2"></i>Modo Simples</a>
+                    <a class="nav-link" href="#modo-detalhado"><i class="bi bi-list-ol me-2"></i>Modo Detalhado</a>
+                    <a class="nav-link" href="#auto-complete"><i class="bi bi-search me-2"></i>Auto-Complete de Contas</a>
+                    <a class="nav-link" href="#fluxo"><i class="bi bi-arrow-right-circle me-2"></i>Fluxo Completo</a>
+                    <a class="nav-link" href="#erros"><i class="bi bi-exclamation-triangle me-2"></i>Tratamento de Erros</a>
+                    <a class="nav-link" href="#dicas"><i class="bi bi-lightbulb me-2"></i>Dicas</a>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="col-md-9">
+
+        <!-- Visao Geral -->
+        <div class="card mb-4" id="visao-geral">
+            <div class="card-header bg-primary text-white">
+                <h6 class="mb-0"><i class="bi bi-house me-2"></i>Visao Geral</h6>
+            </div>
+            <div class="card-body">
+                <p>O <strong>Financial Import</strong> permite importar lancamentos contabeis de planilhas Excel diretamente para o SAP Business One via Service Layer.</p>
+                <p>O sistema suporta dois modos de operacao:</p>
+                <ul>
+                    <li><strong>Modo Simples:</strong> cada linha do Excel gera um par debito/credito automatico no SAP</li>
+                    <li><strong>Modo Detalhado:</strong> voce controla cada linha do lancamento SAP diretamente no Excel</li>
+                </ul>
+                <p>O modo e detectado <strong>automaticamente</strong> com base nos valores preenchidos nas colunas "Valor Credito" e "Valor Debito".</p>
+            </div>
+        </div>
+
+        <!-- Template -->
+        <div class="card mb-4" id="template">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-file-earmark-excel me-2 text-success"></i>Template Excel</h6>
+            </div>
+            <div class="card-body">
+                <p>Baixe o modelo com exemplos e instrucoes:</p>
+                <a asp-action="DownloadTemplate" asp-route-layout="Layout2" class="btn btn-success btn-sm"
+                   data-loading data-download data-loading-message="Gerando template...">
+                    <i class="bi bi-download me-1"></i> Baixar Template Layout2
+                </a>
+                <p class="text-muted small mt-2">O arquivo contem uma aba com exemplos preenchidos e outra com a descricao de cada campo.</p>
+            </div>
+        </div>
+
+        <!-- Colunas -->
+        <div class="card mb-4" id="colunas">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-table me-2 text-primary"></i>Descricao das Colunas</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Coluna</th>
+                                <th>Descricao</th>
+                                <th>Uso</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>Referencia</code></td>
+                                <td>Identificador do lancamento. Linhas com a <strong>mesma Referencia + datas iguais</strong> formam um unico lancamento SAP.</td>
+                                <td><span class="badge bg-danger-subtle text-danger-emphasis">Obrigatorio</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>Conta Contabil</code></td>
+                                <td>Codigo da conta contabil principal. O digito verificador (ex: <code>-0</code>, <code>-4</code>) e resolvido <strong>automaticamente</strong>.</td>
+                                <td><span class="badge bg-danger-subtle text-danger-emphasis">Obrigatorio</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>Conta Contrapartida</code></td>
+                                <td>Codigo da conta de contrapartida. Tambem com auto-complete de digito verificador.</td>
+                                <td><span class="badge bg-danger-subtle text-danger-emphasis">Obrigatorio</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>Valor Credito</code></td>
+                                <td>
+                                    Preencha quando a <strong>Conta Contabil</strong> deve receber um <strong>Credito</strong> no SAP.
+                                    <br><span class="text-muted">Preencha apenas Credito OU Debito por linha (nao os dois, exceto no modo simples).</span>
+                                </td>
+                                <td><span class="badge bg-warning-subtle text-warning-emphasis">Condicional</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>Valor Debito</code></td>
+                                <td>
+                                    Preencha quando a <strong>Contrapartida</strong> deve receber um <strong>Debito</strong> no SAP.
+                                    <br><span class="text-muted">Preencha apenas Credito OU Debito por linha (nao os dois, exceto no modo simples).</span>
+                                </td>
+                                <td><span class="badge bg-warning-subtle text-warning-emphasis">Condicional</span></td>
+                            </tr>
+                            <tr><td><code>Data Lancamento</code></td><td>Data do lancamento contabil (dd/MM/yyyy).</td><td><span class="badge bg-danger-subtle text-danger-emphasis">Obrigatorio</span></td></tr>
+                            <tr><td><code>Data Vencimento</code></td><td>Data de vencimento. Se vazio, usa Data Lancamento.</td><td><span class="badge bg-secondary-subtle text-secondary-emphasis">Opcional</span></td></tr>
+                            <tr><td><code>Data Documento</code></td><td>Data do documento fiscal. Se vazio, usa Data Lancamento.</td><td><span class="badge bg-secondary-subtle text-secondary-emphasis">Opcional</span></td></tr>
+                            <tr><td><code>Observacao Linha</code></td><td>Historico/memo que aparece na linha do lancamento no SAP (max 254 caracteres).</td><td><span class="badge bg-danger-subtle text-danger-emphasis">Obrigatorio</span></td></tr>
+                            <tr><td><code>Filial</code></td><td>Codigo da filial (BPLID). Mapeamento em Empresas &gt; Filiais.</td><td><span class="badge bg-warning-subtle text-warning-emphasis">Condicional</span></td></tr>
+                            <tr><td><code>Seq Lancamento</code></td><td>Sequencial do lancamento no arquivo. Entra na chave de deduplicacao.</td><td><span class="badge bg-secondary-subtle text-secondary-emphasis">Opcional</span></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agrupamento -->
+        <div class="card mb-4" id="agrupamento">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-collection me-2 text-info"></i>Como Funciona o Agrupamento</h6>
+            </div>
+            <div class="card-body">
+                <p>Linhas com a <strong>mesma Referencia + mesmas datas</strong> (Lancamento, Vencimento, Documento) sao agrupadas em <strong>um unico lancamento SAP</strong>.</p>
+                <div class="alert alert-info py-2 small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Exemplo:</strong> 3 linhas no Excel com Referencia <code>VENDA_001</code> e Data <code>18/02/2026</code> geram 1 lancamento SAP com 3 linhas.
+                </div>
+                <p>O sistema detecta <strong>automaticamente</strong> se o grupo e simples (uma linha) ou detalhado (multiplas linhas balanceadas).</p>
+            </div>
+        </div>
+
+        <!-- Modo Simples -->
+        <div class="card mb-4" id="modo-simples">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-1-circle me-2 text-success"></i>Modo Simples (1 linha Excel → 2 linhas SAP)</h6>
+            </div>
+            <div class="card-body">
+                <p>Quando o grupo tem <strong>apenas debitos OU apenas creditos</strong>, o sistema gera automaticamente a contrapartida para balancear.</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered small">
+                        <thead class="table-light">
+                            <tr><th>Referencia</th><th>Conta Contabil</th><th>Contrapartida</th><th>Credito</th><th>Debito</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>PAG_FORN</td><td>2101001100001</td><td>1112001100003</td><td>0</td><td>2.750,00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mb-1"><strong>Resultado no SAP:</strong></p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered small">
+                        <thead class="table-light">
+                            <tr><th>#</th><th>Conta</th><th>Debito</th><th>Credito</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>1</td><td><code>2101001100001</code></td><td>2.750,00</td><td></td></tr>
+                            <tr><td>2</td><td><code>1112001100003</code></td><td></td><td>2.750,00</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mb-0">
+                    <strong>Alternativa:</strong> se voce preencher AMBAS as colunas (Credito e Debito) com o mesmo valor na mesma linha,
+                    o resultado e o mesmo: Conta Contabil recebe Debito e Contrapartida recebe Credito.
+                </p>
+            </div>
+        </div>
+
+        <!-- Modo Detalhado -->
+        <div class="card mb-4" id="modo-detalhado">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-list-ol me-2 text-warning"></i>Modo Detalhado (N linhas Excel → N linhas SAP)</h6>
+            </div>
+            <div class="card-body">
+                <p>Quando o grupo tem linhas com <strong>creditos E debitos que totalizam o mesmo valor</strong>, cada linha do Excel vira <strong>uma linha SAP</strong>.</p>
+                <div class="alert alert-warning py-2 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <strong>Regra:</strong> Valor Credito → Conta Contabil recebe <strong>Credito</strong> no SAP &nbsp;|&nbsp; Valor Debito → Contrapartida recebe <strong>Debito</strong> no SAP
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered small">
+                        <thead class="table-light">
+                            <tr><th>Referencia</th><th>Conta Contabil</th><th>Contrapartida</th><th>Credito</th><th>Debito</th><th>Observacao</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>VENDA_001</td><td>1612001100002</td><td>4999200000008</td><td>2.203,22</td><td>0</td><td>VR REF JUROS CCB N. 16119</td></tr>
+                            <tr><td>VENDA_001</td><td>1612001100002</td><td>4999200000008</td><td>0</td><td>2.200,00</td><td>VR REF JUROS S/ EMPRESTIMO</td></tr>
+                            <tr><td>VENDA_001</td><td>1612001100002</td><td>3281020050001</td><td>0</td><td>3,22</td><td>Taxa</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="mb-1"><strong>Resultado no SAP:</strong></p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered small">
+                        <thead class="table-light">
+                            <tr><th>#</th><th>Conta</th><th>Debito</th><th>Credito</th><th>Observacao</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>1</td><td><code>1612001100002</code></td><td></td><td>2.203,22</td><td>VR REF JUROS CCB N. 16119</td></tr>
+                            <tr><td>2</td><td><code>4999200000008</code></td><td>2.200,00</td><td></td><td>VR REF JUROS S/ EMPRESTIMO</td></tr>
+                            <tr><td>3</td><td><code>3281020050001</code></td><td>3,22</td><td></td><td>Taxa</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted small mb-0"><strong>Total:</strong> D 2.203,22 = C 2.203,22 ✓ (balanceado)</p>
+            </div>
+        </div>
+
+        <!-- Auto-Complete -->
+        <div class="card mb-4" id="auto-complete">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-search me-2 text-primary"></i>Auto-Complete de Contas</h6>
+            </div>
+            <div class="card-body">
+                <p>O sistema busca o <strong>plano de contas</strong> do SAP automaticamente e resolve o digito verificador.</p>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="card bg-light border-0">
+                            <div class="card-body p-3 text-center">
+                                <div class="text-muted small mb-1">Voce escreve</div>
+                                <code class="fs-6">1612001100002</code>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-success-subtle border-0">
+                            <div class="card-body p-3 text-center">
+                                <div class="text-muted small mb-1">SAP recebe</div>
+                                <code class="fs-6 text-success-emphasis">1612001100002-4</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-muted small mt-3 mb-0">
+                    Se voce ja souber o digito verificador, pode escrever o codigo completo (<code>1612001100002-4</code>) — o sistema aceita ambos.
+                    Contas nao encontradas no plano de contas sao sinalizadas na tela de preview com um aviso amarelo.
+                </p>
+            </div>
+        </div>
+
+        <!-- Fluxo -->
+        <div class="card mb-4" id="fluxo">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-arrow-right-circle me-2 text-info"></i>Fluxo Completo da Importacao</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex align-items-start gap-3">
+                        <span class="badge bg-primary rounded-pill" style="min-width: 28px;">1</span>
+                        <div>
+                            <strong>Upload do arquivo</strong>
+                            <div class="text-muted small">Selecione o arquivo Excel (.xlsx) na tela Importar. O sistema detecta o layout automaticamente.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-start gap-3">
+                        <span class="badge bg-primary rounded-pill" style="min-width: 28px;">2</span>
+                        <div>
+                            <strong>Pre-visualizacao</strong>
+                            <div class="text-muted small">Revise os lancamentos agrupados por Observacao e Data. Verifique os totais, contas invalidas e erros de validacao.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-start gap-3">
+                        <span class="badge bg-primary rounded-pill" style="min-width: 28px;">3</span>
+                        <div>
+                            <strong>Exclusao opcional</strong>
+                            <div class="text-muted small">Antes de confirmar, voce pode excluir grupos inteiros ou linhas individuais clicando no botao <i class="bi bi-trash text-danger"></i>.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-start gap-3">
+                        <span class="badge bg-primary rounded-pill" style="min-width: 28px;">4</span>
+                        <div>
+                            <strong>Confirmacao</strong>
+                            <div class="text-muted small">Clique em "Confirmar Importacao" para enviar os lancamentos ao SAP. A tela mostra o progresso em tempo real.</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-start gap-3">
+                        <span class="badge bg-primary rounded-pill" style="min-width: 28px;">5</span>
+                        <div>
+                            <strong>Resultado</strong>
+                            <div class="text-muted small">Apos o processamento, a tela mostra quais lancamentos foram importados com sucesso e quais falharam.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Erros -->
+        <div class="card mb-4" id="erros">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-2 text-danger"></i>Tratamento de Erros</h6>
+            </div>
+            <div class="card-body">
+                <p>Se o SAP rejeitar um lancamento:</p>
+                <ol>
+                    <li><strong>Verifique o erro</strong> — expanda o grupo com erro e leia a mensagem na coluna "Mensagem"</li>
+                    <li><strong>Corrija a conta</strong> — para linhas com erro, os campos de conta ficam editaveis. Altere e clique "Salvar contas alteradas"</li>
+                    <li><strong>Reprocesse</strong> — clique no botao amarelo "Reprocessar" para reenviar ao SAP apenas os lancamentos que falharam</li>
+                </ol>
+                <div class="alert alert-info py-2 small mb-0">
+                    <i class="bi bi-shield-check me-1"></i>
+                    <strong>Seguranca:</strong> Lancamentos ja importados com sucesso nunca sao duplicados no reprocessamento.
+                    O sistema usa uma chave unica (GroupKeyHash) para garantir a idempotencia.
+                </div>
+            </div>
+        </div>
+
+        <!-- Dicas -->
+        <div class="card mb-4" id="dicas">
+            <div class="card-header bg-white">
+                <h6 class="mb-0"><i class="bi bi-lightbulb me-2 text-warning"></i>Dicas</h6>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li><strong>Deduplicacao:</strong> o sistema impede que o mesmo arquivo seja importado duas vezes usando hash de conteudo</li>
+                    <li><strong>Historico:</strong> todos os lancamentos importados ficam visiveis em Historico com status e detalhes</li>
+                    <li><strong>Cancelamento:</strong> durante o processamento, voce pode cancelar clicando em "Cancelar processamento". Lancamentos ja enviados permanecem no SAP</li>
+                    <li><strong>Exclusao:</strong> importacoes com erro podem ser excluidas no Historico e reimportadas</li>
+                    <li><strong>Limites:</strong> Memo max 254 chars, Referencia max 200 chars, Historico Linha max 254 chars</li>
+                    <li><strong>Filial (BPLID):</strong> o sistema envia o BPLID em cada linha do lancamento SAP (nao no header). Mapeamento em Empresas &gt; Filiais</li>
+                    <li><strong>Sessao SAP:</strong> se a sessao expirar durante o processamento, o sistema faz re-login automaticamente</li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+</div>

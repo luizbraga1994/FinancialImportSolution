@@ -107,6 +107,11 @@ public class ImportController : Controller
         return View();
     }
 
+    public IActionResult Instructions()
+    {
+        return View();
+    }
+
     [HttpGet]
     public IActionResult DownloadTemplate(string? layout = "Layout2")
     {
