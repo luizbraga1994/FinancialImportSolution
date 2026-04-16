@@ -347,6 +347,64 @@ public class ImportController : Controller
         return Ok();
     }
 
+    /// <summary>
+    /// Real-time progress endpoint polled by the loading overlay during
+    /// the SAP dispatch. Returns how many groups have been sent, how many
+    /// failed, the file status, and (best-effort) the last group the
+    /// processor touched so the user sees movement and does not assume
+    /// the screen is frozen.
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> Progress(long id, CancellationToken cancellationToken)
+    {
+        var file = await _dbContext.ImportFiles
+            .AsNoTracking()
+            .Where(f => f.Id == id)
+            .Select(f => new { f.Id, f.Status, f.TotalLines, f.ValidLines, f.ImportedLines, f.LinesWithError, f.OriginalFileName, f.ProcessingStartedAtUtc })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (file == null)
+            return NotFound();
+
+        var dispatches = await _dbContext.JournalEntryDispatches
+            .AsNoTracking()
+            .Where(d => d.ImportFileId == id)
+            .Select(d => new { d.Status, d.GroupKey, d.LastAttemptAtUtc, d.LastError })
+            .ToListAsync(cancellationToken);
+
+        var dispatched = dispatches.Count(d => d.Status == JournalDispatchStatus.Dispatched);
+        var failed = dispatches.Count(d => d.Status == JournalDispatchStatus.Failed);
+        var inFlight = dispatches.Count(d => d.Status == JournalDispatchStatus.InFlight);
+        var totalGroups = dispatches.Count;
+
+        var latest = dispatches
+            .OrderByDescending(d => d.LastAttemptAtUtc)
+            .FirstOrDefault();
+
+        var elapsed = file.ProcessingStartedAtUtc.HasValue
+            ? (long)(DateTime.Now - file.ProcessingStartedAtUtc.Value).TotalSeconds
+            : 0;
+
+        return Json(new
+        {
+            status = file.Status.ToString(),
+            isFinished = file.Status != ImportStatus.Processing,
+            fileName = file.OriginalFileName,
+            totalLines = file.TotalLines,
+            validLines = file.ValidLines,
+            importedLines = file.ImportedLines,
+            linesWithError = file.LinesWithError,
+            totalGroups,
+            dispatched,
+            failed,
+            inFlight,
+            percent = totalGroups > 0 ? (int)Math.Round((dispatched + failed) * 100.0 / totalGroups) : 0,
+            currentGroup = latest?.GroupKey,
+            lastError = latest?.Status == JournalDispatchStatus.Failed ? latest.LastError : null,
+            elapsedSeconds = elapsed
+        });
+    }
+
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reprocess(long id, CancellationToken cancellationToken)

@@ -150,7 +150,11 @@
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var code in Model.InvalidAccountCodes.Take(50))
                 {
-                    <code class="bg-warning-subtle text-warning-emphasis border border-warning px-2 py-1 rounded small">@code</code>
+                    <button type="button" class="btn btn-sm bg-warning-subtle text-warning-emphasis border border-warning px-2 py-1 rounded small account-filter-chip"
+                            data-account="@code"
+                            title="Clique para filtrar grupos que usam essa conta">
+                        <code class="text-warning-emphasis">@code</code>
+                    </button>
                 }
             </div>
             @if (Model.InvalidAccountCodes.Count > 50)
@@ -177,6 +181,18 @@ else
     </div>
 }
 
+<div id="accountFilterBar" class="alert alert-primary d-none align-items-center justify-content-between py-2 mb-3" role="alert">
+    <div>
+        <i class="bi bi-funnel-fill me-2"></i>
+        <span>Filtrando grupos pela conta:</span>
+        <code id="accountFilterValue" class="bg-white text-primary-emphasis border px-2 py-1 rounded ms-1"></code>
+        <span class="text-muted small ms-2" id="accountFilterCount"></span>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary" id="accountFilterClear">
+        <i class="bi bi-x-lg me-1"></i>Limpar filtro
+    </button>
+</div>
+
 <div class="card mb-4">
     <div class="card-header bg-white d-flex align-items-center justify-content-between">
         <h6 class="fw-bold mb-0">
@@ -201,7 +217,14 @@ else
                     var group = Model.Groups[i];
                     var collapseId = $"collapse-{i}";
                     var headingId = $"heading-{i}";
-                    <div class="accordion-item @(group.IsExcluded ? "opacity-50" : "")">
+                    @{
+                        var groupAccounts = string.Join(" ",
+                            group.Lines.SelectMany(l => new[] { l.AccountCode, l.ContraAccountCode })
+                                .Where(c => !string.IsNullOrWhiteSpace(c))
+                                .Distinct(StringComparer.OrdinalIgnoreCase));
+                    }
+                    <div class="accordion-item group-card @(group.IsExcluded ? "opacity-50" : "")"
+                         data-accounts="@groupAccounts">
                         <h2 class="accordion-header d-flex align-items-center" id="@headingId">
                             <button class="accordion-button collapsed flex-grow-1" type="button"
                                     data-bs-toggle="collapse" data-bs-target="#@collapseId"
@@ -332,7 +355,10 @@ else
     </a>
     @if (canReprocess)
     {
-        <form asp-action="Reprocess" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Reprocessando..." data-cancel-url="/Import/Cancel/@Model.ImportFileId">
+        <form asp-action="Reprocess" asp-route-id="@Model.ImportFileId" method="post" class="d-inline"
+              data-loading data-loading-message="Reprocessando ao SAP..."
+              data-cancel-url="/Import/Cancel/@Model.ImportFileId"
+              data-progress-url="/Import/Progress/@Model.ImportFileId">
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-warning px-4"
                     onclick="return confirm('Reprocessar linhas com erro? O sistema vai tentar reenviar ao SAP apenas os lancamentos que falharam.');">
@@ -342,7 +368,10 @@ else
     }
     @if (canConfirm)
     {
-        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline" data-loading data-loading-message="Enviando ao SAP..." data-cancel-url="/Import/Cancel/@Model.ImportFileId">
+        <form asp-action="Confirm" asp-route-id="@Model.ImportFileId" method="post" class="d-inline"
+              data-loading data-loading-message="Enviando ao SAP..."
+              data-cancel-url="/Import/Cancel/@Model.ImportFileId"
+              data-progress-url="/Import/Progress/@Model.ImportFileId">
             @Html.AntiForgeryToken()
             <button type="submit" class="btn btn-primary px-4"
                     onclick="return confirm('Confirmar envio de @Model.ValidLines linha(s) ao SAP em @Model.Groups.Count lancamento(s)?');">
@@ -358,3 +387,62 @@ else
         </button>
     }
 </div>
+
+@section Scripts {
+    <script>
+        // Client-side filter: clicking a "conta nao encontrada" badge shows
+        // ONLY the groups that reference that account (either ContaContabil
+        // or Contrapartida). A filter bar at the top lets the user clear it.
+        (function () {
+            var chips = document.querySelectorAll('.account-filter-chip');
+            var bar = document.getElementById('accountFilterBar');
+            var valueLabel = document.getElementById('accountFilterValue');
+            var countLabel = document.getElementById('accountFilterCount');
+            var clearBtn = document.getElementById('accountFilterClear');
+            var cards = document.querySelectorAll('.group-card');
+
+            function applyFilter(account) {
+                if (!account) {
+                    cards.forEach(function (c) { c.style.display = ''; });
+                    bar.classList.add('d-none');
+                    bar.classList.remove('d-flex');
+                    chips.forEach(function (c) { c.classList.remove('active', 'btn-warning'); });
+                    return;
+                }
+
+                var visible = 0;
+                var needle = account.toLowerCase();
+                cards.forEach(function (c) {
+                    var accounts = (c.getAttribute('data-accounts') || '').toLowerCase().split(/\s+/);
+                    if (accounts.indexOf(needle) !== -1) {
+                        c.style.display = '';
+                        visible++;
+                    } else {
+                        c.style.display = 'none';
+                    }
+                });
+
+                valueLabel.textContent = account;
+                countLabel.textContent = '(' + visible + ' grupo' + (visible === 1 ? '' : 's') + ' exibido' + (visible === 1 ? '' : 's') + ')';
+                bar.classList.remove('d-none');
+                bar.classList.add('d-flex');
+                chips.forEach(function (c) {
+                    if (c.getAttribute('data-account') === account) {
+                        c.classList.add('active', 'btn-warning');
+                    } else {
+                        c.classList.remove('active', 'btn-warning');
+                    }
+                });
+                bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            chips.forEach(function (chip) {
+                chip.addEventListener('click', function () {
+                    applyFilter(chip.getAttribute('data-account'));
+                });
+            });
+
+            if (clearBtn) clearBtn.addEventListener('click', function () { applyFilter(null); });
+        })();
+    </script>
+}

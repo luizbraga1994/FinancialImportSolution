@@ -1,5 +1,7 @@
 ﻿// Loading overlay functions
-function showLoading(message = 'Processando...', cancelUrl = null) {
+var __progressPoller = null;
+
+function showLoading(message = 'Processando...', cancelUrl = null, progressUrl = null) {
     let overlay = document.getElementById('loadingOverlay');
     if (!overlay) {
         overlay = document.createElement('div');
@@ -14,15 +16,92 @@ function showLoading(message = 'Processando...', cancelUrl = null) {
             <i class="bi bi-x-circle me-1"></i> Cancelar processamento
         </button>`;
     }
+
+    var progressHtml = '';
+    if (progressUrl) {
+        progressHtml = `
+            <div class="progress mt-3" style="width: 280px; height: 6px;">
+                <div id="loadingProgressBar" class="progress-bar bg-primary" role="progressbar" style="width: 0%"></div>
+            </div>
+            <div id="loadingProgressText" class="loading-submessage mt-2 small text-muted" style="min-height: 40px;">
+                Iniciando envio ao SAP...
+            </div>`;
+    }
+
     overlay.innerHTML = `
         <div class="loading-content">
             <div class="loading-spinner"></div>
             <div class="loading-message">${message}</div>
+            ${progressHtml}
             ${cancelHtml}
         </div>
     `;
     overlay.classList.remove('hidden');
     overlay.classList.add('active');
+
+    // Clear any previous poller to avoid leaks when reusing the overlay
+    if (__progressPoller) { clearInterval(__progressPoller); __progressPoller = null; }
+
+    if (progressUrl) {
+        __progressPoller = setInterval(function () { pollProgress(progressUrl); }, 1500);
+        pollProgress(progressUrl); // initial tick so the user sees data fast
+    }
+}
+
+function pollProgress(url) {
+    fetch(url, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (!data) return;
+
+            var bar = document.getElementById('loadingProgressBar');
+            var text = document.getElementById('loadingProgressText');
+            if (bar) bar.style.width = (data.percent || 0) + '%';
+
+            if (text) {
+                var parts = [];
+                parts.push('<strong>' + (data.percent || 0) + '%</strong>');
+                if (typeof data.totalGroups === 'number' && data.totalGroups > 0) {
+                    parts.push((data.dispatched || 0) + ' de ' + data.totalGroups + ' lancamento(s) enviado(s)');
+                }
+                if (data.failed > 0) {
+                    parts.push('<span class="text-danger">' + data.failed + ' com erro</span>');
+                }
+                var line1 = parts.join(' &middot; ');
+
+                var line2 = '';
+                if (data.currentGroup) {
+                    line2 = 'Processando: <code>' + escapeHtml(data.currentGroup) + '</code>';
+                }
+
+                var line3 = '';
+                if (typeof data.elapsedSeconds === 'number' && data.elapsedSeconds > 0) {
+                    line3 = 'Tempo decorrido: ' + formatDuration(data.elapsedSeconds);
+                }
+
+                text.innerHTML = [line1, line2, line3].filter(Boolean).join('<br>');
+            }
+
+            if (data.isFinished) {
+                if (__progressPoller) { clearInterval(__progressPoller); __progressPoller = null; }
+                // Reload the page to show the final status
+                setTimeout(function () { window.location.reload(); }, 600);
+            }
+        })
+        .catch(function () { /* polling errors are non-fatal */ });
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+
+function formatDuration(sec) {
+    if (sec < 60) return sec + 's';
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + 'min ' + s + 's';
 }
 
 function cancelProcessing(url) {
@@ -56,7 +135,8 @@ document.addEventListener('DOMContentLoaded', function () {
         form.addEventListener('submit', function () {
             const message = form.getAttribute('data-loading-message') || 'Enviando...';
             const cancelUrl = form.getAttribute('data-cancel-url') || null;
-            showLoading(message, cancelUrl);
+            const progressUrl = form.getAttribute('data-progress-url') || null;
+            showLoading(message, cancelUrl, progressUrl);
         });
     });
 
