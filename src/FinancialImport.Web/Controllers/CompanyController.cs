@@ -73,8 +73,8 @@ public class CompanyController : Controller
             }, CancellationToken.None);
 
             TempData["Error"] = "Tempo esgotado ao conectar no SAP. Tente novamente.";
-            var companies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
-            return View(nameof(Index), companies);
+            var timeoutCompanies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
+            return View(nameof(Index), timeoutCompanies);
         }
 
         if (!result.Success)
@@ -90,8 +90,8 @@ public class CompanyController : Controller
             }, CancellationToken.None);
 
             TempData["Error"] = result.ErrorMessage ?? "Falha ao conectar na empresa selecionada.";
-            var companies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
-            return View(nameof(Index), companies);
+            var failureCompanies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
+            return View(nameof(Index), failureCompanies);
         }
 
         // Re-issue the authentication cookie so the company_db / company_name

@@ -217,12 +217,10 @@ else
                     var group = Model.Groups[i];
                     var collapseId = $"collapse-{i}";
                     var headingId = $"heading-{i}";
-                    @{
-                        var groupAccounts = string.Join(" ",
-                            group.Lines.SelectMany(l => new[] { l.AccountCode, l.ContraAccountCode })
-                                .Where(c => !string.IsNullOrWhiteSpace(c))
-                                .Distinct(StringComparer.OrdinalIgnoreCase));
-                    }
+                    var groupAccounts = string.Join(" ",
+                        group.Lines.SelectMany(l => new[] { l.AccountCode, l.ContraAccountCode })
+                            .Where(c => !string.IsNullOrWhiteSpace(c))
+                            .Distinct(StringComparer.OrdinalIgnoreCase));
                     <div class="accordion-item group-card @(group.IsExcluded ? "opacity-50" : "")"
                          data-accounts="@groupAccounts">
                         <h2 class="accordion-header d-flex align-items-center" id="@headingId">
