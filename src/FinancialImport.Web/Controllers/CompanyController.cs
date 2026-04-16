@@ -1,7 +1,11 @@
+using System.Security.Claims;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Settings;
 using FinancialImport.Shared.Logging;
+using FinancialImport.Web.Context;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -90,13 +94,32 @@ public class CompanyController : Controller
             return View(nameof(Index), companies);
         }
 
+        // Re-issue the authentication cookie so the company_db / company_name
+        // claims reflect the new selection. Without this the UI keeps showing
+        // the previous company in the header and Historico/Import would still
+        // be scoped to the old company (via the claim lookup in controllers).
+        var companies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
+        var selected = companies.FirstOrDefault(c =>
+            c.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase));
+        var newCompanyName = selected?.CompanyName ?? companyDb;
+
+        var existingClaims = User.Claims
+            .Where(c => c.Type != ClaimConstants.CompanyDb && c.Type != ClaimConstants.CompanyName)
+            .ToList();
+        existingClaims.Add(new Claim(ClaimConstants.CompanyDb, companyDb));
+        existingClaims.Add(new Claim(ClaimConstants.CompanyName, newCompanyName));
+
+        var identity = new ClaimsIdentity(existingClaims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
         await _audit.WriteAsync(new AuditLogEntry
         {
             Level = LogSeverities.Info,
             Category = LogCategories.Audit,
             Source = nameof(CompanyController),
             Operation = "SelecionarEmpresa",
-            Message = $"Empresa '{companyDb}' selecionada por '{userLogin}'. Sessao SAP estabelecida.",
+            Message = $"Empresa '{companyDb}' ({newCompanyName}) selecionada por '{userLogin}'. Sessao SAP estabelecida.",
             CompanyDb = companyDb
         }, CancellationToken.None);
 
