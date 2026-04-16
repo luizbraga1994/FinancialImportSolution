@@ -2,6 +2,7 @@ using FinancialImport.Application.Sap;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.Security;
+using FinancialImport.Shared.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -47,17 +48,20 @@ public class UserController : Controller
     private readonly AppDbContext _dbContext;
     private readonly ISapCompanyDiscoveryService _companyDiscovery;
     private readonly PasswordHasher _passwordHasher;
+    private readonly IAuditLogger _audit;
     private readonly ILogger<UserController> _logger;
 
     public UserController(
         AppDbContext dbContext,
         ISapCompanyDiscoveryService companyDiscovery,
         PasswordHasher passwordHasher,
+        IAuditLogger audit,
         ILogger<UserController> logger)
     {
         _dbContext = dbContext;
         _companyDiscovery = companyDiscovery;
         _passwordHasher = passwordHasher;
+        _audit = audit;
         _logger = logger;
     }
 
@@ -171,6 +175,19 @@ public class UserController : Controller
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Usuario '{Login}' criado por '{Admin}'.", user.Login, user.CreatedBy);
+
+        var adminLogin = User.FindFirst("login")?.Value ?? "system";
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(UserController),
+            Operation = "CriarUsuario",
+            Message = $"Administrador '{adminLogin}' criou o usuario '{user.Login}' (ID {user.Id}).",
+            Details = $"Nome: {user.Name}, Email: {user.Email}, Ativo: {user.IsActive}, Admin Global: {user.IsGlobalAdmin}",
+            UserId = user.Id
+        }, cancellationToken);
+
         TempData["Success"] = $"Usuario '{user.Name}' criado com sucesso.";
         return RedirectToAction(nameof(Index));
     }
@@ -303,8 +320,20 @@ public class UserController : Controller
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Usuario '{Login}' atualizado por '{Admin}'.", user.Login,
-            User.FindFirst("login")?.Value ?? "system");
+        var adminLoginEdit = User.FindFirst("login")?.Value ?? "system";
+        _logger.LogInformation("Usuario '{Login}' atualizado por '{Admin}'.", user.Login, adminLoginEdit);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(UserController),
+            Operation = "EditarUsuario",
+            Message = $"Administrador '{adminLoginEdit}' editou o usuario '{user.Login}' (ID {user.Id}).",
+            Details = $"Nome: {user.Name}, Email: {user.Email}, Ativo: {user.IsActive}, Admin Global: {user.IsGlobalAdmin}",
+            UserId = user.Id
+        }, cancellationToken);
+
         TempData["Success"] = $"Usuario '{user.Name}' atualizado com sucesso.";
         return RedirectToAction(nameof(Index));
     }

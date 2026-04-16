@@ -2,6 +2,7 @@ using FinancialImport.Application.Abstractions;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Shared.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,12 +14,14 @@ public class HistoryController : Controller
 {
     private readonly AppDbContext _dbContext;
     private readonly ICompanyContext _companyContext;
+    private readonly IAuditLogger _audit;
     private readonly ILogger<HistoryController> _logger;
 
-    public HistoryController(AppDbContext dbContext, ICompanyContext companyContext, ILogger<HistoryController> logger)
+    public HistoryController(AppDbContext dbContext, ICompanyContext companyContext, IAuditLogger audit, ILogger<HistoryController> logger)
     {
         _dbContext = dbContext;
         _companyContext = companyContext;
+        _audit = audit;
         _logger = logger;
     }
 
@@ -88,9 +91,23 @@ public class HistoryController : Controller
         _dbContext.ImportFiles.Remove(importFile);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var userLogin = User.FindFirst("login")?.Value ?? "desconhecido";
         _logger.LogInformation(
             "Importacao {Id} ({FileName}) excluida por '{User}' na company '{CompanyDb}'.",
-            id, importFile.OriginalFileName, User.FindFirst("login")?.Value, companyDb);
+            id, importFile.OriginalFileName, userLogin, companyDb);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(HistoryController),
+            Operation = "ExcluirImportacao",
+            Message = $"Importacao '{importFile.OriginalFileName}' (ID {id}) excluida por '{userLogin}'. Status anterior: {importFile.Status}. Linhas: {importFile.TotalLines}.",
+            Details = $"Arquivo: {importFile.OriginalFileName}\nStatus: {importFile.Status}\nTotal linhas: {importFile.TotalLines}\nLinhas importadas: {importFile.ImportedLines}\nLinhas com erro: {importFile.LinesWithError}\nEmpresa: {companyDb}\nUsuario: {userLogin}",
+            ImportFileId = id,
+            CompanyDb = companyDb,
+            StatusBefore = importFile.Status.ToString()
+        }, cancellationToken);
 
         TempData["Success"] = $"Importacao '{importFile.OriginalFileName}' excluida com sucesso.";
         return RedirectToAction(nameof(Index));

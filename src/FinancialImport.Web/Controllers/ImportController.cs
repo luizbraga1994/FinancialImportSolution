@@ -6,6 +6,7 @@ using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.Imports;
 using FinancialImport.Shared.Imports;
+using FinancialImport.Shared.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -69,6 +70,7 @@ public class ImportController : Controller
     private readonly ImportProcessingOptions _processingOptions;
     private readonly ISapSessionStore _sapSessionStore;
     private readonly ISapChartOfAccountsService _chartOfAccounts;
+    private readonly IAuditLogger _audit;
     private readonly ILogger<ImportController> _logger;
 
     public ImportController(
@@ -79,6 +81,7 @@ public class ImportController : Controller
         IOptions<ImportProcessingOptions> processingOptions,
         ISapSessionStore sapSessionStore,
         ISapChartOfAccountsService chartOfAccounts,
+        IAuditLogger audit,
         ILogger<ImportController> logger)
     {
         _importService = importService;
@@ -88,8 +91,12 @@ public class ImportController : Controller
         _processingOptions = processingOptions.Value;
         _sapSessionStore = sapSessionStore;
         _chartOfAccounts = chartOfAccounts;
+        _audit = audit;
         _logger = logger;
     }
+
+    private string CurrentUser => User.FindFirst("login")?.Value ?? "desconhecido";
+    private string CurrentCompany => _companyContext.CompanyDb ?? "-";
 
     public IActionResult Index()
     {
@@ -325,6 +332,18 @@ public class ImportController : Controller
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Importacao {Id} cancelada pelo usuario.", id);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(ImportController),
+            Operation = "CancelarProcessamento",
+            Message = $"Processamento da importacao {id} cancelado por '{CurrentUser}'.",
+            ImportFileId = id,
+            CompanyDb = CurrentCompany
+        }, cancellationToken);
+
         return Ok();
     }
 
@@ -405,7 +424,20 @@ public class ImportController : Controller
 
         _logger.LogInformation(
             "Grupo '{GroupKey}' ({Count} linha(s)) excluido do arquivo {FileId} por '{User}'.",
-            reference, affected.Count, id, User.FindFirst("login")?.Value);
+            reference, affected.Count, id, CurrentUser);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(ImportController),
+            Operation = "ExcluirGrupo",
+            Message = $"Grupo '{reference}' ({affected.Count} linha(s)) excluido do arquivo {id} por '{CurrentUser}'.",
+            Details = $"Referencia: {reference}\nLinhas excluidas: {affected.Count}\nContas: {string.Join(", ", affected.Select(l => l.AccountCode).Distinct())}\nEmpresa: {CurrentCompany}",
+            ImportFileId = id,
+            CompanyDb = CurrentCompany,
+            BusinessKey = groupKeyHash
+        }, cancellationToken);
 
         TempData["Success"] = $"Grupo '{reference}' excluido ({affected.Count} linha(s)). Essas linhas nao serao enviadas ao SAP.";
         return RedirectToAction(nameof(Preview), new { id });
@@ -459,7 +491,19 @@ public class ImportController : Controller
 
         _logger.LogInformation(
             "Linha {LineId} (grupo {GroupKey}) excluida do arquivo {FileId} por '{User}'.",
-            lineId, line.Reference, id, User.FindFirst("login")?.Value);
+            lineId, line.Reference, id, CurrentUser);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(ImportController),
+            Operation = "ExcluirLinha",
+            Message = $"Linha {lineId} excluida do grupo '{line.Reference}' (arquivo {id}) por '{CurrentUser}'. Conta: {line.AccountCode}, D:{line.DebitAmount ?? 0:N2} / C:{line.CreditAmount ?? 0:N2}.",
+            ImportFileId = id,
+            ImportLineId = lineId,
+            CompanyDb = CurrentCompany
+        }, cancellationToken);
 
         TempData["Success"] = $"Linha excluida com sucesso. Atencao: se o grupo '{line.Reference}' ficar desbalanceado, o SAP pode rejeitar o lancamento inteiro.";
         return RedirectToAction(nameof(Preview), new { id });

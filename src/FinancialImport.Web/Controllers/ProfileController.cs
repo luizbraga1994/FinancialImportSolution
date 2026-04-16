@@ -1,5 +1,6 @@
 using FinancialImport.Domain.Entities;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Shared.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -30,11 +31,13 @@ public class PermissionCheckItem
 public class ProfileController : Controller
 {
     private readonly AppDbContext _dbContext;
+    private readonly IAuditLogger _audit;
     private readonly ILogger<ProfileController> _logger;
 
-    public ProfileController(AppDbContext dbContext, ILogger<ProfileController> logger)
+    public ProfileController(AppDbContext dbContext, IAuditLogger audit, ILogger<ProfileController> logger)
     {
         _dbContext = dbContext;
+        _audit = audit;
         _logger = logger;
     }
 
@@ -118,8 +121,19 @@ public class ProfileController : Controller
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Perfil '{Profile}' criado por '{Admin}'.", profile.Name,
-            User.FindFirst("login")?.Value ?? "system");
+        var adminLogin = User.FindFirst("login")?.Value ?? "system";
+        _logger.LogInformation("Perfil '{Profile}' criado por '{Admin}'.", profile.Name, adminLogin);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(ProfileController),
+            Operation = "CriarPerfil",
+            Message = $"Perfil '{profile.Name}' (ID {profile.Id}) criado por '{adminLogin}'.",
+            Details = $"Usuario: {adminLogin}\nPerfil: {profile.Name}\nID: {profile.Id}\nDescricao: {profile.Description ?? "(nenhuma)"}\nAtivo: {profile.IsActive}\nPermissoes: {selectedPermissionIds.Count}"
+        }, cancellationToken);
+
         TempData["Success"] = $"Perfil '{profile.Name}' criado com sucesso.";
         return RedirectToAction(nameof(Index));
     }
@@ -206,8 +220,19 @@ public class ProfileController : Controller
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Perfil '{Profile}' atualizado por '{Admin}'.", profile.Name,
-            User.FindFirst("login")?.Value ?? "system");
+        var adminLogin = User.FindFirst("login")?.Value ?? "system";
+        _logger.LogInformation("Perfil '{Profile}' atualizado por '{Admin}'.", profile.Name, adminLogin);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(ProfileController),
+            Operation = "EditarPerfil",
+            Message = $"Perfil '{profile.Name}' (ID {profile.Id}) editado por '{adminLogin}'.",
+            Details = $"Usuario: {adminLogin}\nPerfil: {profile.Name}\nID: {profile.Id}\nDescricao: {profile.Description ?? "(nenhuma)"}\nAtivo: {profile.IsActive}\nPermissoes: {selectedPermissionIds.Count}"
+        }, cancellationToken);
+
         TempData["Success"] = $"Perfil '{profile.Name}' atualizado com sucesso.";
         return RedirectToAction(nameof(Index));
     }
