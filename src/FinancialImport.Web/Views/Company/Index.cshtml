@@ -35,11 +35,13 @@
 }
 else
 {
-    <div class="row g-3">
+    <div class="row g-3" id="companyList">
         @foreach (var company in Model.Where(c => c.IsActive))
         {
             <div class="col-md-6 col-lg-4 col-xl-3">
-                <form asp-controller="Company" asp-action="Select" method="post">
+                <form asp-controller="Company" asp-action="Select" method="post"
+                      data-loading data-loading-message="Conectando ao SAP em @company.CompanyName..."
+                      class="company-select-form">
                     @Html.AntiForgeryToken()
                     <input type="hidden" name="companyDb" value="@company.CompanyDb" />
                     <button type="submit" class="company-card card h-100 w-100 border-0 text-start">
@@ -60,6 +62,27 @@ else
             </div>
         }
     </div>
+
+    @section Scripts {
+        <script>
+            // Prevent double-submit: once the user clicks a company, disable ALL
+            // company cards so they cannot click again while the SAP login is
+            // in flight (takes ~6-10s). Multiple clicks were cancelling the
+            // previous request and causing 500 errors.
+            document.addEventListener('DOMContentLoaded', function () {
+                var forms = document.querySelectorAll('.company-select-form');
+                forms.forEach(function (form) {
+                    form.addEventListener('submit', function () {
+                        document.querySelectorAll('.company-card').forEach(function (btn) {
+                            btn.disabled = true;
+                            btn.style.cursor = 'not-allowed';
+                            btn.style.opacity = '0.6';
+                        });
+                    });
+                });
+            });
+        </script>
+    }
 }
 
 @if (Model != null && Model.Any(c => !c.IsActive))

@@ -1,3 +1,4 @@
+using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Settings;
 using FinancialImport.Shared.Logging;
@@ -38,11 +39,39 @@ public class CompanyController : Controller
     {
         var userLogin = User.FindFirst("login")?.Value ?? "desconhecido";
 
-        var result = await _sessionService.SignInCompanyAsync(
-            companyDb,
-            _settings.Get("Sap:UserName") ?? "",
-            _settings.Get("Sap:Password") ?? "",
-            cancellationToken);
+        // The SAP Service Layer login can take 5-10s. We deliberately do NOT pass
+        // the request cancellation token to it: if the user clicks the card again
+        // (impatience) or navigates away mid-login, a cancelled login leaves the
+        // session store in a half-dirty state AND throws a generic 500 that hides
+        // the real cause. A fresh CancellationToken bounded by a 60s timeout gives
+        // SAP plenty of headroom while still preventing runaway requests.
+        using var sapTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+
+        SapLoginResult result;
+        try
+        {
+            result = await _sessionService.SignInCompanyAsync(
+                companyDb,
+                _settings.Get("Sap:UserName") ?? "",
+                _settings.Get("Sap:Password") ?? "",
+                sapTimeout.Token);
+        }
+        catch (OperationCanceledException) when (sapTimeout.IsCancellationRequested)
+        {
+            await _audit.WriteAsync(new AuditLogEntry
+            {
+                Level = LogSeverities.Error,
+                Category = LogCategories.Audit,
+                Source = nameof(CompanyController),
+                Operation = "SelecionarEmpresa",
+                Message = $"Timeout ao selecionar empresa '{companyDb}' por '{userLogin}' (60s). SAP nao respondeu a tempo.",
+                CompanyDb = companyDb
+            }, CancellationToken.None);
+
+            TempData["Error"] = "Tempo esgotado ao conectar no SAP. Tente novamente.";
+            var companies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
+            return View(nameof(Index), companies);
+        }
 
         if (!result.Success)
         {
@@ -54,10 +83,10 @@ public class CompanyController : Controller
                 Operation = "SelecionarEmpresa",
                 Message = $"Falha ao selecionar empresa '{companyDb}' por '{userLogin}': {result.ErrorMessage}",
                 CompanyDb = companyDb
-            }, cancellationToken);
+            }, CancellationToken.None);
 
             TempData["Error"] = result.ErrorMessage ?? "Falha ao conectar na empresa selecionada.";
-            var companies = await _discoveryService.GetAvailableCompaniesAsync(cancellationToken);
+            var companies = await _discoveryService.GetAvailableCompaniesAsync(CancellationToken.None);
             return View(nameof(Index), companies);
         }
 
@@ -69,7 +98,7 @@ public class CompanyController : Controller
             Operation = "SelecionarEmpresa",
             Message = $"Empresa '{companyDb}' selecionada por '{userLogin}'. Sessao SAP estabelecida.",
             CompanyDb = companyDb
-        }, cancellationToken);
+        }, CancellationToken.None);
 
         return RedirectToAction("Index", "Home");
     }
