@@ -286,9 +286,19 @@ public class ImportController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Confirm(long id, CancellationToken cancellationToken)
     {
+        // The dispatch runs synchronously on the HTTP thread and can take
+        // several minutes for large files. If we pass the request cancellation
+        // token, any browser hiccup / tab close / NIC blip kills the processor
+        // mid-batch with a half-dispatched journal. Use a dedicated 15-minute
+        // token: it insulates the long-running work and still prevents runaway
+        // requests. The user can still cancel via the Cancel button, which
+        // sets ImportStatus.Cancelled and the processor checks that between
+        // groups.
+        using var runToken = new CancellationTokenSource(TimeSpan.FromMinutes(15));
+
         try
         {
-            var result = await _importService.ConfirmAsync(id, cancellationToken);
+            var result = await _importService.ConfirmAsync(id, runToken.Token);
 
             if (result.IsAsync)
             {
@@ -311,6 +321,12 @@ public class ImportController : Controller
         {
             _logger.LogWarning(ex, "Failed to confirm import {FileId}.", id);
             TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+        catch (OperationCanceledException) when (runToken.IsCancellationRequested)
+        {
+            _logger.LogError("Confirm de importacao {FileId} excedeu 15 minutos e foi abortado.", id);
+            TempData["Error"] = "Processamento excedeu 15 minutos e foi abortado. Use Reprocessar para continuar de onde parou.";
             return RedirectToAction(nameof(Preview), new { id });
         }
     }
@@ -409,9 +425,12 @@ public class ImportController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reprocess(long id, CancellationToken cancellationToken)
     {
+        // See Confirm for why we isolate the processor from the request token.
+        using var runToken = new CancellationTokenSource(TimeSpan.FromMinutes(15));
+
         try
         {
-            var result = await _importService.ReprocessAsync(id, cancellationToken);
+            var result = await _importService.ReprocessAsync(id, runToken.Token);
             TempData["Success"] = result.IsAsync
                 ? "Reprocessamento enviado para fila."
                 : "Reprocessamento concluido.";
@@ -420,6 +439,12 @@ public class ImportController : Controller
         catch (InvalidOperationException ex)
         {
             TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+        catch (OperationCanceledException) when (runToken.IsCancellationRequested)
+        {
+            _logger.LogError("Reprocess de importacao {FileId} excedeu 15 minutos e foi abortado.", id);
+            TempData["Error"] = "Reprocessamento excedeu 15 minutos e foi abortado. Clique em Reprocessar novamente para continuar.";
             return RedirectToAction(nameof(Preview), new { id });
         }
     }
