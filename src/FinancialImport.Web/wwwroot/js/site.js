@@ -76,6 +76,13 @@ function pollProgress(url) {
                 }
                 var line1 = parts.join(' &middot; ');
 
+                var lineTotal = '';
+                if (typeof data.totalLines === 'number' && data.totalLines > 0) {
+                    var linesProcessed = (data.importedLines || 0) + (data.linesWithError || 0);
+                    var linePercent = Math.round(linesProcessed * 100 / data.totalLines);
+                    lineTotal = 'Linhas: ' + linesProcessed + ' de ' + data.validLines + ' (' + linePercent + '%)';
+                }
+
                 var line2 = '';
                 if (data.currentGroup) {
                     line2 = 'Processando: <code>' + escapeHtml(data.currentGroup) + '</code>';
@@ -86,7 +93,7 @@ function pollProgress(url) {
                     line3 = 'Tempo decorrido: ' + formatDuration(data.elapsedSeconds);
                 }
 
-                text.innerHTML = [line1, line2, line3].filter(Boolean).join('<br>');
+                text.innerHTML = [line1, lineTotal, line2, line3].filter(Boolean).join('<br>');
             }
 
             // Remember if we ever saw the server in Processing state.
