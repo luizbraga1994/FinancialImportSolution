@@ -247,10 +247,25 @@ public class ProfileController : Controller
         var profile = await _dbContext.Profiles.FindAsync(new object[] { id }, cancellationToken);
         if (profile == null) return NotFound();
 
+        var previousStatus = profile.IsActive;
         profile.IsActive = !profile.IsActive;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var adminLogin = User.FindFirst("login")?.Value ?? "system";
         var status = profile.IsActive ? "ativado" : "desativado";
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(ProfileController),
+            Operation = "AlterarStatusPerfil",
+            Message = $"Perfil '{profile.Name}' (ID {profile.Id}) {status} por '{adminLogin}'.",
+            Details = $"Usuario: {adminLogin}\nPerfil: {profile.Name}\nID: {profile.Id}\nStatus anterior: {(previousStatus ? "Ativo" : "Inativo")}\nStatus atual: {(profile.IsActive ? "Ativo" : "Inativo")}",
+            StatusBefore = previousStatus ? "Ativo" : "Inativo",
+            StatusAfter = profile.IsActive ? "Ativo" : "Inativo"
+        }, cancellationToken);
+
         TempData["Success"] = $"Perfil '{profile.Name}' {status}.";
         return RedirectToAction(nameof(Index));
     }

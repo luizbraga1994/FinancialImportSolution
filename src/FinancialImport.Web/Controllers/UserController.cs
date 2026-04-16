@@ -352,6 +352,19 @@ public class UserController : Controller
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var status = user.IsActive ? "ativado" : "desativado";
+        var adminLoginToggle = User.FindFirst("login")?.Value ?? "system";
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(UserController),
+            Operation = "AlterarStatusUsuario",
+            Message = $"Administrador '{adminLoginToggle}' {status} o usuario '{user.Login}' (ID {user.Id}).",
+            Details = $"Nome: {user.Name}, Novo status ativo: {user.IsActive}",
+            UserId = user.Id,
+            StatusAfter = user.IsActive ? "Ativo" : "Inativo"
+        }, cancellationToken);
+
         TempData["Success"] = $"Usuario '{user.Name}' {status}.";
         return RedirectToAction(nameof(Index));
     }
@@ -376,6 +389,18 @@ public class UserController : Controller
         user.PasswordHash = hash;
         user.PasswordSalt = salt;
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        var adminLoginReset = User.FindFirst("login")?.Value ?? "system";
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Warning,
+            Category = LogCategories.Audit,
+            Source = nameof(UserController),
+            Operation = "ResetarSenha",
+            Message = $"Administrador '{adminLoginReset}' redefiniu a senha do usuario '{user.Login}' (ID {user.Id}).",
+            Details = $"Nome: {user.Name}, Login: {user.Login}",
+            UserId = user.Id
+        }, cancellationToken);
 
         TempData["Success"] = $"Senha do usuario '{user.Name}' redefinida com sucesso.";
         return RedirectToAction(nameof(Edit), new { id });
