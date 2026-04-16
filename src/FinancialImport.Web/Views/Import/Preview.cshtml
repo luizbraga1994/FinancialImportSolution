@@ -72,15 +72,42 @@
                     <span class="badge bg-secondary-subtle text-secondary-emphasis">
                         Total: @Model.TotalLines
                     </span>
-                    <span class="badge bg-success-subtle text-success-emphasis">
-                        Validas: @Model.ValidLines
-                    </span>
-                    <span class="badge bg-danger-subtle text-danger-emphasis">
-                        Invalidas: @Model.InvalidLines
-                    </span>
-                    <span class="badge bg-warning-subtle text-warning-emphasis">
-                        Duplicadas: @Model.DuplicatedLines
-                    </span>
+                    @if (Model.ImportedLines > 0)
+                    {
+                        <span class="badge bg-primary-subtle text-primary-emphasis">
+                            <i class="bi bi-check-circle me-1"></i>Importadas: @Model.ImportedLines
+                        </span>
+                    }
+                    @if (Model.SapErrorLines > 0)
+                    {
+                        <span class="badge bg-danger-subtle text-danger-emphasis">
+                            <i class="bi bi-exclamation-circle me-1"></i>Erro SAP: @Model.SapErrorLines
+                        </span>
+                    }
+                    @if (Model.ValidLines > 0)
+                    {
+                        <span class="badge bg-success-subtle text-success-emphasis">
+                            Pendentes: @Model.ValidLines
+                        </span>
+                    }
+                    @if (Model.InvalidLines > 0)
+                    {
+                        <span class="badge bg-danger-subtle text-danger-emphasis">
+                            Invalidas: @Model.InvalidLines
+                        </span>
+                    }
+                    @if (Model.DuplicatedLines > 0)
+                    {
+                        <span class="badge bg-warning-subtle text-warning-emphasis">
+                            Duplicadas: @Model.DuplicatedLines
+                        </span>
+                    }
+                    @if (Model.ExcludedLines > 0)
+                    {
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis">
+                            Excluidas: @Model.ExcludedLines
+                        </span>
+                    }
                 </div>
                 <div class="text-muted small mt-2">
                     Agrupadas em <strong>@Model.Groups.Count</strong> lancamento(s) SAP

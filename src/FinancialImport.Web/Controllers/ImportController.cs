@@ -23,6 +23,9 @@ public class ImportPreviewViewModel
     public int ValidLines { get; set; }
     public int InvalidLines { get; set; }
     public int DuplicatedLines { get; set; }
+    public int ImportedLines { get; set; }
+    public int SapErrorLines { get; set; }
+    public int ExcludedLines { get; set; }
     public IReadOnlyCollection<string> Errors { get; set; } = Array.Empty<string>();
     public List<ImportPreviewGroup> Groups { get; set; } = new();
     public ImportStatus Status { get; set; }
@@ -269,15 +272,34 @@ public class ImportController : Controller
             _logger.LogWarning(ex, "Falha ao validar contas contra o plano de contas do SAP no preview (nao-critico).");
         }
 
+        // Recalculate counters from actual line statuses so the header
+        // shows the CURRENT state (not the initial parse-time counts).
+        // After SAP dispatch, some "Valid" lines become SapError/Imported.
+        var statusCounts = await _dbContext.ImportLines
+            .Where(l => l.ImportFileId == id)
+            .GroupBy(l => l.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        var realValid = statusCounts.Where(s => s.Status == ImportLineStatus.Valid).Sum(s => s.Count);
+        var realInvalid = statusCounts.Where(s => s.Status == ImportLineStatus.Invalid).Sum(s => s.Count);
+        var realDuplicated = statusCounts.Where(s => s.Status == ImportLineStatus.Duplicated).Sum(s => s.Count);
+        var realImported = statusCounts.Where(s => s.Status == ImportLineStatus.Imported).Sum(s => s.Count);
+        var realSapError = statusCounts.Where(s => s.Status == ImportLineStatus.SapError).Sum(s => s.Count);
+        var realExcluded = statusCounts.Where(s => s.Status == ImportLineStatus.Excluded).Sum(s => s.Count);
+
         var model = new ImportPreviewViewModel
         {
             ImportFileId = importFile.Id,
             FileName = importFile.OriginalFileName,
             LayoutDetected = importFile.LayoutDetected,
             TotalLines = importFile.TotalLines,
-            ValidLines = importFile.ValidLines,
-            InvalidLines = importFile.InvalidLines,
-            DuplicatedLines = importFile.DuplicatedLines,
+            ValidLines = realValid,
+            InvalidLines = realInvalid,
+            DuplicatedLines = realDuplicated,
+            ImportedLines = realImported,
+            SapErrorLines = realSapError,
+            ExcludedLines = realExcluded,
             Groups = groups,
             Status = importFile.Status,
             CorrelationId = importFile.CorrelationId,
