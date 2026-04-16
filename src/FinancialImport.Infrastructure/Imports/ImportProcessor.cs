@@ -102,6 +102,10 @@ public sealed class ImportProcessor : IImportProcessor
 
         importFile.Status = ImportStatus.Processing;
         importFile.ProcessingStartedAtUtc = start;
+        // Clear the previous run's completion timestamp so the /Progress
+        // endpoint does not mistake a stale 'finished' state for the current
+        // run. Also clears error/imported counters so the UI shows fresh data.
+        importFile.ProcessingCompletedAtUtc = null;
         await _repository.UpdateImportFileAsync(importFile, cancellationToken);
 
         // Include lines that previously errored on SAP so Reprocess picks them up.

@@ -1,5 +1,7 @@
 ﻿// Loading overlay functions
 var __progressPoller = null;
+var __progressStartedAt = null; // timestamp when showLoading was called
+var __progressSawProcessing = false; // true once we see status === 'Processing' at least once
 
 function showLoading(message = 'Processando...', cancelUrl = null, progressUrl = null) {
     let overlay = document.getElementById('loadingOverlay');
@@ -41,10 +43,15 @@ function showLoading(message = 'Processando...', cancelUrl = null, progressUrl =
 
     // Clear any previous poller to avoid leaks when reusing the overlay
     if (__progressPoller) { clearInterval(__progressPoller); __progressPoller = null; }
+    __progressStartedAt = Date.now();
+    __progressSawProcessing = false;
 
     if (progressUrl) {
         __progressPoller = setInterval(function () { pollProgress(progressUrl); }, 1500);
-        pollProgress(progressUrl); // initial tick so the user sees data fast
+        // Wait 1s before the first poll so the server has time to start
+        // processing. Polling too early sees the stale pre-run state and
+        // the JS mistakes it for "finished".
+        setTimeout(function () { pollProgress(progressUrl); }, 1000);
     }
 }
 
@@ -82,10 +89,26 @@ function pollProgress(url) {
                 text.innerHTML = [line1, line2, line3].filter(Boolean).join('<br>');
             }
 
+            // Remember if we ever saw the server in Processing state.
+            // This prevents a race where the first poll happens before the
+            // processor sets status=Processing and the JS would otherwise
+            // treat the stale "Failed" state as terminal.
+            if (data.isProcessing) {
+                __progressSawProcessing = true;
+            }
+
             if (data.isFinished) {
-                if (__progressPoller) { clearInterval(__progressPoller); __progressPoller = null; }
-                // Reload the page to show the final status
-                setTimeout(function () { window.location.reload(); }, 600);
+                // Only accept "finished" once we have either seen the server
+                // transition into Processing (proof the run started) OR
+                // waited long enough that we are sure the POST would have
+                // kicked things off by now.
+                var elapsedSinceStart = Date.now() - (__progressStartedAt || Date.now());
+                var canTrustFinish = __progressSawProcessing || elapsedSinceStart > 15000;
+
+                if (canTrustFinish) {
+                    if (__progressPoller) { clearInterval(__progressPoller); __progressPoller = null; }
+                    setTimeout(function () { window.location.reload(); }, 600);
+                }
             }
         })
         .catch(function () { /* polling errors are non-fatal */ });

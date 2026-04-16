@@ -401,10 +401,20 @@ public class ImportController : Controller
             ? (long)(DateTime.Now - file.ProcessingStartedAtUtc.Value).TotalSeconds
             : 0;
 
+        // Only consider the import "finished" when it reaches a terminal state.
+        // If the processor hasn't started yet (status still Validated/Pending/
+        // Failed from a previous run), we return isFinished=false so the JS
+        // overlay keeps polling instead of reloading the page prematurely.
+        var isTerminal = file.Status == ImportStatus.Completed
+                      || file.Status == ImportStatus.PartiallyCompleted
+                      || file.Status == ImportStatus.Cancelled
+                      || (file.Status == ImportStatus.Failed && file.ProcessingCompletedAtUtc.HasValue);
+
         return Json(new
         {
             status = file.Status.ToString(),
-            isFinished = file.Status != ImportStatus.Processing,
+            isFinished = isTerminal,
+            isProcessing = file.Status == ImportStatus.Processing,
             fileName = file.OriginalFileName,
             totalLines = file.TotalLines,
             validLines = file.ValidLines,
