@@ -82,7 +82,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
         if (existing != null)
         {
             existing.Valor = value;
-            existing.AtualizadoEm = DateTime.UtcNow;
+            existing.AtualizadoEm = DateTime.Now;
             existing.AtualizadoPor = updatedBy;
         }
         else
@@ -92,7 +92,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
                 Chave = key,
                 Valor = value,
                 Categoria = key.Contains(':') ? key.Split(':')[0] : "Geral",
-                AtualizadoEm = DateTime.UtcNow,
+                AtualizadoEm = DateTime.Now,
                 AtualizadoPor = updatedBy
             });
         }
@@ -113,7 +113,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
             .ToListAsync(ct);
 
         var existingByKey = existing.ToDictionary(s => s.Chave, StringComparer.OrdinalIgnoreCase);
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
 
         foreach (var (key, value) in values)
         {
@@ -163,7 +163,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
 
     private async Task EnsureCacheAsync(CancellationToken ct)
     {
-        if (_cache.Count > 0 && DateTime.UtcNow - _cacheLoadedAt < CacheTtl)
+        if (_cache.Count > 0 && DateTime.Now - _cacheLoadedAt < CacheTtl)
             return;
         await LoadCacheAsync(ct);
     }
@@ -174,7 +174,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
         try
         {
             // double-check after acquiring lock
-            if (_cache.Count > 0 && DateTime.UtcNow - _cacheLoadedAt < CacheTtl)
+            if (_cache.Count > 0 && DateTime.Now - _cacheLoadedAt < CacheTtl)
                 return;
 
             using var scope = _scopeFactory.CreateScope();
@@ -182,7 +182,7 @@ public sealed class DbSystemSettingsService : ISystemSettingsService
             var all = await db.SystemSettings.AsNoTracking().ToListAsync(ct);
 
             _cache = all.ToDictionary(s => s.Chave, s => s.Valor, StringComparer.OrdinalIgnoreCase);
-            _cacheLoadedAt = DateTime.UtcNow;
+            _cacheLoadedAt = DateTime.Now;
             _logger.LogDebug("Cache de configuracoes carregado com {Count} entradas.", all.Count);
         }
         catch (Exception ex)

@@ -69,7 +69,7 @@ public sealed class ImportProcessor : IImportProcessor
         long importFileId,
         CancellationToken cancellationToken = default)
     {
-        var start = DateTime.UtcNow;
+        var start = DateTime.Now;
         var userId = _userContext.UserId
             ?? throw new InvalidOperationException("Usuario nao autenticado.");
 
@@ -190,15 +190,15 @@ public sealed class ImportProcessor : IImportProcessor
                 GroupKey = BuildGroupKeyLabel(groupLines[0]),
                 Status = JournalDispatchStatus.InFlight,
                 AttemptCount = 1,
-                CreatedAtUtc = DateTime.UtcNow,
-                LastAttemptAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.Now,
+                LastAttemptAtUtc = DateTime.Now,
                 CorrelationId = importFile.CorrelationId
             };
 
             if (existingDispatch != null)
             {
                 dispatch.AttemptCount += 1;
-                dispatch.LastAttemptAtUtc = DateTime.UtcNow;
+                dispatch.LastAttemptAtUtc = DateTime.Now;
                 dispatch.Status = JournalDispatchStatus.InFlight;
             }
             else
@@ -279,7 +279,7 @@ public sealed class ImportProcessor : IImportProcessor
             {
                 var docEntry = ExtractDocEntry(sapResult.RawResponse);
                 dispatch.Status = JournalDispatchStatus.Dispatched;
-                dispatch.DispatchedAtUtc = DateTime.UtcNow;
+                dispatch.DispatchedAtUtc = DateTime.Now;
                 dispatch.SapDocEntry = docEntry;
                 dispatch.SapResponseSummary = Truncate(sapResult.RawResponse, 2000);
                 dispatch.LastError = null;
@@ -298,7 +298,7 @@ public sealed class ImportProcessor : IImportProcessor
                     CompanyDb = importFile.CompanyDb,
                     GroupKey = dispatch.GroupKey,
                     DocEntry = docEntry,
-                    DurationMs = (long)(DateTime.UtcNow - start).TotalMilliseconds
+                    DurationMs = (long)(DateTime.Now - start).TotalMilliseconds
                 }, cancellationToken);
             }
             else
@@ -367,7 +367,7 @@ public sealed class ImportProcessor : IImportProcessor
 
         importFile.ImportedLines = imported;
         importFile.LinesWithError = sapErrors;
-        importFile.ProcessingCompletedAtUtc = DateTime.UtcNow;
+        importFile.ProcessingCompletedAtUtc = DateTime.Now;
 
         if (importFile.Status == ImportStatus.Cancelled)
         {
@@ -382,7 +382,7 @@ public sealed class ImportProcessor : IImportProcessor
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var duration = (long)(DateTime.UtcNow - start).TotalMilliseconds;
+        var duration = (long)(DateTime.Now - start).TotalMilliseconds;
 
         await _eventPublisher.PublishAsync(new ImportProcessedEvent
         {

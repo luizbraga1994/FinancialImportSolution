@@ -36,7 +36,7 @@ public sealed class DbAuditLogger : IAuditLogger
 
         var record = new SystemLog
         {
-            OccurredAt       = entry.OccurredAtUtc == default ? DateTime.UtcNow : entry.OccurredAtUtc,
+            OccurredAt       = entry.OccurredAtUtc == default ? DateTime.Now : entry.OccurredAtUtc,
             Level            = string.IsNullOrEmpty(entry.Level) ? LogSeverities.Info : entry.Level,
             Category         = string.IsNullOrEmpty(entry.Category) ? LogCategories.Technical : entry.Category,
             Source           = entry.Source,

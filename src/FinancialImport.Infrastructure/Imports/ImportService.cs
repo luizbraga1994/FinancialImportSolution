@@ -243,7 +243,7 @@ public sealed class ImportService : IImportService
                 existingFile.DuplicatedLines = duplicatedCount;
                 existingFile.LinesWithError = 0;
                 existingFile.ImportedLines = 0;
-                existingFile.ImportedAt = DateTime.UtcNow;
+                existingFile.ImportedAt = DateTime.Now;
                 existingFile.CorrelationId = correlationId;
 
                 _dbContext.ImportFiles.Update(existingFile);
@@ -267,7 +267,7 @@ public sealed class ImportService : IImportService
                     DuplicatedLines = duplicatedCount,
                     LinesWithError = 0,
                     ImportedLines = 0,
-                    ImportedAt = DateTime.UtcNow,
+                    ImportedAt = DateTime.Now,
                     CorrelationId = correlationId
                 };
                 await _dbContext.ImportFiles.AddAsync(file, cancellationToken);

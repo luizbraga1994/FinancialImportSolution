@@ -67,7 +67,7 @@ public sealed class OutboxPublisher : IEventPublisher, ICommandBus
             CausationId = correlation?.CausationId,
             UserId = correlation?.UserId,
             CompanyDb = correlation?.CompanyDb,
-            OccurredAtUtc = DateTime.UtcNow,
+            OccurredAtUtc = DateTime.Now,
             Payload = payload
         };
 
@@ -81,7 +81,7 @@ public sealed class OutboxPublisher : IEventPublisher, ICommandBus
             Payload = JsonSerializer.Serialize(envelope),
             Broker = broker,
             Status = OutboxMessageStatus.Pending,
-            CreatedAtUtc = DateTime.UtcNow,
+            CreatedAtUtc = DateTime.Now,
             UserId = envelope.UserId,
             CompanyDb = envelope.CompanyDb
         };

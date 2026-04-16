@@ -405,7 +405,7 @@ public sealed class AppDbContext : DbContext
 
     private void StampTimestamps()
     {
-        var nowUtc = DateTime.UtcNow;
+        var nowUtc = DateTime.Now;
 
         foreach (var entry in ChangeTracker.Entries())
         {
