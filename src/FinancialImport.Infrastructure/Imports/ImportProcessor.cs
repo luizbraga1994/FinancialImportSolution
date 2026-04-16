@@ -104,12 +104,17 @@ public sealed class ImportProcessor : IImportProcessor
         importFile.ProcessingStartedAtUtc = start;
         await _repository.UpdateImportFileAsync(importFile, cancellationToken);
 
+        // Include lines that previously errored on SAP so Reprocess picks them up.
+        // Groups that were dispatched successfully are skipped later via the
+        // JournalEntryDispatch idempotency check, so there is no risk of double-
+        // posting. Duplicated/Invalid lines never reach SAP.
         var validLines = importFile.Lines
-            .Where(l => l.Status == ImportLineStatus.Valid)
+            .Where(l => l.Status == ImportLineStatus.Valid
+                     || l.Status == ImportLineStatus.SapError)
             .ToList();
 
         _logger.LogInformation(
-            "Processing file={FileId} validLines={Count} correlation={CorrelationId}",
+            "Processing file={FileId} lines={Count} correlation={CorrelationId}",
             importFileId, validLines.Count, importFile.CorrelationId);
 
         var branchMappings = await _dbContext.BranchMappings
@@ -392,13 +397,49 @@ public sealed class ImportProcessor : IImportProcessor
         }, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Build a readable summary message so operators get the full picture
+        // without expanding details. Include: file name, totals, duration, status.
+        var totalGroups = groups.Count;
+        var dispatchedGroups = imported > 0
+            ? await _dbContext.JournalEntryDispatches
+                .Where(d => d.ImportFileId == importFile.Id && d.Status == JournalDispatchStatus.Dispatched)
+                .CountAsync(cancellationToken)
+            : 0;
+
+        string summaryMessage = importFile.Status switch
+        {
+            ImportStatus.Completed => $"Importacao '{importFile.OriginalFileName}' concluida com sucesso — {imported} linha(s) em {dispatchedGroups} lancamento(s) SAP. Duracao: {FormatDuration(duration)}.",
+            ImportStatus.PartiallyCompleted => $"Importacao '{importFile.OriginalFileName}' concluida parcialmente — {imported} linha(s) enviadas, {sapErrors} com erro em {totalGroups - dispatchedGroups} grupo(s). Duracao: {FormatDuration(duration)}.",
+            ImportStatus.Failed => $"Importacao '{importFile.OriginalFileName}' falhou — 0 linha(s) enviadas, {sapErrors} erro(s) em {totalGroups} grupo(s). Verifique os logs de cada grupo para o motivo. Duracao: {FormatDuration(duration)}.",
+            ImportStatus.Cancelled => $"Importacao '{importFile.OriginalFileName}' cancelada pelo usuario — {imported} linha(s) ja enviadas antes do cancelamento.",
+            _ => $"Importacao '{importFile.OriginalFileName}' processada — status: {importFile.Status}. Duracao: {FormatDuration(duration)}."
+        };
+
+        var summaryDetails = $"Arquivo: {importFile.OriginalFileName}\n" +
+                             $"Layout: {importFile.LayoutDetected}\n" +
+                             $"Empresa: {importFile.CompanyDb}\n" +
+                             $"Total de linhas: {importFile.TotalLines}\n" +
+                             $"  - Validas/Reprocessadas: {validLines.Count}\n" +
+                             $"  - Invalidas: {importFile.InvalidLines}\n" +
+                             $"  - Duplicadas: {importFile.DuplicatedLines}\n" +
+                             $"Grupos processados: {totalGroups}\n" +
+                             $"  - Enviados ao SAP: {dispatchedGroups}\n" +
+                             $"  - Com erro: {totalGroups - dispatchedGroups}\n" +
+                             $"Linhas enviadas: {imported}\n" +
+                             $"Linhas com erro: {sapErrors}\n" +
+                             $"Duracao: {FormatDuration(duration)}\n" +
+                             $"Correlation ID: {importFile.CorrelationId}";
+
         await _audit.WriteAsync(new AuditLogEntry
         {
-            Level = sapErrors > 0 ? LogSeverities.Warning : LogSeverities.Info,
+            Level = importFile.Status == ImportStatus.Failed ? LogSeverities.Error
+                 : sapErrors > 0 ? LogSeverities.Warning
+                 : LogSeverities.Info,
             Category = LogCategories.Integration,
             Source = nameof(ImportProcessor),
-            Operation = "Process",
-            Message = $"Import processed: imported={imported} sapErrors={sapErrors}",
+            Operation = "ProcessImport",
+            Message = summaryMessage,
+            Details = summaryDetails,
             ImportFileId = importFileId,
             CompanyDb = importFile.CompanyDb,
             CorrelationId = importFile.CorrelationId,
@@ -457,5 +498,14 @@ public sealed class ImportProcessor : IImportProcessor
     {
         if (string.IsNullOrEmpty(value)) return value;
         return value.Length <= max ? value : value.Substring(0, max - 3) + "...";
+    }
+
+    private static string FormatDuration(long ms)
+    {
+        if (ms < 1000) return $"{ms}ms";
+        var seconds = ms / 1000.0;
+        if (seconds < 60) return $"{seconds:N1}s";
+        var minutes = seconds / 60;
+        return $"{minutes:N1}min";
     }
 }

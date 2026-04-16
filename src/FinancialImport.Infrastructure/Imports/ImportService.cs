@@ -305,13 +305,28 @@ public sealed class ImportService : IImportService
             throw;
         }
 
+        var previewMessage = invalidCount > 0 || duplicatedCount > 0
+            ? $"Preview do arquivo '{context.FileName}' concluido com avisos — {validCount} linha(s) validas, {invalidCount} invalidas, {duplicatedCount} duplicadas (total {parsed.Count})."
+            : $"Preview do arquivo '{context.FileName}' concluido — {validCount} linha(s) prontas para envio ao SAP.";
+
+        var previewDetails = $"Arquivo: {context.FileName}\n" +
+                             $"Layout detectado: {parser.LayoutName}\n" +
+                             $"Empresa: {companyDb}\n" +
+                             $"Usuario: {userId}\n" +
+                             $"Total de linhas: {parsed.Count}\n" +
+                             $"  - Validas: {validCount}\n" +
+                             $"  - Invalidas: {invalidCount}\n" +
+                             $"  - Duplicadas: {duplicatedCount}\n" +
+                             $"Correlation ID: {correlationId}";
+
         await _audit.WriteAsync(new AuditLogEntry
         {
-            Level = LogSeverities.Info,
+            Level = invalidCount > 0 ? LogSeverities.Warning : LogSeverities.Info,
             Category = LogCategories.Functional,
             Source = nameof(ImportService),
             Operation = "Preview",
-            Message = $"Preview OK: total={parsed.Count} valid={validCount} invalid={invalidCount} duplicated={duplicatedCount}",
+            Message = previewMessage,
+            Details = previewDetails,
             UserId = userId,
             CompanyDb = companyDb,
             ImportFileId = importFileId,

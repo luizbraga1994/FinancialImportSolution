@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
+using FinancialImport.Application.Settings;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace FinancialImport.Integration.Sap.Services;
@@ -15,6 +17,7 @@ namespace FinancialImport.Integration.Sap.Services;
 public sealed class SapChartOfAccountsService : ISapChartOfAccountsService
 {
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SapChartOfAccountsService> _logger;
 
     // Cache per company — survives across requests within the same scope
@@ -23,9 +26,11 @@ public sealed class SapChartOfAccountsService : ISapChartOfAccountsService
 
     public SapChartOfAccountsService(
         IHttpClientFactory httpClientFactory,
+        IServiceProvider serviceProvider,
         ILogger<SapChartOfAccountsService> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -53,6 +58,8 @@ public sealed class SapChartOfAccountsService : ISapChartOfAccountsService
         string? nextUrl = $"ChartOfAccounts?$select=Code,Name";
         int pageCount = 0;
 
+        var reloginAttempted = false;
+
         while (!string.IsNullOrWhiteSpace(nextUrl))
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -64,6 +71,37 @@ public sealed class SapChartOfAccountsService : ISapChartOfAccountsService
             request.Headers.Add("Prefer", $"odata.maxpagesize={pageSize}");
 
             var response = await client.SendAsync(request, cancellationToken);
+
+            // Session expired (typical when the stored session was created hours ago).
+            // Try to re-authenticate once using SAP credentials from settings, then retry.
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !reloginAttempted)
+            {
+                reloginAttempted = true;
+                _logger.LogInformation("SAP session expired while fetching ChartOfAccounts for {CompanyDb}. Re-authenticating...", session.CompanyDb);
+
+                using var scope = _serviceProvider.CreateScope();
+                var sessionService = scope.ServiceProvider.GetService<ISapCompanySessionService>();
+                var settings = scope.ServiceProvider.GetService<ISystemSettingsService>();
+
+                if (sessionService != null && settings != null)
+                {
+                    var relogin = await sessionService.SignInCompanyAsync(
+                        session.CompanyDb,
+                        settings.Get("Sap:UserName") ?? "",
+                        settings.Get("Sap:Password") ?? "",
+                        cancellationToken);
+
+                    if (relogin.Success && relogin.Session != null)
+                    {
+                        session = relogin.Session;
+                        continue; // retry the same nextUrl with the new session
+                    }
+
+                    _logger.LogWarning("Re-authentication failed: {Error}", relogin.ErrorMessage);
+                }
+                break;
+            }
+
             if (!response.IsSuccessStatusCode)
             {
                 var body = await response.Content.ReadAsStringAsync(cancellationToken);
