@@ -264,6 +264,8 @@ else
                         <div id="@collapseId" class="accordion-collapse collapse"
                              aria-labelledby="@headingId" data-bs-parent="#groupsAccordion">
                             <div class="accordion-body p-0">
+                              @{ var hasEditableLines = group.Lines.Any(l => l.Status == ImportLineStatus.SapError && Model.Status != ImportStatus.Processing && Model.Status != ImportStatus.Completed); }
+                              @if (hasEditableLines) { <form asp-action="UpdateAccounts" asp-route-id="@Model.ImportFileId" method="post"> @Html.AntiForgeryToken() }
                                 <div class="table-responsive">
                                     <table class="table table-sm mb-0 small">
                                         <thead class="table-light">
@@ -295,13 +297,36 @@ else
                                                 var canExcludeLine = (line.Status == ImportLineStatus.Valid || line.Status == ImportLineStatus.SapError)
                                                                      && Model.Status != ImportStatus.Processing
                                                                      && Model.Status != ImportStatus.Completed;
+                                                var canEditAccount = line.Status == ImportLineStatus.SapError
+                                                                     && Model.Status != ImportStatus.Processing
+                                                                     && Model.Status != ImportStatus.Completed;
                                                 <tr class="@rowClass">
                                                     <td>
                                                         <span class="badge @rowBadge">@line.Status</span>
                                                     </td>
                                                     <td class="text-nowrap">@line.PostingDate.ToString("dd/MM/yyyy")</td>
-                                                    <td><code>@line.AccountCode</code></td>
-                                                    <td><code>@line.ContraAccountCode</code></td>
+                                                    <td>
+                                                        @if (canEditAccount)
+                                                        {
+                                                            <input type="text" name="accountCode[@line.Id]" value="@line.AccountCode"
+                                                                   class="form-control form-control-sm font-monospace" style="width: 140px; font-size: 0.75rem;" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <code>@line.AccountCode</code>
+                                                        }
+                                                    </td>
+                                                    <td>
+                                                        @if (canEditAccount)
+                                                        {
+                                                            <input type="text" name="contraAccountCode[@line.Id]" value="@line.ContraAccountCode"
+                                                                   class="form-control form-control-sm font-monospace" style="width: 140px; font-size: 0.75rem;" />
+                                                        }
+                                                        else
+                                                        {
+                                                            <code>@line.ContraAccountCode</code>
+                                                        }
+                                                    </td>
                                                     <td class="text-end">@((line.DebitAmount ?? 0m).ToString("N2"))</td>
                                                     <td class="text-end">@((line.CreditAmount ?? 0m).ToString("N2"))</td>
                                                     <td class="text-truncate" style="max-width: 240px;" title="@line.LineMemo">@line.LineMemo</td>
@@ -349,6 +374,15 @@ else
                                         </tbody>
                                     </table>
                                 </div>
+                                @if (hasEditableLines)
+                                {
+                                    <div class="p-2 bg-light border-top text-end">
+                                        <button type="submit" class="btn btn-sm btn-warning">
+                                            <i class="bi bi-pencil-square me-1"></i>Salvar contas alteradas
+                                        </button>
+                                    </div>
+                                }
+                              @if (hasEditableLines) { </form> }
                             </div>
                         </div>
                     </div>

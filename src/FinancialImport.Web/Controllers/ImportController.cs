@@ -608,4 +608,94 @@ public class ImportController : Controller
         TempData["Success"] = $"Linha excluida com sucesso. Atencao: se o grupo '{line.Reference}' ficar desbalanceado, o SAP pode rejeitar o lancamento inteiro.";
         return RedirectToAction(nameof(Preview), new { id });
     }
+
+    /// <summary>
+    /// Updates account codes for lines with SapError status so the operator
+    /// can fix invalid accounts directly in the browser and Reprocess
+    /// without re-importing the file.
+    /// </summary>
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateAccounts(long id, Dictionary<long, string> accountCode, Dictionary<long, string> contraAccountCode, CancellationToken cancellationToken)
+    {
+        var importFile = await _dbContext.ImportFiles
+            .Include(f => f.Lines.Where(l => l.Status == ImportLineStatus.SapError))
+            .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
+
+        if (importFile == null)
+        {
+            TempData["Error"] = "Importacao nao encontrada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        int updated = 0;
+        var changes = new List<string>();
+
+        foreach (var line in importFile.Lines)
+        {
+            var changed = false;
+
+            if (accountCode.TryGetValue(line.Id, out var newAccount) &&
+                !string.IsNullOrWhiteSpace(newAccount) &&
+                newAccount.Trim() != line.AccountCode)
+            {
+                changes.Add($"Linha {line.Id}: ContaContabil '{line.AccountCode}' → '{newAccount.Trim()}'");
+                line.AccountCode = newAccount.Trim();
+                changed = true;
+            }
+
+            if (contraAccountCode.TryGetValue(line.Id, out var newContra) &&
+                !string.IsNullOrWhiteSpace(newContra) &&
+                newContra.Trim() != line.ContraAccountCode)
+            {
+                changes.Add($"Linha {line.Id}: Contrapartida '{line.ContraAccountCode}' → '{newContra.Trim()}'");
+                line.ContraAccountCode = newContra.Trim();
+                changed = true;
+            }
+
+            if (changed)
+            {
+                line.SapReturnMessage = null;
+                updated++;
+            }
+        }
+
+        if (updated > 0)
+        {
+            // Clear failed dispatches so Reprocess retries these groups
+            var affectedHashes = importFile.Lines
+                .Where(l => accountCode.ContainsKey(l.Id) || contraAccountCode.ContainsKey(l.Id))
+                .Select(l => l.GroupKeyHash)
+                .Where(h => h != null)
+                .Distinct()
+                .ToList();
+
+            var failedDispatches = await _dbContext.JournalEntryDispatches
+                .Where(d => d.ImportFileId == id && affectedHashes.Contains(d.GroupKeyHash) && d.Status == JournalDispatchStatus.Failed)
+                .ToListAsync(cancellationToken);
+
+            _dbContext.JournalEntryDispatches.RemoveRange(failedDispatches);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            await _audit.WriteAsync(new AuditLogEntry
+            {
+                Level = LogSeverities.Info,
+                Category = LogCategories.Audit,
+                Source = nameof(ImportController),
+                Operation = "EditarContas",
+                Message = $"{updated} linha(s) com contas corrigidas no arquivo {id} por '{CurrentUser}'.",
+                Details = string.Join("\n", changes),
+                ImportFileId = id,
+                CompanyDb = CurrentCompany
+            }, CancellationToken.None);
+
+            TempData["Success"] = $"{updated} conta(s) atualizada(s). Clique em Reprocessar para reenviar ao SAP.";
+        }
+        else
+        {
+            TempData["Error"] = "Nenhuma alteracao detectada.";
+        }
+
+        return RedirectToAction(nameof(Preview), new { id });
+    }
 }
