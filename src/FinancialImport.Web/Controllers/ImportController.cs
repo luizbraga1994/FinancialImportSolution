@@ -189,7 +189,6 @@ public class ImportController : Controller
     {
         var importFile = await _dbContext.ImportFiles
             .AsNoTracking()
-            .Include(f => f.Lines)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
 
         if (importFile == null)
@@ -198,27 +197,28 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var groups = importFile.Lines
-            .GroupBy(l => l.GroupKeyHash ?? string.Empty, StringComparer.Ordinal)
-            .OrderBy(g => g.First().PostingDate)
-            .ThenBy(g => g.First().Reference ?? string.Empty)
-            .Select(g =>
+        // Build group summaries from a lightweight DB query instead of loading
+        // ALL lines into memory. For a 35k-line file, Include(f => f.Lines)
+        // generates a ~30MB HTML page that crashes the browser with OOM.
+        var groups = await _dbContext.ImportLines
+            .AsNoTracking()
+            .Where(l => l.ImportFileId == id)
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty)
+            .Select(g => new ImportPreviewGroup
             {
-                var first = g.First();
-                return new ImportPreviewGroup
-                {
-                    Reference = first.Reference ?? string.Empty,
-                    PostingDate = first.PostingDate,
-                    LineCount = g.Count(),
-                    TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
-                    TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
-                    GroupKeyHash = g.Key,
-                    IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
-                    IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
-                    Lines = g.OrderBy(l => l.Id).ToList()
-                };
+                GroupKeyHash = g.Key,
+                Reference = g.OrderBy(l => l.Id).First().Reference ?? string.Empty,
+                PostingDate = g.OrderBy(l => l.Id).First().PostingDate,
+                LineCount = g.Count(),
+                TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
+                TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
+                IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
+                IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
+                Lines = g.OrderBy(l => l.Id).Take(20).ToList()
             })
-            .ToList();
+            .OrderBy(g => g.PostingDate)
+            .ThenBy(g => g.Reference)
+            .ToListAsync(cancellationToken);
 
         // Best-effort account validation against the SAP chart of accounts.
         // Only runs when a SAP session already exists for this user + company,
@@ -238,11 +238,17 @@ public class ImportController : Controller
                     var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
                     if (accounts.Count > 0)
                     {
-                        var codesInFile = importFile.Lines
-                            .SelectMany(l => new[] { l.AccountCode, l.ContraAccountCode })
-                            .Where(c => !string.IsNullOrWhiteSpace(c))
-                            .Distinct(StringComparer.OrdinalIgnoreCase)
-                            .ToList();
+                        var codesInFile = await _dbContext.ImportLines
+                            .AsNoTracking()
+                            .Where(l => l.ImportFileId == id)
+                            .Select(l => l.AccountCode)
+                            .Union(_dbContext.ImportLines
+                                .AsNoTracking()
+                                .Where(l => l.ImportFileId == id)
+                                .Select(l => l.ContraAccountCode))
+                            .Where(c => c != null && c != "")
+                            .Distinct()
+                            .ToListAsync(cancellationToken);
 
                         invalidAccounts = codesInFile
                             .Where(c => !accounts.ContainsKey(c))
@@ -272,11 +278,12 @@ public class ImportController : Controller
             CorrelationId = importFile.CorrelationId,
             InvalidAccountCodes = invalidAccounts,
             AccountsValidated = accountsValidated,
-            Errors = importFile.Lines
-                .Where(l => !string.IsNullOrWhiteSpace(l.ValidationMessage))
+            Errors = await _dbContext.ImportLines
+                .AsNoTracking()
+                .Where(l => l.ImportFileId == id && l.ValidationMessage != null && l.ValidationMessage != "")
                 .Select(l => l.ValidationMessage!)
                 .Distinct()
-                .ToList()
+                .ToListAsync(cancellationToken)
         };
 
         return View(model);
