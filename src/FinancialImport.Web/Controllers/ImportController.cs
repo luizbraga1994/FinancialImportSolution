@@ -702,7 +702,7 @@ public class ImportController : Controller
     public async Task<IActionResult> UpdateAccounts(long id, Dictionary<long, string> accountCode, Dictionary<long, string> contraAccountCode, CancellationToken cancellationToken)
     {
         var importFile = await _dbContext.ImportFiles
-            .Include(f => f.Lines.Where(l => l.Status == ImportLineStatus.SapError || l.Status == ImportLineStatus.Invalid))
+            .AsNoTracking()
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
 
         if (importFile == null)
@@ -711,10 +711,15 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        var lineIds = accountCode.Keys.Union(contraAccountCode.Keys).Distinct().ToList();
+        var lines = await _dbContext.ImportLines
+            .Where(l => l.ImportFileId == id && lineIds.Contains(l.Id))
+            .ToListAsync(cancellationToken);
+
         int updated = 0;
         var changes = new List<string>();
 
-        foreach (var line in importFile.Lines)
+        foreach (var line in lines)
         {
             var changed = false;
 
@@ -759,7 +764,7 @@ public class ImportController : Controller
                         var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
                         if (accounts.Count > 0)
                         {
-                            foreach (var line in importFile.Lines.Where(l => l.Status == ImportLineStatus.Valid))
+                            foreach (var line in lines.Where(l => l.Status == ImportLineStatus.Valid))
                             {
                                 var acctOk = string.IsNullOrWhiteSpace(line.AccountCode) || accounts.ContainsKey(line.AccountCode);
                                 var contraOk = string.IsNullOrWhiteSpace(line.ContraAccountCode) || accounts.ContainsKey(line.ContraAccountCode);
@@ -788,7 +793,7 @@ public class ImportController : Controller
             }
 
             // Clear failed dispatches so Reprocess retries these groups
-            var affectedHashes = importFile.Lines
+            var affectedHashes = lines
                 .Where(l => accountCode.ContainsKey(l.Id) || contraAccountCode.ContainsKey(l.Id))
                 .Select(l => l.GroupKeyHash)
                 .Where(h => h != null)
