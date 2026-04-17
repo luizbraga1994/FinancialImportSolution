@@ -205,14 +205,14 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        // Build group summaries from a lightweight DB query instead of loading
-        // ALL lines into memory. For a 35k-line file, Include(f => f.Lines)
-        // generates a ~30MB HTML page that crashes the browser with OOM.
-        var groups = await _dbContext.ImportLines
+        // Build group summaries with two separate queries to avoid client-side
+        // evaluation of GroupBy+Take that would load all 35k lines into memory.
+        // Step 1: aggregates only (pure SQL)
+        var groupSummaries = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == id)
             .GroupBy(l => l.GroupKeyHash ?? string.Empty)
-            .Select(g => new ImportPreviewGroup
+            .Select(g => new
             {
                 GroupKeyHash = g.Key,
                 Reference = g.OrderBy(l => l.Id).First().Reference ?? string.Empty,
@@ -222,11 +222,53 @@ public class ImportController : Controller
                 TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
                 IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
                 IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
-                Lines = g.OrderBy(l => l.Id).Take(20).ToList()
             })
             .OrderBy(g => g.PostingDate)
             .ThenBy(g => g.Reference)
             .ToListAsync(cancellationToken);
+
+        // Step 2: load sample lines WITHOUT the heavy SourceJson column.
+        // Use a projection so EF doesn't materialise the full entity blob.
+        const int maxLinesPerGroup = 20;
+        var allLinesDtos = await _dbContext.ImportLines
+            .AsNoTracking()
+            .Where(l => l.ImportFileId == id)
+            .OrderBy(l => l.GroupKeyHash)
+            .ThenBy(l => l.Id)
+            .Select(l => new
+            {
+                l.Id, l.GroupKeyHash, l.Reference, l.AccountCode, l.ContraAccountCode,
+                l.PostingDate, l.DebitAmount, l.CreditAmount, l.LineMemo, l.BranchCode,
+                l.Status, l.ValidationMessage, l.SapReturnMessage, l.SapDocEntry
+            })
+            .ToListAsync(cancellationToken);
+
+        var linesByGroup = allLinesDtos
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Take(maxLinesPerGroup).Select(l => new ImportLine
+                {
+                    Id = l.Id, GroupKeyHash = l.GroupKeyHash, Reference = l.Reference,
+                    AccountCode = l.AccountCode, ContraAccountCode = l.ContraAccountCode,
+                    PostingDate = l.PostingDate, DebitAmount = l.DebitAmount, CreditAmount = l.CreditAmount,
+                    LineMemo = l.LineMemo, BranchCode = l.BranchCode, Status = l.Status,
+                    ValidationMessage = l.ValidationMessage, SapReturnMessage = l.SapReturnMessage,
+                    SapDocEntry = l.SapDocEntry
+                }).ToList());
+
+        var groups = groupSummaries.Select(g => new ImportPreviewGroup
+        {
+            GroupKeyHash = g.GroupKeyHash,
+            Reference = g.Reference,
+            PostingDate = g.PostingDate,
+            LineCount = g.LineCount,
+            TotalCredit = g.TotalCredit,
+            TotalDebit = g.TotalDebit,
+            IsExcluded = g.IsExcluded,
+            IsImported = g.IsImported,
+            Lines = linesByGroup.TryGetValue(g.GroupKeyHash, out var lines) ? lines : new()
+        }).ToList();
 
         // Account validation: try live re-check against SAP chart of accounts.
         // If the SAP session is unavailable, fall back to what was already
