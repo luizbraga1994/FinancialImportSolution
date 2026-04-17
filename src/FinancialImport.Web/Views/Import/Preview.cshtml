@@ -380,15 +380,11 @@ else
                                                     <td class="text-center">
                                                         @if (canExcludeLine)
                                                         {
-                                                            <form asp-action="ExcludeLine" asp-route-id="@Model.ImportFileId" method="post" class="d-inline">
-                                                                @Html.AntiForgeryToken()
-                                                                <input type="hidden" name="lineId" value="@line.Id" />
-                                                                <button type="submit" class="btn btn-sm btn-link text-danger p-0"
-                                                                        title="Excluir esta linha"
-                                                                        onclick="return confirm('Excluir apenas esta linha? Se o grupo ficar desbalanceado (D != C), o SAP pode rejeitar o lancamento inteiro.');">
-                                                                    <i class="bi bi-x-circle"></i>
-                                                                </button>
-                                                            </form>
+                                                            <button type="button" class="btn btn-sm btn-link text-danger p-0"
+                                                                    title="Excluir esta linha"
+                                                                    onclick="excludeLine(@line.Id, @Model.ImportFileId)">
+                                                                <i class="bi bi-x-circle"></i>
+                                                            </button>
                                                         }
                                                     </td>
                                                 </tr>
@@ -539,5 +535,19 @@ else
 
             if (clearBtn) clearBtn.addEventListener('click', function () { applyFilter(null); });
         })();
+
+        function excludeLine(lineId, importFileId) {
+            if (!confirm('Excluir apenas esta linha? Se o grupo ficar desbalanceado (D != C), o SAP pode rejeitar o lancamento inteiro.')) return;
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/Import/ExcludeLine/' + importFileId;
+            var token = document.querySelector('input[name="__RequestVerificationToken"]').value;
+            var t = document.createElement('input'); t.type = 'hidden'; t.name = '__RequestVerificationToken'; t.value = token;
+            form.appendChild(t);
+            var l = document.createElement('input'); l.type = 'hidden'; l.name = 'lineId'; l.value = lineId;
+            form.appendChild(l);
+            document.body.appendChild(form);
+            form.submit();
+        }
     </script>
 }
