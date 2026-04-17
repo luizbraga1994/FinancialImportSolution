@@ -42,7 +42,7 @@ public sealed class EfIdempotencyStore : IIdempotencyStore
         {
             Consumer = consumer,
             MessageId = messageId,
-            ProcessedAtUtc = DateTime.UtcNow,
+            ProcessedAtUtc = DateTime.Now,
             CorrelationId = _correlation.Current?.CorrelationId
         });
 

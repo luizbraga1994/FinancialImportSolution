@@ -1,5 +1,6 @@
 using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Entities;
+using FinancialImport.Shared.Logging;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,14 +10,16 @@ namespace FinancialImport.Web.Controllers;
 public class SettingsController : Controller
 {
     private readonly ISystemSettingsService _settings;
+    private readonly IAuditLogger _audit;
     private readonly ILogger<SettingsController> _logger;
 
     private static readonly string[] Categories =
         ["SAP", "Seguranca", "Importacao", "Mensageria", "Layout"];
 
-    public SettingsController(ISystemSettingsService settings, ILogger<SettingsController> logger)
+    public SettingsController(ISystemSettingsService settings, IAuditLogger audit, ILogger<SettingsController> logger)
     {
         _settings = settings;
+        _audit = audit;
         _logger = logger;
     }
 
@@ -50,8 +53,6 @@ public class SettingsController : Controller
         {
             if (setting.TipoDado == "bool")
             {
-                // Hidden input sends "false", checkbox sends "true".
-                // When checked, BOTH arrive. Check if "true" is present.
                 var isChecked = form[setting.Chave].Any(v => v == "true");
                 updates[setting.Chave] = isChecked ? "true" : "false";
                 continue;
@@ -59,7 +60,6 @@ public class SettingsController : Controller
 
             var formValue = form[setting.Chave].FirstOrDefault();
 
-            // For password fields: empty means "keep existing"
             if (setting.TipoDado == "password" && string.IsNullOrEmpty(formValue))
                 continue;
 
@@ -70,6 +70,23 @@ public class SettingsController : Controller
         {
             await _settings.SetManyAsync(updates, userId, ct);
             _logger.LogInformation("Categoria '{Cat}' salva por '{User}' ({Count} campos).", categoria, userId, updates.Count);
+
+            // Log which keys were changed (mask password values)
+            var changedKeys = updates.Select(u =>
+                u.Key.Contains("Password", StringComparison.OrdinalIgnoreCase) || u.Key.Contains("Secret", StringComparison.OrdinalIgnoreCase)
+                    ? $"{u.Key} = ***"
+                    : $"{u.Key} = {u.Value ?? "(null)"}");
+
+            await _audit.WriteAsync(new AuditLogEntry
+            {
+                Level = LogSeverities.Info,
+                Category = LogCategories.Audit,
+                Source = nameof(SettingsController),
+                Operation = "AlterarConfiguracoes",
+                Message = $"Configuracoes da categoria '{categoria}' alteradas por '{userId}' ({updates.Count} campo(s)).",
+                Details = $"Usuario: {userId}\nCategoria: {categoria}\nCampos alterados ({updates.Count}):\n" + string.Join("\n", changedKeys)
+            }, ct);
+
             TempData["Success"] = $"Configuracoes da categoria '{categoria}' salvas com sucesso.";
         }
 
@@ -78,9 +95,20 @@ public class SettingsController : Controller
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public IActionResult ReloadCache()
+    public async Task<IActionResult> ReloadCache(CancellationToken ct)
     {
+        var userId = User.FindFirst(ClaimConstants.Login)?.Value ?? "sistema";
         _settings.InvalidateCache();
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(SettingsController),
+            Operation = "RecarregarCache",
+            Message = $"Cache de configuracoes invalidado manualmente por '{userId}'."
+        }, ct);
+
         TempData["Success"] = "Cache de configuracoes invalidado. Proximas requisicoes recarregarao do banco.";
         return RedirectToAction(nameof(Index));
     }

@@ -46,7 +46,6 @@ public sealed class JournalEntryBuilder
             // GroupKeyHash) unique index, NOT by Ref1, so there is no
             // need to leak the hash into a user-visible field.
             Reference = Truncate(firstLine.Reference, _options.ReferenceMaxLength),
-            BPLID = bplId,
             JournalEntryLines = new List<SapJournalEntryLine>()
         };
 
@@ -56,23 +55,85 @@ public sealed class JournalEntryBuilder
         var debitLines = new List<SapJournalEntryLine>(lines.Count);
         var creditLines = new List<SapJournalEntryLine>(lines.Count);
 
+        // Detect "pre-balanced" input: the file already contains both
+        // debit and credit rows that balance within the group. In that
+        // case, emitting a ContraAccount line per input would duplicate
+        // the movement. We only generate contra lines when the input
+        // has one-sided rows that need the counterparty to balance.
+        var groupDebitTotal = lines.Sum(l => l.DebitAmount ?? 0m);
+        var groupCreditTotal = lines.Sum(l => l.CreditAmount ?? 0m);
+        var alreadyBalanced = groupDebitTotal > 0m
+            && groupCreditTotal > 0m
+            && Math.Abs(groupDebitTotal - groupCreditTotal) <= _options.JournalBalanceTolerance;
+
         foreach (var line in lines)
         {
-            // Resolve amount + direction. Each input row becomes a pair
-            // of SAP journal lines (ContaContabil + ContraAccountCode)
-            // whose sides MUST be mutually exclusive — never debit+credit
-            // on the same line.
-            //
-            // Direction rules:
-            //   - DebitAmount populated  → ContaContabil = debit
-            //   - CreditAmount populated → ContaContabil = credit
-            //   - Both populated with the same value (common user error
-            //     when the template has both columns) → default to
-            //     ContaContabil = debit (standard general-journal entry)
-            //   - Both zero/null → skip line
             var debitAmount = line.DebitAmount ?? 0m;
             var creditAmount = line.CreditAmount ?? 0m;
+            var memo = Truncate(line.LineMemo, _options.LineMemoMaxLength);
 
+            if (alreadyBalanced)
+            {
+                // Pre-balanced detailed input. Column names map DIRECTLY
+                // to the SAP journal side:
+                //
+                // (a) BOTH columns on same row → classic 2-line entry:
+                //     ContaContabil  receives Debit  (= Valor Debito)
+                //     Contrapartida  receives Credit (= Valor Credito)
+                //
+                // (b) Only ONE column on the row → 1 SAP line:
+                //     "Valor Credito" → ContaContabil on CREDIT side
+                //     "Valor Debito"  → Contrapartida on DEBIT side
+                if (creditAmount > 0m && debitAmount > 0m)
+                {
+                    debitLines.Add(new SapJournalEntryLine
+                    {
+                        AccountCode = line.AccountCode,
+                        Debit = debitAmount,
+                        Credit = 0m,
+                        LineMemo = memo,
+                        BPLID = bplId
+                    });
+                    creditLines.Add(new SapJournalEntryLine
+                    {
+                        AccountCode = line.ContraAccountCode,
+                        Debit = 0m,
+                        Credit = creditAmount,
+                        LineMemo = memo,
+                        BPLID = bplId
+                    });
+                }
+                else if (creditAmount > 0m)
+                {
+                    creditLines.Add(new SapJournalEntryLine
+                    {
+                        AccountCode = line.AccountCode,
+                        Debit = 0m,
+                        Credit = creditAmount,
+                        LineMemo = memo,
+                        BPLID = bplId
+                    });
+                }
+                else if (debitAmount > 0m)
+                {
+                    debitLines.Add(new SapJournalEntryLine
+                    {
+                        AccountCode = line.ContraAccountCode,
+                        Debit = debitAmount,
+                        Credit = 0m,
+                        LineMemo = memo,
+                        BPLID = bplId
+                    });
+                }
+                continue;
+            }
+
+            // One-sided input (legacy): emit main + contra lines to balance.
+            // Direction rules:
+            //   - DebitAmount populated  → ContaContabil = debit, Contrapartida = credit
+            //   - CreditAmount populated → ContaContabil = credit, Contrapartida = debit
+            //   - Amount fallback → treat as debit
+            //   - Both zero/null → skip line
             decimal accountDebit;
             decimal accountCredit;
 
@@ -88,8 +149,6 @@ public sealed class JournalEntryBuilder
             }
             else if (line.Amount > 0m)
             {
-                // Fallback: neither credit nor debit column was parsed
-                // but the Amount field is populated — treat as debit.
                 accountDebit = line.Amount;
                 accountCredit = 0m;
             }
@@ -98,27 +157,27 @@ public sealed class JournalEntryBuilder
                 continue;
             }
 
-            var memo = Truncate(line.LineMemo, _options.LineMemoMaxLength);
-
             // Main account (ContaContabil)
             var mainLine = new SapJournalEntryLine
             {
                 AccountCode = line.AccountCode,
                 Debit = accountDebit,
                 Credit = accountCredit,
-                LineMemo = memo
+                LineMemo = memo,
+                BPLID = bplId
             };
 
-            // Counterparty (ContraAccountCode) — sides flipped
+            (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
+
             var contraLine = new SapJournalEntryLine
             {
                 AccountCode = line.ContraAccountCode,
                 Debit = accountCredit,
                 Credit = accountDebit,
-                LineMemo = memo
+                LineMemo = memo,
+                BPLID = bplId
             };
 
-            (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
             (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);
         }
 

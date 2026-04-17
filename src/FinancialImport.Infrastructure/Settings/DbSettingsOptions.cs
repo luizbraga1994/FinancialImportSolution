@@ -115,6 +115,48 @@ public sealed class DbConfigureRabbitMqOptions : IConfigureOptions<RabbitMqOptio
         o.InitialRetryDelaySeconds  = int.TryParse(_s.Get("RabbitMq:InitialRetryDelaySeconds"), out var ird) ? ird : 2;
         o.RetryBackoffMultiplier    = double.TryParse(_s.Get("RabbitMq:RetryBackoffMultiplier"), out var rbm) ? rbm : 2.0;
         o.MaxRetryDelaySeconds      = int.TryParse(_s.Get("RabbitMq:MaxRetryDelaySeconds"), out var mrd) ? mrd : 300;
+        o.ConnectionRecoveryIntervalSeconds = int.TryParse(_s.Get("RabbitMq:ConnectionRecoveryIntervalSeconds"), out var cri) ? cri : 10;
+        o.NetworkRecoveryIntervalSeconds    = int.TryParse(_s.Get("RabbitMq:NetworkRecoveryIntervalSeconds"), out var nri) ? nri : 10;
+        o.UseSsl           = bool.TryParse(_s.Get("RabbitMq:UseSsl"), out var ssl) && ssl;
+
+        // --- Channel definitions ---
+        // DB keys follow the pattern: RabbitMq:Channels:<channelKey>:<Property>
+        // e.g. RabbitMq:Channels:import.process.command:Queue
+        const string prefix = "RabbitMq:Channels:";
+        var channelEntries = _s.GetByPrefix(prefix);
+
+        foreach (var (key, value) in channelEntries)
+        {
+            // key = "RabbitMq:Channels:import.process.command:Queue"
+            var remainder = key[prefix.Length..]; // "import.process.command:Queue"
+            var colonIdx = remainder.LastIndexOf(':');
+            if (colonIdx <= 0) continue;
+
+            var channelKey = remainder[..colonIdx];    // "import.process.command"
+            var property   = remainder[(colonIdx + 1)..]; // "Queue"
+
+            if (!o.Channels.TryGetValue(channelKey, out var channelOpts))
+            {
+                channelOpts = new RabbitMqChannelOptions();
+                o.Channels[channelKey] = channelOpts;
+            }
+
+            switch (property)
+            {
+                case "Queue":
+                    channelOpts.Queue = value ?? string.Empty;
+                    break;
+                case "RoutingKey":
+                    channelOpts.RoutingKey = value ?? string.Empty;
+                    break;
+                case "DeadLetterQueue":
+                    channelOpts.DeadLetterQueue = value;
+                    break;
+                case "Durable":
+                    channelOpts.Durable = !bool.TryParse(value, out var dur) || dur;
+                    break;
+            }
+        }
     }
 }
 
@@ -136,6 +178,48 @@ public sealed class DbConfigureKafkaOptions : IConfigureOptions<KafkaOptions>
         o.BatchSize         = int.TryParse(_s.Get("Kafka:BatchSize"), out var bs) ? bs : 32768;
         o.EnableIdempotence = !bool.TryParse(_s.Get("Kafka:EnableIdempotence"), out var ei) || ei;
         o.Acks              = _s.Get("Kafka:Acks") ?? "all";
+        o.SecurityProtocol  = _s.Get("Kafka:SecurityProtocol");
+        o.SaslMechanism     = _s.Get("Kafka:SaslMechanism");
+        o.SaslUsername       = _s.Get("Kafka:SaslUsername");
+        o.SaslPassword       = _s.Get("Kafka:SaslPassword");
+
+        // --- Topic definitions ---
+        // DB keys follow the pattern: Kafka:Topics:<channelKey>:<Property>
+        // e.g. Kafka:Topics:import.events:Topic
+        const string prefix = "Kafka:Topics:";
+        var topicEntries = _s.GetByPrefix(prefix);
+
+        foreach (var (key, value) in topicEntries)
+        {
+            var remainder = key[prefix.Length..];
+            var colonIdx = remainder.LastIndexOf(':');
+            if (colonIdx <= 0) continue;
+
+            var channelKey = remainder[..colonIdx];
+            var property   = remainder[(colonIdx + 1)..];
+
+            if (!o.Topics.TryGetValue(channelKey, out var topicOpts))
+            {
+                topicOpts = new KafkaTopicOptions();
+                o.Topics[channelKey] = topicOpts;
+            }
+
+            switch (property)
+            {
+                case "Topic":
+                    topicOpts.Topic = value ?? string.Empty;
+                    break;
+                case "Partitions":
+                    topicOpts.Partitions = int.TryParse(value, out var p) ? p : 3;
+                    break;
+                case "ReplicationFactor":
+                    topicOpts.ReplicationFactor = short.TryParse(value, out var rf) ? rf : (short)1;
+                    break;
+                case "AutoCreate":
+                    topicOpts.AutoCreate = !bool.TryParse(value, out var ac) || ac;
+                    break;
+            }
+        }
     }
 }
 
@@ -151,8 +235,8 @@ public sealed class DbConfigureImportOptions : IConfigureOptions<ImportProcessin
     {
         o.MaxFileSizeBytes   = long.TryParse(_s.Get("Import:MaxFileSizeBytes"), out var mfs) ? mfs : 10_485_760;
         o.MemoMaxLength      = int.TryParse(_s.Get("Import:MemoMaxLength"), out var mml) ? mml : 254;
-        o.ReferenceMaxLength = int.TryParse(_s.Get("Import:ReferenceMaxLength"), out var rml) ? rml : 27;
-        o.LineMemoMaxLength  = int.TryParse(_s.Get("Import:LineMemoMaxLength"), out var lml) ? lml : 50;
+        o.ReferenceMaxLength = int.TryParse(_s.Get("Import:ReferenceMaxLength"), out var rml) ? rml : 200;
+        o.LineMemoMaxLength  = int.TryParse(_s.Get("Import:LineMemoMaxLength"), out var lml) ? lml : 254;
         o.JournalBalanceTolerance = decimal.TryParse(_s.Get("Import:JournalBalanceTolerance"), out var jbt) ? jbt : 0.01m;
 
         var ext = _s.Get("Import:AllowedExtensions");

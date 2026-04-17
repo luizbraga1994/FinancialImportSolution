@@ -29,6 +29,7 @@ public sealed class ImportProcessor : IImportProcessor
     private readonly ISapSessionStore _sapSessionStore;
     private readonly ISapCompanySessionService _sapSessionService;
     private readonly ISapJournalEntryService _sapService;
+    private readonly ISapChartOfAccountsService _chartOfAccounts;
     private readonly JournalEntryBuilder _entryBuilder;
     private readonly IUserContext _userContext;
     private readonly IEventPublisher _eventPublisher;
@@ -42,6 +43,7 @@ public sealed class ImportProcessor : IImportProcessor
         ISapSessionStore sapSessionStore,
         ISapCompanySessionService sapSessionService,
         ISapJournalEntryService sapService,
+        ISapChartOfAccountsService chartOfAccounts,
         JournalEntryBuilder entryBuilder,
         IUserContext userContext,
         IEventPublisher eventPublisher,
@@ -54,6 +56,7 @@ public sealed class ImportProcessor : IImportProcessor
         _sapSessionStore = sapSessionStore;
         _sapSessionService = sapSessionService;
         _sapService = sapService;
+        _chartOfAccounts = chartOfAccounts;
         _entryBuilder = entryBuilder;
         _userContext = userContext;
         _eventPublisher = eventPublisher;
@@ -66,7 +69,7 @@ public sealed class ImportProcessor : IImportProcessor
         long importFileId,
         CancellationToken cancellationToken = default)
     {
-        var start = DateTime.UtcNow;
+        var start = DateTime.Now;
         var userId = _userContext.UserId
             ?? throw new InvalidOperationException("Usuario nao autenticado.");
 
@@ -99,19 +102,40 @@ public sealed class ImportProcessor : IImportProcessor
 
         importFile.Status = ImportStatus.Processing;
         importFile.ProcessingStartedAtUtc = start;
+        // Clear the previous run's completion timestamp so the /Progress
+        // endpoint does not mistake a stale 'finished' state for the current
+        // run. Also clears error/imported counters so the UI shows fresh data.
+        importFile.ProcessingCompletedAtUtc = null;
         await _repository.UpdateImportFileAsync(importFile, cancellationToken);
 
+        // Include lines that previously errored on SAP so Reprocess picks them up.
+        // Groups that were dispatched successfully are skipped later via the
+        // JournalEntryDispatch idempotency check, so there is no risk of double-
+        // posting. Duplicated/Invalid lines never reach SAP.
         var validLines = importFile.Lines
-            .Where(l => l.Status == ImportLineStatus.Valid)
+            .Where(l => l.Status == ImportLineStatus.Valid
+                     || l.Status == ImportLineStatus.SapError)
             .ToList();
 
         _logger.LogInformation(
-            "Processing file={FileId} validLines={Count} correlation={CorrelationId}",
+            "Processing file={FileId} lines={Count} correlation={CorrelationId}",
             importFileId, validLines.Count, importFile.CorrelationId);
 
         var branchMappings = await _dbContext.BranchMappings
             .Where(b => b.CompanyDb == importFile.CompanyDb && b.IsActive)
             .ToListAsync(cancellationToken);
+
+        // Fetch chart of accounts to auto-resolve partial codes (e.g. "1612001100002" → "1612001100002-0")
+        IReadOnlyDictionary<string, string> accountCodes;
+        try
+        {
+            accountCodes = await _chartOfAccounts.GetAccountCodesAsync(sapSession, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch ChartOfAccounts — account codes will not be auto-resolved.");
+            accountCodes = new Dictionary<string, string>();
+        }
 
         // Group by GroupKeyHash precomputed at preview time. This
         // means a reprocess hits the same groups, so the unique index
@@ -127,6 +151,20 @@ public sealed class ImportProcessor : IImportProcessor
         foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Check if the user requested cancellation via the UI
+            var currentStatus = await _dbContext.ImportFiles
+                .AsNoTracking()
+                .Where(f => f.Id == importFileId)
+                .Select(f => f.Status)
+                .FirstAsync(cancellationToken);
+
+            if (currentStatus == ImportStatus.Cancelled)
+            {
+                _logger.LogInformation("Import {FileId} cancelled by user after {Imported} groups.", importFileId, imported);
+                break;
+            }
+
             var groupLines = group.OrderBy(l => l.Id).ToList();
 
             // Check the dispatch table — if this group already has a
@@ -156,15 +194,15 @@ public sealed class ImportProcessor : IImportProcessor
                 GroupKey = BuildGroupKeyLabel(groupLines[0]),
                 Status = JournalDispatchStatus.InFlight,
                 AttemptCount = 1,
-                CreatedAtUtc = DateTime.UtcNow,
-                LastAttemptAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.Now,
+                LastAttemptAtUtc = DateTime.Now,
                 CorrelationId = importFile.CorrelationId
             };
 
             if (existingDispatch != null)
             {
                 dispatch.AttemptCount += 1;
-                dispatch.LastAttemptAtUtc = DateTime.UtcNow;
+                dispatch.LastAttemptAtUtc = DateTime.Now;
                 dispatch.Status = JournalDispatchStatus.InFlight;
             }
             else
@@ -195,13 +233,49 @@ public sealed class ImportProcessor : IImportProcessor
                     importFile.Id, dispatch.GroupKey, build.TotalDebit, build.TotalCredit);
             }
 
+            // Auto-resolve partial account codes to full SAP codes (with check digit)
+            if (accountCodes.Count > 0)
+            {
+                foreach (var line in build.Payload.JournalEntryLines)
+                {
+                    line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accountCodes);
+                }
+            }
+
             SapResult sapResult;
+            Exception? sapException = null;
             try
             {
                 sapResult = await _sapService.CreateJournalEntryAsync(sapSession, build.Payload, cancellationToken);
+
+                // Session expired mid-batch — re-login once and retry
+                if (sapResult.IsSessionExpired)
+                {
+                    _logger.LogInformation("SAP session expired mid-batch. Re-authenticating for '{CompanyDb}'...", importFile.CompanyDb);
+                    var relogin = await _sapSessionService.SignInCompanyAsync(
+                        importFile.CompanyDb,
+                        _settings.Get("Sap:UserName") ?? "",
+                        _settings.Get("Sap:Password") ?? "",
+                        cancellationToken);
+
+                    if (relogin.Success)
+                    {
+                        sapSession = relogin.Session!;
+                        sapResult = await _sapService.CreateJournalEntryAsync(sapSession, build.Payload, cancellationToken);
+                    }
+                    else
+                    {
+                        _logger.LogError("Re-authentication to SAP failed for '{CompanyDb}': {Error}",
+                            importFile.CompanyDb, relogin.ErrorMessage);
+                    }
+                }
             }
             catch (Exception ex)
             {
+                sapException = ex;
+                _logger.LogError(ex,
+                    "Exception while dispatching group {GroupKey} for file {FileId} (company {CompanyDb}).",
+                    dispatch.GroupKey, importFile.Id, importFile.CompanyDb);
                 sapResult = SapResult.Fail($"Erro de comunicacao: {ex.Message}");
             }
 
@@ -209,7 +283,7 @@ public sealed class ImportProcessor : IImportProcessor
             {
                 var docEntry = ExtractDocEntry(sapResult.RawResponse);
                 dispatch.Status = JournalDispatchStatus.Dispatched;
-                dispatch.DispatchedAtUtc = DateTime.UtcNow;
+                dispatch.DispatchedAtUtc = DateTime.Now;
                 dispatch.SapDocEntry = docEntry;
                 dispatch.SapResponseSummary = Truncate(sapResult.RawResponse, 2000);
                 dispatch.LastError = null;
@@ -228,7 +302,7 @@ public sealed class ImportProcessor : IImportProcessor
                     CompanyDb = importFile.CompanyDb,
                     GroupKey = dispatch.GroupKey,
                     DocEntry = docEntry,
-                    DurationMs = (long)(DateTime.UtcNow - start).TotalMilliseconds
+                    DurationMs = (long)(DateTime.Now - start).TotalMilliseconds
                 }, cancellationToken);
             }
             else
@@ -244,6 +318,41 @@ public sealed class ImportProcessor : IImportProcessor
                     sapErrors++;
                 }
 
+                // Per-group audit log with the FULL error details so users can see
+                // exactly which group failed and why, without digging through app logs.
+                var detailsBuilder = new System.Text.StringBuilder();
+                detailsBuilder.AppendLine($"Grupo: {dispatch.GroupKey}");
+                detailsBuilder.AppendLine($"Tentativa: {dispatch.AttemptCount}");
+                detailsBuilder.AppendLine($"Linhas afetadas: {groupLines.Count}");
+                detailsBuilder.AppendLine($"Debito total: {build.TotalDebit:N2}");
+                detailsBuilder.AppendLine($"Credito total: {build.TotalCredit:N2}");
+                detailsBuilder.AppendLine($"Contas utilizadas: {string.Join(", ", build.Payload.JournalEntryLines.Select(l => l.AccountCode).Distinct())}");
+                detailsBuilder.AppendLine();
+                detailsBuilder.AppendLine("--- Resposta completa do SAP ---");
+                detailsBuilder.AppendLine(sapResult.RawResponse ?? "(sem corpo de resposta)");
+                if (sapException != null)
+                {
+                    detailsBuilder.AppendLine();
+                    detailsBuilder.AppendLine("--- Exception capturada ---");
+                    detailsBuilder.AppendLine(sapException.ToString());
+                }
+
+                await _audit.WriteAsync(new AuditLogEntry
+                {
+                    Level = LogSeverities.Error,
+                    Category = LogCategories.Integration,
+                    Source = nameof(ImportProcessor),
+                    Operation = "DispatchJournalEntry",
+                    Message = $"SAP rejeitou lancamento do grupo '{dispatch.GroupKey}': {dispatch.LastError}",
+                    Details = detailsBuilder.ToString(),
+                    StackTrace = sapException?.StackTrace,
+                    ImportFileId = importFile.Id,
+                    CompanyDb = importFile.CompanyDb,
+                    CorrelationId = importFile.CorrelationId,
+                    BusinessKey = dispatch.GroupKeyHash,
+                    StatusAfter = dispatch.Status.ToString()
+                }, cancellationToken);
+
                 await _eventPublisher.PublishAsync(new SapDispatchFailedEvent
                 {
                     ImportFileId = importFile.Id,
@@ -257,17 +366,27 @@ public sealed class ImportProcessor : IImportProcessor
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
+        // Reload to detect if status was set to Cancelled during processing
+        await _dbContext.Entry(importFile).ReloadAsync(cancellationToken);
+
         importFile.ImportedLines = imported;
         importFile.LinesWithError = sapErrors;
-        importFile.ProcessingCompletedAtUtc = DateTime.UtcNow;
+        importFile.ProcessingCompletedAtUtc = DateTime.Now;
 
-        importFile.Status = sapErrors > 0
-            ? (imported > 0 ? ImportStatus.PartiallyCompleted : ImportStatus.Failed)
-            : (imported > 0 ? ImportStatus.Completed : ImportStatus.Failed);
+        if (importFile.Status == ImportStatus.Cancelled)
+        {
+            // Keep Cancelled status; imported lines stay as Imported
+        }
+        else
+        {
+            importFile.Status = sapErrors > 0
+                ? (imported > 0 ? ImportStatus.PartiallyCompleted : ImportStatus.Failed)
+                : (imported > 0 ? ImportStatus.Completed : ImportStatus.Failed);
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        var duration = (long)(DateTime.UtcNow - start).TotalMilliseconds;
+        var duration = (long)(DateTime.Now - start).TotalMilliseconds;
 
         await _eventPublisher.PublishAsync(new ImportProcessedEvent
         {
@@ -282,13 +401,49 @@ public sealed class ImportProcessor : IImportProcessor
         }, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        // Build a readable summary message so operators get the full picture
+        // without expanding details. Include: file name, totals, duration, status.
+        var totalGroups = groups.Count;
+        var dispatchedGroups = imported > 0
+            ? await _dbContext.JournalEntryDispatches
+                .Where(d => d.ImportFileId == importFile.Id && d.Status == JournalDispatchStatus.Dispatched)
+                .CountAsync(cancellationToken)
+            : 0;
+
+        string summaryMessage = importFile.Status switch
+        {
+            ImportStatus.Completed => $"Importacao '{importFile.OriginalFileName}' concluida com sucesso — {imported} linha(s) em {dispatchedGroups} lancamento(s) SAP. Duracao: {FormatDuration(duration)}.",
+            ImportStatus.PartiallyCompleted => $"Importacao '{importFile.OriginalFileName}' concluida parcialmente — {imported} linha(s) enviadas, {sapErrors} com erro em {totalGroups - dispatchedGroups} grupo(s). Duracao: {FormatDuration(duration)}.",
+            ImportStatus.Failed => $"Importacao '{importFile.OriginalFileName}' falhou — 0 linha(s) enviadas, {sapErrors} erro(s) em {totalGroups} grupo(s). Verifique os logs de cada grupo para o motivo. Duracao: {FormatDuration(duration)}.",
+            ImportStatus.Cancelled => $"Importacao '{importFile.OriginalFileName}' cancelada pelo usuario — {imported} linha(s) ja enviadas antes do cancelamento.",
+            _ => $"Importacao '{importFile.OriginalFileName}' processada — status: {importFile.Status}. Duracao: {FormatDuration(duration)}."
+        };
+
+        var summaryDetails = $"Arquivo: {importFile.OriginalFileName}\n" +
+                             $"Layout: {importFile.LayoutDetected}\n" +
+                             $"Empresa: {importFile.CompanyDb}\n" +
+                             $"Total de linhas: {importFile.TotalLines}\n" +
+                             $"  - Validas/Reprocessadas: {validLines.Count}\n" +
+                             $"  - Invalidas: {importFile.InvalidLines}\n" +
+                             $"  - Duplicadas: {importFile.DuplicatedLines}\n" +
+                             $"Grupos processados: {totalGroups}\n" +
+                             $"  - Enviados ao SAP: {dispatchedGroups}\n" +
+                             $"  - Com erro: {totalGroups - dispatchedGroups}\n" +
+                             $"Linhas enviadas: {imported}\n" +
+                             $"Linhas com erro: {sapErrors}\n" +
+                             $"Duracao: {FormatDuration(duration)}\n" +
+                             $"Correlation ID: {importFile.CorrelationId}";
+
         await _audit.WriteAsync(new AuditLogEntry
         {
-            Level = sapErrors > 0 ? LogSeverities.Warning : LogSeverities.Info,
+            Level = importFile.Status == ImportStatus.Failed ? LogSeverities.Error
+                 : sapErrors > 0 ? LogSeverities.Warning
+                 : LogSeverities.Info,
             Category = LogCategories.Integration,
             Source = nameof(ImportProcessor),
-            Operation = "Process",
-            Message = $"Import processed: imported={imported} sapErrors={sapErrors}",
+            Operation = "ProcessImport",
+            Message = summaryMessage,
+            Details = summaryDetails,
             ImportFileId = importFileId,
             CompanyDb = importFile.CompanyDb,
             CorrelationId = importFile.CorrelationId,
@@ -347,5 +502,14 @@ public sealed class ImportProcessor : IImportProcessor
     {
         if (string.IsNullOrEmpty(value)) return value;
         return value.Length <= max ? value : value.Substring(0, max - 3) + "...";
+    }
+
+    private static string FormatDuration(long ms)
+    {
+        if (ms < 1000) return $"{ms}ms";
+        var seconds = ms / 1000.0;
+        if (seconds < 60) return $"{seconds:N1}s";
+        var minutes = seconds / 60;
+        return $"{minutes:N1}min";
     }
 }

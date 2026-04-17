@@ -7,7 +7,7 @@ namespace FinancialImport.Shared.Logging;
 /// </summary>
 public sealed class AuditLogEntry
 {
-    public DateTime OccurredAtUtc { get; init; } = DateTime.UtcNow;
+    public DateTime OccurredAtUtc { get; init; } = DateTime.Now;
     public string Level { get; init; } = LogSeverities.Info;
     public string Category { get; init; } = LogCategories.Technical;
     public string Source { get; init; } = string.Empty;

@@ -3,6 +3,8 @@ using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Imports;
 using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Messaging;
+using FinancialImport.Application.Sap;
+using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
@@ -36,6 +38,10 @@ public sealed class ImportService : IImportService
     private readonly IImportProcessor _processor;
     private readonly IEventPublisher _eventPublisher;
     private readonly ICommandBus _commandBus;
+    private readonly ISapSessionStore _sapSessionStore;
+    private readonly ISapChartOfAccountsService _chartOfAccounts;
+    private readonly ISapCompanySessionService _sapSessionService;
+    private readonly ISystemSettingsService _settings;
     private readonly IAuditLogger _audit;
     private readonly ICorrelationContextAccessor _correlation;
     private readonly ImportProcessingOptions _processingOptions;
@@ -53,6 +59,10 @@ public sealed class ImportService : IImportService
         IImportProcessor processor,
         IEventPublisher eventPublisher,
         ICommandBus commandBus,
+        ISapSessionStore sapSessionStore,
+        ISapChartOfAccountsService chartOfAccounts,
+        ISapCompanySessionService sapSessionService,
+        ISystemSettingsService settings,
         IAuditLogger audit,
         ICorrelationContextAccessor correlation,
         IOptions<ImportProcessingOptions> processingOptions,
@@ -69,6 +79,10 @@ public sealed class ImportService : IImportService
         _processor = processor;
         _eventPublisher = eventPublisher;
         _commandBus = commandBus;
+        _sapSessionStore = sapSessionStore;
+        _chartOfAccounts = chartOfAccounts;
+        _sapSessionService = sapSessionService;
+        _settings = settings;
         _audit = audit;
         _correlation = correlation;
         _processingOptions = processingOptions.Value;
@@ -219,10 +233,110 @@ public sealed class ImportService : IImportService
             });
         }
 
-        // Persist everything in a single transaction. Previously the
-        // code tried to do this but referenced a non-existent
-        // `transaction` variable, which meant the project did not
-        // compile — this path is now correct.
+        // Validate and auto-complete account codes against the SAP chart of accounts.
+        // This runs best-effort: if there is no active SAP session or the fetch
+        // fails, lines keep their original codes and validation happens later.
+        var accountsValidated = false;
+        var invalidAccountCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+            if (session == null || !session.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("No active SAP session found for user {UserId} / company '{CompanyDb}'. Auto-creating...", userId, companyDb);
+                var loginResult = await _sapSessionService.SignInCompanyAsync(
+                    companyDb,
+                    _settings.Get("Sap:UserName") ?? "",
+                    _settings.Get("Sap:Password") ?? "",
+                    cancellationToken);
+                if (loginResult.Success)
+                {
+                    session = loginResult.Session;
+                    _logger.LogInformation("SAP session auto-created for company '{CompanyDb}'.", companyDb);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to auto-create SAP session for '{CompanyDb}': {Error}", companyDb, loginResult.ErrorMessage);
+                }
+            }
+
+            if (session != null)
+            {
+                var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
+                if (accounts.Count > 0)
+                {
+                    accountsValidated = true;
+                    foreach (var line in lines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line.AccountCode))
+                        {
+                            var resolved = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accounts);
+                            if (resolved == line.AccountCode && !accounts.ContainsKey(line.AccountCode))
+                            {
+                                invalidAccountCodes.Add(line.AccountCode);
+                                var msg = $"Conta '{line.AccountCode}' nao encontrada no plano de contas do SAP.";
+                                line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
+                                if (line.Status == ImportLineStatus.Valid)
+                                {
+                                    line.Status = ImportLineStatus.Invalid;
+                                    validCount--;
+                                    invalidCount++;
+                                }
+                            }
+                            else
+                            {
+                                line.AccountCode = resolved;
+                            }
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(line.ContraAccountCode))
+                        {
+                            var resolved = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
+                            if (resolved == line.ContraAccountCode && !accounts.ContainsKey(line.ContraAccountCode))
+                            {
+                                invalidAccountCodes.Add(line.ContraAccountCode);
+                                var msg = $"Contrapartida '{line.ContraAccountCode}' nao encontrada no plano de contas do SAP.";
+                                line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
+                                if (line.Status == ImportLineStatus.Valid)
+                                {
+                                    line.Status = ImportLineStatus.Invalid;
+                                    validCount--;
+                                    invalidCount++;
+                                }
+                            }
+                            else
+                            {
+                                line.ContraAccountCode = resolved;
+                            }
+                        }
+                    }
+
+                    if (invalidAccountCodes.Count > 0)
+                    {
+                        _logger.LogWarning(
+                            "Account validation found {Count} invalid code(s) in file '{FileName}': {Codes}",
+                            invalidAccountCodes.Count, context.FileName,
+                            string.Join(", ", invalidAccountCodes.Take(20)));
+                    }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "All account codes validated OK against SAP chart of accounts for '{FileName}'.",
+                            context.FileName);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("ChartOfAccounts returned empty for company '{CompanyDb}'. Skipping account validation.", companyDb);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to validate accounts against SAP chart of accounts during upload (non-critical).");
+        }
+
+        // Persist everything in a single transaction.
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         long importFileId;
         try
@@ -243,7 +357,7 @@ public sealed class ImportService : IImportService
                 existingFile.DuplicatedLines = duplicatedCount;
                 existingFile.LinesWithError = 0;
                 existingFile.ImportedLines = 0;
-                existingFile.ImportedAt = DateTime.UtcNow;
+                existingFile.ImportedAt = DateTime.Now;
                 existingFile.CorrelationId = correlationId;
 
                 _dbContext.ImportFiles.Update(existingFile);
@@ -267,7 +381,7 @@ public sealed class ImportService : IImportService
                     DuplicatedLines = duplicatedCount,
                     LinesWithError = 0,
                     ImportedLines = 0,
-                    ImportedAt = DateTime.UtcNow,
+                    ImportedAt = DateTime.Now,
                     CorrelationId = correlationId
                 };
                 await _dbContext.ImportFiles.AddAsync(file, cancellationToken);
@@ -305,13 +419,32 @@ public sealed class ImportService : IImportService
             throw;
         }
 
+        var previewMessage = invalidCount > 0 || duplicatedCount > 0
+            ? $"Preview do arquivo '{context.FileName}' concluido com avisos — {validCount} linha(s) validas, {invalidCount} invalidas, {duplicatedCount} duplicadas (total {parsed.Count})."
+            : $"Preview do arquivo '{context.FileName}' concluido — {validCount} linha(s) prontas para envio ao SAP.";
+
+        var previewDetails = $"Arquivo: {context.FileName}\n" +
+                             $"Layout detectado: {parser.LayoutName}\n" +
+                             $"Empresa: {companyDb}\n" +
+                             $"Usuario: {userId}\n" +
+                             $"Total de linhas: {parsed.Count}\n" +
+                             $"  - Validas: {validCount}\n" +
+                             $"  - Invalidas: {invalidCount}\n" +
+                             $"  - Duplicadas: {duplicatedCount}\n" +
+                             $"Validacao de contas: {(accountsValidated ? "Sim" : "Nao (sem sessao SAP)")}\n" +
+                             (invalidAccountCodes.Count > 0
+                                 ? $"Contas invalidas: {string.Join(", ", invalidAccountCodes.Take(20))}\n"
+                                 : "") +
+                             $"Correlation ID: {correlationId}";
+
         await _audit.WriteAsync(new AuditLogEntry
         {
-            Level = LogSeverities.Info,
+            Level = invalidCount > 0 ? LogSeverities.Warning : LogSeverities.Info,
             Category = LogCategories.Functional,
             Source = nameof(ImportService),
             Operation = "Preview",
-            Message = $"Preview OK: total={parsed.Count} valid={validCount} invalid={invalidCount} duplicated={duplicatedCount}",
+            Message = previewMessage,
+            Details = previewDetails,
             UserId = userId,
             CompanyDb = companyDb,
             ImportFileId = importFileId,

@@ -36,7 +36,7 @@ public sealed class DbAuditLogger : IAuditLogger
 
         var record = new SystemLog
         {
-            OccurredAt       = entry.OccurredAtUtc == default ? DateTime.UtcNow : entry.OccurredAtUtc,
+            OccurredAt       = entry.OccurredAtUtc == default ? DateTime.Now : entry.OccurredAtUtc,
             Level            = string.IsNullOrEmpty(entry.Level) ? LogSeverities.Info : entry.Level,
             Category         = string.IsNullOrEmpty(entry.Category) ? LogCategories.Technical : entry.Category,
             Source           = entry.Source,
@@ -62,6 +62,22 @@ public sealed class DbAuditLogger : IAuditLogger
         };
 
         _dbContext.SystemLogs.Add(record);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // IMPORTANT: audit log writes must be durable — they must NOT be aborted
+        // when the request's cancellation token fires (user navigates away, HTTP
+        // request timeout, etc). Otherwise error audits never get persisted,
+        // which is the worst time to lose them.
+        try
+        {
+            await _dbContext.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // Last-resort swallow: if the audit write itself fails (DB unreachable,
+            // etc.) we do not want to mask the original error that triggered the
+            // audit. The entry is also in Serilog console logs via ILogger calls
+            // at the call sites, so nothing is lost in practice.
+            _dbContext.ChangeTracker.Clear();
+        }
     }
 }

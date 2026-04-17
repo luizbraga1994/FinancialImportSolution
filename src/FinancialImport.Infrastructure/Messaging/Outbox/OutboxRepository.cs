@@ -41,7 +41,7 @@ public sealed class OutboxRepository : IOutboxRepository
         TimeSpan claimTimeout,
         CancellationToken cancellationToken = default)
     {
-        var nowUtc = DateTime.UtcNow;
+        var nowUtc = DateTime.Now;
         var claimUntil = nowUtc.Add(claimTimeout);
 
         // Candidate set: pending or previously-inflight messages whose
@@ -78,7 +78,7 @@ public sealed class OutboxRepository : IOutboxRepository
         if (message == null) return;
 
         message.Status = OutboxMessageStatus.Dispatched;
-        message.DispatchedAtUtc = DateTime.UtcNow;
+        message.DispatchedAtUtc = DateTime.Now;
         message.ClaimedUntilUtc = null;
         message.NextAttemptAtUtc = null;
         message.LastError = null;
@@ -97,7 +97,7 @@ public sealed class OutboxRepository : IOutboxRepository
 
         message.Status = OutboxMessageStatus.Pending;
         message.ClaimedUntilUtc = null;
-        message.NextAttemptAtUtc = DateTime.UtcNow.AddSeconds(nextAttemptDelaySeconds);
+        message.NextAttemptAtUtc = DateTime.Now.AddSeconds(nextAttemptDelaySeconds);
         message.LastError = Truncate(error, 2000);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

@@ -19,6 +19,15 @@ namespace FinancialImport.Integration.Sap.Services;
 /// </summary>
 public sealed class SapCompanySessionService : ISapCompanySessionService
 {
+    // SAP Service Layer is case-sensitive on JSON property names (CompanyDB, UserName, etc.).
+    // PostAsJsonAsync uses JsonSerializerDefaults.Web which applies camelCase — we must
+    // preserve the original PascalCase so SAP recognizes the properties.
+    private static readonly JsonSerializerOptions SapJsonOptions = new()
+    {
+        PropertyNamingPolicy = null,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ISapSessionStore _sessionStore;
     private readonly IUserContext _userContext;
@@ -54,6 +63,12 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
             var language = int.TryParse(_settings.Get("Sap:Language"), out var lang) ? lang : 29;
 
+            _logger.LogDebug(
+                "SAP Login payload: CompanyDB={CompanyDb}, UserName={User}, Password={HasPassword}, Language={Language}, BaseAddress={BaseAddress}",
+                companyDb, sapUserName,
+                string.IsNullOrEmpty(sapPassword) ? "EMPTY" : $"SET({sapPassword.Length} chars)",
+                language, client.BaseAddress?.ToString() ?? "NULL");
+
             // Login payload — same structure as PortalSapB1.ServiceLayerAdapter
             var payload = new
             {
@@ -63,7 +78,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
                 Language = language
             };
 
-            var response = await client.PostAsJsonAsync("b1s/v1/Login", payload, cancellationToken);
+            var response = await client.PostAsJsonAsync("Login", payload, SapJsonOptions, cancellationToken);
             var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
@@ -119,7 +134,7 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
         try
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
-            var request = new HttpRequestMessage(HttpMethod.Post, "b1s/v1/Logout");
+            var request = new HttpRequestMessage(HttpMethod.Post, "Logout");
             request.Headers.Add("B1SESSION", session.SessionId);
             if (!string.IsNullOrWhiteSpace(session.RouteId))
                 request.Headers.Add("ROUTEID", session.RouteId);
@@ -188,10 +203,16 @@ public sealed class SapCompanySessionService : ISapCompanySessionService
         {
             using var doc = JsonDocument.Parse(rawResponse);
             if (doc.RootElement.TryGetProperty("error", out var err) &&
-                err.TryGetProperty("message", out var msg) &&
-                msg.TryGetProperty("value", out var val))
+                err.TryGetProperty("message", out var msg))
             {
-                return val.GetString() ?? rawResponse;
+                // v2 format: "message": "Error text"
+                if (msg.ValueKind == JsonValueKind.String)
+                    return msg.GetString() ?? rawResponse;
+
+                // v1 format: "message": { "value": "Error text" }
+                if (msg.ValueKind == JsonValueKind.Object &&
+                    msg.TryGetProperty("value", out var val))
+                    return val.GetString() ?? rawResponse;
             }
         }
         catch (JsonException) { }

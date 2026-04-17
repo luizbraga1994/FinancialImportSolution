@@ -145,9 +145,11 @@
                 <table class="table table-hover mb-0 small">
                     <thead>
                         <tr>
+                            <th style="width: 30px;"></th>
                             <th>Data/Hora</th>
                             <th>Nivel</th>
                             <th>Origem</th>
+                            <th>Operacao</th>
                             <th>Mensagem</th>
                             <th>Base</th>
                             <th>Correlacao</th>
@@ -156,7 +158,22 @@
                     <tbody>
                         @foreach (var log in Model.SystemLogs)
                         {
+                            var hasDetails = !string.IsNullOrWhiteSpace(log.Details)
+                                || !string.IsNullOrWhiteSpace(log.StackTrace);
+                            var rowId = $"logrow-{log.Id}";
+
                             <tr>
+                                <td class="text-center">
+                                    @if (hasDetails)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-link p-0"
+                                                data-bs-toggle="collapse" data-bs-target="#@rowId"
+                                                aria-expanded="false" aria-controls="@rowId"
+                                                title="Ver detalhes">
+                                            <i class="bi bi-chevron-right"></i>
+                                        </button>
+                                    }
+                                </td>
                                 <td class="text-nowrap">@log.OccurredAt.ToString("dd/MM/yyyy HH:mm:ss")</td>
                                 <td>
                                     <span class="badge @(log.Level == "Error" || log.Level == "Critical" ? "bg-danger-subtle text-danger-emphasis" : log.Level == "Warning" ? "bg-warning-subtle text-warning-emphasis" : log.Level == "Information" ? "bg-info-subtle text-info-emphasis" : "bg-secondary-subtle text-secondary-emphasis")">
@@ -164,10 +181,61 @@
                                     </span>
                                 </td>
                                 <td><code>@log.Source</code></td>
+                                <td class="text-muted small">@(log.Operation ?? "-")</td>
                                 <td>@log.Message</td>
                                 <td><code>@(log.CompanyDb ?? "-")</code></td>
                                 <td><code class="text-muted">@(log.CorrelationId ?? "-")</code></td>
                             </tr>
+                            @if (hasDetails)
+                            {
+                                <tr class="collapse" id="@rowId">
+                                    <td colspan="8" class="bg-light p-3">
+                                        <div class="row g-3">
+                                            @if (!string.IsNullOrWhiteSpace(log.Details))
+                                            {
+                                                <div class="col-12">
+                                                    <h6 class="fw-bold small text-muted text-uppercase mb-2">
+                                                        <i class="bi bi-info-circle me-1"></i>Detalhes
+                                                    </h6>
+                                                    <pre class="bg-white border rounded p-2 small mb-0" style="max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-word;">@log.Details</pre>
+                                                </div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(log.StackTrace))
+                                            {
+                                                <div class="col-12">
+                                                    <h6 class="fw-bold small text-muted text-uppercase mb-2">
+                                                        <i class="bi bi-bug me-1"></i>Stack Trace
+                                                    </h6>
+                                                    <pre class="bg-dark text-light rounded p-2 small mb-0" style="max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-word;">@log.StackTrace</pre>
+                                                </div>
+                                            }
+                                            @if (log.ImportFileId.HasValue || !string.IsNullOrWhiteSpace(log.BusinessKey) || !string.IsNullOrWhiteSpace(log.StatusAfter))
+                                            {
+                                                <div class="col-12">
+                                                    <div class="d-flex flex-wrap gap-3 small text-muted">
+                                                        @if (log.ImportFileId.HasValue)
+                                                        {
+                                                            <span><strong>Importacao:</strong> #@log.ImportFileId</span>
+                                                        }
+                                                        @if (!string.IsNullOrWhiteSpace(log.BusinessKey))
+                                                        {
+                                                            <span><strong>Chave:</strong> <code>@log.BusinessKey</code></span>
+                                                        }
+                                                        @if (!string.IsNullOrWhiteSpace(log.StatusAfter))
+                                                        {
+                                                            <span><strong>Status:</strong> @log.StatusAfter</span>
+                                                        }
+                                                        @if (log.DurationMs.HasValue)
+                                                        {
+                                                            <span><strong>Duracao:</strong> @log.DurationMs ms</span>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
                         }
                     </tbody>
                 </table>
