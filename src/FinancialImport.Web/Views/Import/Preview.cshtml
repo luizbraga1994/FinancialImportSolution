@@ -454,6 +454,13 @@ else
             </button>
         </form>
     }
+    else if (hasInvalidAccounts)
+    {
+        <button type="button" class="btn btn-danger px-4" disabled
+                title="Importacao bloqueada — existem contas nao encontradas no plano de contas do SAP.">
+            <i class="bi bi-shield-exclamation me-1"></i> Bloqueado
+        </button>
+    }
     else if (!canReprocess)
     {
         <button type="button" class="btn btn-primary px-4" disabled
