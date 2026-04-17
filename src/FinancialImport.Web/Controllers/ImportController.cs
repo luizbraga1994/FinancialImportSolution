@@ -320,14 +320,47 @@ public class ImportController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Confirm(long id, CancellationToken cancellationToken)
     {
-        // The dispatch runs synchronously on the HTTP thread and can take
-        // several minutes for large files. If we pass the request cancellation
-        // token, any browser hiccup / tab close / NIC blip kills the processor
-        // mid-batch with a half-dispatched journal. Use a dedicated 15-minute
-        // token: it insulates the long-running work and still prevents runaway
-        // requests. The user can still cancel via the Cancel button, which
-        // sets ImportStatus.Cancelled and the processor checks that between
-        // groups.
+        // Pre-flight: validate accounts against SAP chart of accounts.
+        // If any account in the file doesn't exist in SAP, BLOCK the import
+        // entirely. The user must fix the file or register the accounts in SAP.
+        try
+        {
+            var userIdClaim = User.FindFirst("user_id")?.Value;
+            if (long.TryParse(userIdClaim, out var userId))
+            {
+                var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+                if (session != null)
+                {
+                    var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
+                    if (accounts.Count > 0)
+                    {
+                        var codesInFile = await _dbContext.ImportLines
+                            .AsNoTracking()
+                            .Where(l => l.ImportFileId == id && (l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError))
+                            .Select(l => l.AccountCode)
+                            .Union(_dbContext.ImportLines
+                                .AsNoTracking()
+                                .Where(l => l.ImportFileId == id && (l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError))
+                                .Select(l => l.ContraAccountCode))
+                            .Where(c => c != null && c != "")
+                            .Distinct()
+                            .ToListAsync(cancellationToken);
+
+                        var invalid = codesInFile.Where(c => !accounts.ContainsKey(c!)).ToList();
+                        if (invalid.Count > 0)
+                        {
+                            TempData["Error"] = $"Importacao bloqueada: {invalid.Count} conta(s) nao encontrada(s) no plano de contas do SAP ({string.Join(", ", invalid.Take(10))}). Corrija o arquivo ou cadastre as contas no SAP.";
+                            return RedirectToAction(nameof(Preview), new { id });
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falha na validacao pre-confirm de contas (nao-critico, prosseguindo).");
+        }
+
         using var runToken = new CancellationTokenSource(TimeSpan.FromMinutes(15));
 
         try

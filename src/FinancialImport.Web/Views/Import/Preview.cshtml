@@ -4,14 +4,17 @@
     ViewData["Title"] = "Pre-visualizacao da Importacao";
     var totalCredit = Model.Groups.Sum(g => g.TotalCredit);
     var totalDebit = Model.Groups.Sum(g => g.TotalDebit);
+    var hasInvalidAccounts = Model.AccountsValidated && Model.InvalidAccountCodes.Count > 0;
     var canConfirm = Model.ValidLines > 0
+        && !hasInvalidAccounts
         && Model.Status != ImportStatus.Completed
         && Model.Status != ImportStatus.PartiallyCompleted
         && Model.Status != ImportStatus.Processing
         && Model.Status != ImportStatus.Failed;
-    var canReprocess = Model.Status == ImportStatus.Failed
+    var canReprocess = !hasInvalidAccounts
+        && (Model.Status == ImportStatus.Failed
         || Model.Status == ImportStatus.PartiallyCompleted
-        || Model.Status == ImportStatus.Cancelled;
+        || Model.Status == ImportStatus.Cancelled);
     var statusBadgeClass = Model.Status == ImportStatus.Completed ? "bg-success-subtle text-success-emphasis"
         : Model.Status == ImportStatus.PartiallyCompleted ? "bg-warning-subtle text-warning-emphasis"
         : Model.Status == ImportStatus.Failed ? "bg-danger-subtle text-danger-emphasis"
@@ -164,15 +167,16 @@
 
 @if (Model.InvalidAccountCodes.Count > 0)
 {
-    <div class="card mb-4 border-warning">
+    <div class="card mb-4 border-danger">
         <div class="card-body p-3">
-            <h6 class="fw-bold text-warning-emphasis mb-2">
-                <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                Contas nao encontradas no plano de contas do SAP (@Model.InvalidAccountCodes.Count)
+            <h6 class="fw-bold text-danger mb-2">
+                <i class="bi bi-shield-exclamation me-1"></i>
+                IMPORTACAO BLOQUEADA — @Model.InvalidAccountCodes.Count conta(s) nao encontrada(s) no SAP
             </h6>
-            <p class="small text-muted mb-2">
-                As contas abaixo nao existem na empresa atual. O SAP rejeitara os lancamentos que usem esses codigos.
-                Corrija o arquivo antes de confirmar.
+            <p class="small text-danger-emphasis mb-2">
+                <strong>A importacao esta bloqueada</strong> porque as contas abaixo nao existem no plano de contas da empresa atual.
+                Corrija o arquivo Excel e reimporte, ou cadastre essas contas no SAP antes de confirmar.
+                Clique em uma conta para filtrar os grupos que a utilizam.
             </p>
             <div class="d-flex flex-wrap gap-2">
                 @foreach (var code in Model.InvalidAccountCodes.Take(50))
