@@ -228,11 +228,9 @@ public class ImportController : Controller
             .ThenBy(g => g.Reference)
             .ToListAsync(cancellationToken);
 
-        // Best-effort account validation against the SAP chart of accounts.
-        // Only runs when a SAP session already exists for this user + company,
-        // so the preview page loads fast for users that haven't logged in to
-        // SAP yet. Invalid codes shown here give the user a chance to fix the
-        // file before confirming (avoiding a run that fails group-by-group).
+        // Account validation: try live re-check against SAP chart of accounts.
+        // If the SAP session is unavailable, fall back to what was already
+        // validated during upload (lines marked Invalid with account messages).
         var invalidAccounts = new List<string>();
         var accountsValidated = false;
         try
@@ -270,6 +268,31 @@ public class ImportController : Controller
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Falha ao validar contas contra o plano de contas do SAP no preview (nao-critico).");
+        }
+
+        // Fallback: if live re-check didn't run, extract invalid accounts
+        // from lines already flagged during upload.
+        if (!accountsValidated)
+        {
+            var invalidFilter = _dbContext.ImportLines
+                .AsNoTracking()
+                .Where(l => l.ImportFileId == id
+                    && l.Status == ImportLineStatus.Invalid
+                    && l.ValidationMessage != null
+                    && l.ValidationMessage.Contains("nao encontrada no plano de contas"));
+
+            var accountErrors = await invalidFilter
+                .Select(l => l.AccountCode)
+                .Union(invalidFilter.Select(l => l.ContraAccountCode))
+                .Where(c => c != null && c != "")
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            if (accountErrors.Count > 0)
+            {
+                invalidAccounts = accountErrors.OrderBy(c => c).ToList()!;
+                accountsValidated = true;
+            }
         }
 
         // Recalculate counters from actual line statuses so the header
