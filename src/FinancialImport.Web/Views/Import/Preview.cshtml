@@ -332,7 +332,7 @@ else
                                                 var canEditAccount = (line.Status == ImportLineStatus.SapError || line.Status == ImportLineStatus.Invalid)
                                                                      && Model.Status != ImportStatus.Processing
                                                                      && Model.Status != ImportStatus.Completed;
-                                                <tr class="@rowClass">
+                                                <tr class="@rowClass" data-line-accounts="@line.AccountCode @line.ContraAccountCode">
                                                     <td>
                                                         <span class="badge @rowBadge">@line.Status</span>
                                                     </td>
@@ -477,8 +477,10 @@ else
             var cards = document.querySelectorAll('.group-card');
 
             function applyFilter(account) {
+                var rows = document.querySelectorAll('tr[data-line-accounts]');
                 if (!account) {
                     cards.forEach(function (c) { c.style.display = ''; });
+                    rows.forEach(function (r) { r.style.opacity = ''; r.style.backgroundColor = ''; });
                     bar.classList.add('d-none');
                     bar.classList.remove('d-flex');
                     chips.forEach(function (c) { c.classList.remove('active', 'btn-warning'); });
@@ -494,6 +496,17 @@ else
                         visible++;
                     } else {
                         c.style.display = 'none';
+                    }
+                });
+
+                rows.forEach(function (r) {
+                    var lineAccounts = (r.getAttribute('data-line-accounts') || '').toLowerCase().split(/\s+/);
+                    if (lineAccounts.indexOf(needle) !== -1) {
+                        r.style.opacity = '';
+                        r.style.backgroundColor = 'rgba(255, 193, 7, 0.15)';
+                    } else {
+                        r.style.opacity = '0.4';
+                        r.style.backgroundColor = '';
                     }
                 });
 
