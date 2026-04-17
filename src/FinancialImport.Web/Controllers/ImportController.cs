@@ -702,7 +702,7 @@ public class ImportController : Controller
     public async Task<IActionResult> UpdateAccounts(long id, Dictionary<long, string> accountCode, Dictionary<long, string> contraAccountCode, CancellationToken cancellationToken)
     {
         var importFile = await _dbContext.ImportFiles
-            .Include(f => f.Lines.Where(l => l.Status == ImportLineStatus.SapError))
+            .Include(f => f.Lines.Where(l => l.Status == ImportLineStatus.SapError || l.Status == ImportLineStatus.Invalid))
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
 
         if (importFile == null)
@@ -739,12 +739,54 @@ public class ImportController : Controller
             if (changed)
             {
                 line.SapReturnMessage = null;
+                line.ValidationMessage = null;
+                line.Status = ImportLineStatus.Valid;
                 updated++;
             }
         }
 
         if (updated > 0)
         {
+            // Re-validate updated accounts against the chart of accounts
+            try
+            {
+                var userIdClaim = User.FindFirst("user_id")?.Value;
+                if (long.TryParse(userIdClaim, out var userId))
+                {
+                    var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+                    if (session != null)
+                    {
+                        var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
+                        if (accounts.Count > 0)
+                        {
+                            foreach (var line in importFile.Lines.Where(l => l.Status == ImportLineStatus.Valid))
+                            {
+                                var acctOk = string.IsNullOrWhiteSpace(line.AccountCode) || accounts.ContainsKey(line.AccountCode);
+                                var contraOk = string.IsNullOrWhiteSpace(line.ContraAccountCode) || accounts.ContainsKey(line.ContraAccountCode);
+                                if (!acctOk || !contraOk)
+                                {
+                                    line.Status = ImportLineStatus.Invalid;
+                                    var msgs = new List<string>();
+                                    if (!acctOk) msgs.Add($"Conta '{line.AccountCode}' nao encontrada no plano de contas do SAP.");
+                                    if (!contraOk) msgs.Add($"Contrapartida '{line.ContraAccountCode}' nao encontrada no plano de contas do SAP.");
+                                    line.ValidationMessage = string.Join("; ", msgs);
+                                }
+                                else
+                                {
+                                    line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode!, accounts);
+                                    if (!string.IsNullOrWhiteSpace(line.ContraAccountCode))
+                                        line.ContraAccountCode = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to re-validate accounts after update.");
+            }
+
             // Clear failed dispatches so Reprocess retries these groups
             var affectedHashes = importFile.Lines
                 .Where(l => accountCode.ContainsKey(l.Id) || contraAccountCode.ContainsKey(l.Id))
@@ -772,7 +814,7 @@ public class ImportController : Controller
                 CompanyDb = CurrentCompany
             }, CancellationToken.None);
 
-            TempData["Success"] = $"{updated} conta(s) atualizada(s). Clique em Reprocessar para reenviar ao SAP.";
+            TempData["Success"] = $"{updated} conta(s) atualizada(s). As contas foram revalidadas.";
         }
         else
         {

@@ -295,7 +295,7 @@ else
                         <div id="@collapseId" class="accordion-collapse collapse"
                              aria-labelledby="@headingId" data-bs-parent="#groupsAccordion">
                             <div class="accordion-body p-0">
-                                @{ var hasEditableLines = group.Lines.Any(l => l.Status == ImportLineStatus.SapError && Model.Status != ImportStatus.Processing && Model.Status != ImportStatus.Completed); }
+                                @{ var hasEditableLines = group.Lines.Any(l => (l.Status == ImportLineStatus.SapError || l.Status == ImportLineStatus.Invalid) && Model.Status != ImportStatus.Processing && Model.Status != ImportStatus.Completed); }
                                 <form asp-action="UpdateAccounts" asp-route-id="@Model.ImportFileId" method="post">
                                 @Html.AntiForgeryToken()
                                 <div class="table-responsive">
@@ -326,10 +326,10 @@ else
                                                     : line.Status == ImportLineStatus.Excluded ? "bg-secondary-subtle text-secondary-emphasis"
                                                     : "bg-secondary-subtle text-secondary-emphasis";
                                                 var rowClass = line.Status == ImportLineStatus.Excluded ? "text-muted text-decoration-line-through" : "";
-                                                var canExcludeLine = (line.Status == ImportLineStatus.Valid || line.Status == ImportLineStatus.SapError)
+                                                var canExcludeLine = (line.Status == ImportLineStatus.Valid || line.Status == ImportLineStatus.SapError || line.Status == ImportLineStatus.Invalid)
                                                                      && Model.Status != ImportStatus.Processing
                                                                      && Model.Status != ImportStatus.Completed;
-                                                var canEditAccount = line.Status == ImportLineStatus.SapError
+                                                var canEditAccount = (line.Status == ImportLineStatus.SapError || line.Status == ImportLineStatus.Invalid)
                                                                      && Model.Status != ImportStatus.Processing
                                                                      && Model.Status != ImportStatus.Completed;
                                                 <tr class="@rowClass">
