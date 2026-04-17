@@ -295,8 +295,9 @@ else
                         <div id="@collapseId" class="accordion-collapse collapse"
                              aria-labelledby="@headingId" data-bs-parent="#groupsAccordion">
                             <div class="accordion-body p-0">
-                              @{ var hasEditableLines = group.Lines.Any(l => l.Status == ImportLineStatus.SapError && Model.Status != ImportStatus.Processing && Model.Status != ImportStatus.Completed); }
-                              @if (hasEditableLines) { <form asp-action="UpdateAccounts" asp-route-id="@Model.ImportFileId" method="post"> @Html.AntiForgeryToken() }
+                              var hasEditableLines = group.Lines.Any(l => l.Status == ImportLineStatus.SapError && Model.Status != ImportStatus.Processing && Model.Status != ImportStatus.Completed);
+                                <form asp-action="UpdateAccounts" asp-route-id="@Model.ImportFileId" method="post">
+                                @Html.AntiForgeryToken()
                                 <div class="table-responsive">
                                     <table class="table table-sm mb-0 small">
                                         <thead class="table-light">
@@ -413,8 +414,7 @@ else
                                         </button>
                                     </div>
                                 }
-                              @if (hasEditableLines) { </form> }
-                            </div>
+                                </form>
                         </div>
                     </div>
                 }
