@@ -4,6 +4,7 @@ using FinancialImport.Application.Imports;
 using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Messaging;
 using FinancialImport.Application.Sap;
+using FinancialImport.Application.Settings;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
@@ -39,6 +40,8 @@ public sealed class ImportService : IImportService
     private readonly ICommandBus _commandBus;
     private readonly ISapSessionStore _sapSessionStore;
     private readonly ISapChartOfAccountsService _chartOfAccounts;
+    private readonly ISapCompanySessionService _sapSessionService;
+    private readonly ISystemSettingsService _settings;
     private readonly IAuditLogger _audit;
     private readonly ICorrelationContextAccessor _correlation;
     private readonly ImportProcessingOptions _processingOptions;
@@ -58,6 +61,8 @@ public sealed class ImportService : IImportService
         ICommandBus commandBus,
         ISapSessionStore sapSessionStore,
         ISapChartOfAccountsService chartOfAccounts,
+        ISapCompanySessionService sapSessionService,
+        ISystemSettingsService settings,
         IAuditLogger audit,
         ICorrelationContextAccessor correlation,
         IOptions<ImportProcessingOptions> processingOptions,
@@ -76,6 +81,8 @@ public sealed class ImportService : IImportService
         _commandBus = commandBus;
         _sapSessionStore = sapSessionStore;
         _chartOfAccounts = chartOfAccounts;
+        _sapSessionService = sapSessionService;
+        _settings = settings;
         _audit = audit;
         _correlation = correlation;
         _processingOptions = processingOptions.Value;
@@ -234,7 +241,26 @@ public sealed class ImportService : IImportService
         try
         {
             var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
-            if (session != null && session.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase))
+            if (session == null || !session.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("No active SAP session found for user {UserId} / company '{CompanyDb}'. Auto-creating...", userId, companyDb);
+                var loginResult = await _sapSessionService.SignInCompanyAsync(
+                    companyDb,
+                    _settings.Get("Sap:UserName") ?? "",
+                    _settings.Get("Sap:Password") ?? "",
+                    cancellationToken);
+                if (loginResult.Success)
+                {
+                    session = loginResult.Session;
+                    _logger.LogInformation("SAP session auto-created for company '{CompanyDb}'.", companyDb);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to auto-create SAP session for '{CompanyDb}': {Error}", companyDb, loginResult.ErrorMessage);
+                }
+            }
+
+            if (session != null)
             {
                 var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
                 if (accounts.Count > 0)
@@ -303,10 +329,6 @@ public sealed class ImportService : IImportService
                 {
                     _logger.LogWarning("ChartOfAccounts returned empty for company '{CompanyDb}'. Skipping account validation.", companyDb);
                 }
-            }
-            else
-            {
-                _logger.LogInformation("No active SAP session for user {UserId} / company '{CompanyDb}'. Account validation skipped during upload.", userId, companyDb);
             }
         }
         catch (Exception ex)
