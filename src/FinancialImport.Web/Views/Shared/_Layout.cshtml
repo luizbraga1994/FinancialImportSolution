@@ -45,20 +45,21 @@
     {
         <!-- SIDEBAR -->
         <aside class="sidebar d-flex flex-column" id="sidebar">
-            <div class="sidebar-brand">
+            <div class="sidebar-brand @(!string.IsNullOrWhiteSpace(sidebarLogo) ? "flex-column text-center py-3" : "")">
                 @{
                     var sidebarLogo = AppSettings.Get("Aparencia:LogoUrl");
                     var sidebarAppName = AppSettings.Get("Aparencia:AppName") ?? "Financial Import";
                 }
                 @if (!string.IsNullOrWhiteSpace(sidebarLogo))
                 {
-                    <img src="@sidebarLogo" alt="@sidebarAppName" style="height: 28px; width: auto;" class="me-2" />
+                    <img src="@sidebarLogo" alt="@sidebarAppName" style="max-height: 40px; max-width: 180px; width: auto;" class="mb-1" />
+                    <span style="font-size: 0.8rem;">@sidebarAppName</span>
                 }
                 else
                 {
                     <i class="bi bi-stack me-2"></i>
+                    <span>@sidebarAppName</span>
                 }
-                <span>@sidebarAppName</span>
             </div>
 
             <nav class="sidebar-nav flex-grow-1">
