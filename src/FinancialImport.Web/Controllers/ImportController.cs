@@ -609,7 +609,6 @@ public class ImportController : Controller
         }
 
         var importFile = await _dbContext.ImportFiles
-            .Include(f => f.Lines)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
 
         if (importFile == null)
@@ -624,10 +623,11 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Preview), new { id });
         }
 
-        var affected = importFile.Lines
-            .Where(l => l.GroupKeyHash == groupKeyHash
-                     && (l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError))
-            .ToList();
+        var affected = await _dbContext.ImportLines
+            .Where(l => l.ImportFileId == id
+                     && l.GroupKeyHash == groupKeyHash
+                     && (l.Status == ImportLineStatus.Valid || l.Status == ImportLineStatus.SapError || l.Status == ImportLineStatus.Invalid))
+            .ToListAsync(cancellationToken);
 
         if (affected.Count == 0)
         {
@@ -641,9 +641,6 @@ public class ImportController : Controller
             line.Status = ImportLineStatus.Excluded;
             line.ValidationMessage = "Excluido pelo operador antes do envio ao SAP.";
         }
-
-        // Recount so the header counters stay accurate
-        importFile.ValidLines = importFile.Lines.Count(l => l.Status == ImportLineStatus.Valid);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -680,7 +677,6 @@ public class ImportController : Controller
     public async Task<IActionResult> ExcludeLine(long id, long lineId, CancellationToken cancellationToken)
     {
         var importFile = await _dbContext.ImportFiles
-            .Include(f => f.Lines)
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
 
         if (importFile == null)
@@ -695,14 +691,16 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Preview), new { id });
         }
 
-        var line = importFile.Lines.FirstOrDefault(l => l.Id == lineId);
+        var line = await _dbContext.ImportLines
+            .FirstOrDefaultAsync(l => l.Id == lineId && l.ImportFileId == id, cancellationToken);
+
         if (line == null)
         {
             TempData["Error"] = "Linha nao encontrada.";
             return RedirectToAction(nameof(Preview), new { id });
         }
 
-        if (line.Status != ImportLineStatus.Valid && line.Status != ImportLineStatus.SapError)
+        if (line.Status != ImportLineStatus.Valid && line.Status != ImportLineStatus.SapError && line.Status != ImportLineStatus.Invalid)
         {
             TempData["Error"] = $"Linha com status '{line.Status}' nao pode ser excluida.";
             return RedirectToAction(nameof(Preview), new { id });
@@ -710,8 +708,6 @@ public class ImportController : Controller
 
         line.Status = ImportLineStatus.Excluded;
         line.ValidationMessage = "Excluida pelo operador antes do envio ao SAP.";
-
-        importFile.ValidLines = importFile.Lines.Count(l => l.Status == ImportLineStatus.Valid);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
