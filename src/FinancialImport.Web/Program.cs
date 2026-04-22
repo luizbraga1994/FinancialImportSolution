@@ -7,6 +7,7 @@ using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -106,8 +107,7 @@ if (!app.Environment.IsDevelopment())
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
-                     | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
 app.UseMiddleware<CorrelationIdMiddleware>();
@@ -124,8 +124,16 @@ app.UseSerilogRequestLogging(options =>
     };
 });
 
-app.UseHttpsRedirection();
+// NÃO redireciona para HTTPS quando for desafio do Let's Encrypt/ACME
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/.well-known/acme-challenge"),
+    appBuilder =>
+    {
+        appBuilder.UseHttpsRedirection();
+    });
+
 app.UseStaticFiles();
+
 app.UseRouting();
 
 app.UseAuthentication();
