@@ -121,6 +121,9 @@
                         <div class="sidebar-user-name">@(User.FindFirst("name")?.Value ?? User.Identity?.Name ?? "Usuario")</div>
                         <div class="sidebar-user-role">@(User.HasClaim("global_admin", "true") ? "Administrador" : "Operador")</div>
                     </div>
+                    <a href="@Url.Action("ChangePassword", "Account")" class="btn btn-link sidebar-logout-btn p-0 me-2" title="Alterar Senha">
+                        <i class="bi bi-key"></i>
+                    </a>
                     <form asp-controller="Account" asp-action="Logout" method="post" class="d-inline" data-loading data-loading-message="Saindo...">
                         @Html.AntiForgeryToken()
                         <button type="submit" class="btn btn-link sidebar-logout-btn p-0" title="Sair">
