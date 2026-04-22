@@ -302,7 +302,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Outbox:ClaimTimeoutSeconds",     Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "120",  Descricao = "Timeout de reserva de mensagem em segundos" },
 
             // ── CORS (API) ───────────────────────────────────────────────────
-            new() { Chave = "Cors:AllowedOrigins",       Categoria = "Seguranca",  TipoDado = "list",   Obrigatorio = false, Valor = "http://localhost:5000,https://localhost:7000", Descricao = "Origens permitidas pelo CORS (separadas por virgula)" },
+            new() { Chave = "Cors:AllowedOrigins",       Categoria = "Seguranca",  TipoDado = "list",   Obrigatorio = false, Valor = "https://financialimport.aconsulting.com,http://localhost:5000,https://localhost:7000,https://localhost:7146", Descricao = "Origens permitidas pelo CORS (separadas por virgula)" },
         };
 
         int added = 0;

@@ -85,10 +85,17 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowWeb", policy =>
     {
-        // Allowed origins are read from DB settings at startup after PreloadCacheAsync.
-        // Wildcard fallback for dev when not yet configured.
-        policy.SetIsOriginAllowed(_ => true)
-            .AllowAnyHeader()
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(_ => true);
+        }
+        else
+        {
+            policy.WithOrigins(
+                "https://financialimport.aconsulting.com",
+                "http://financialimport.aconsulting.com");
+        }
+        policy.AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
     });
@@ -149,6 +156,12 @@ using (var scope = app.Services.CreateScope())
 app.Services.ProvisionMessagingTopology();
 
 // --- Middleware pipeline ---
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                     | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+});
+
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseMiddleware<CorrelationIdMiddleware>();
 
