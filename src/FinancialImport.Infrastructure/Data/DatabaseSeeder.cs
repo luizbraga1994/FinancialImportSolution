@@ -237,9 +237,15 @@ public sealed class DatabaseSeeder
             new() { Chave = "Layout:DefaultTipoLancLayout1", Categoria = "Layout", TipoDado = "string", Obrigatorio = false, Valor = "D", Descricao = "Tipo de lancamento padrao para o Layout 1 (D=Debito, C=Credito)" },
 
             // ── Aparencia ───────────────────────────────────────────────────
-            new() { Chave = "Aparencia:LogoUrl",     Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "",                 Descricao = "URL da logo personalizada (ex: /uploads/logo.png). Deixe vazio para usar o icone padrao." },
-            new() { Chave = "Aparencia:AppName",     Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Financial Import", Descricao = "Nome da aplicacao exibido no sidebar e login" },
-            new() { Chave = "Aparencia:AppSubtitle", Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Plataforma de importacao contabil integrada ao SAP Business One", Descricao = "Subtitulo exibido na tela de login" },
+            new() { Chave = "Aparencia:LogoUrl",        Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "",                 Descricao = "URL da logo personalizada (ex: /uploads/logo.png). Deixe vazio para usar o icone padrao." },
+            new() { Chave = "Aparencia:AppName",        Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Financial Import", Descricao = "Nome da aplicacao exibido no sidebar e login" },
+            new() { Chave = "Aparencia:AppSubtitle",    Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Plataforma de importacao contabil integrada ao SAP Business One", Descricao = "Subtitulo exibido na tela de login" },
+            new() { Chave = "Aparencia:CorSidebar",     Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#0f172a",          Descricao = "Cor de fundo do menu lateral (sidebar)" },
+            new() { Chave = "Aparencia:CorSidebarHover", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "#1e293b",          Descricao = "Cor de hover dos itens do menu lateral" },
+            new() { Chave = "Aparencia:CorPrimaria",    Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#3b82f6",          Descricao = "Cor primaria (botoes, links ativos, destaques)" },
+            new() { Chave = "Aparencia:CorFundo",       Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#f1f5f9",          Descricao = "Cor de fundo da pagina principal" },
+            new() { Chave = "Aparencia:CorTextoSidebar", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "#94a3b8",          Descricao = "Cor do texto inativo no menu lateral" },
+            new() { Chave = "Aparencia:CorLoginFundo",  Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#0f172a",          Descricao = "Cor de fundo do painel esquerdo da tela de login" },
 
             // ── Mensageria (RabbitMQ) ────────────────────────────────────────
             new() { Chave = "RabbitMq:Enabled",          Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",                         Descricao = "Habilitar integracao com RabbitMQ" },

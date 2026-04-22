@@ -9,6 +9,36 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
+    @{
+        var corSidebar = AppSettings.Get("Aparencia:CorSidebar");
+        var corSidebarHover = AppSettings.Get("Aparencia:CorSidebarHover");
+        var corPrimaria = AppSettings.Get("Aparencia:CorPrimaria");
+        var corFundo = AppSettings.Get("Aparencia:CorFundo");
+        var corTextoSidebar = AppSettings.Get("Aparencia:CorTextoSidebar");
+        var hasCustomColors = !string.IsNullOrWhiteSpace(corSidebar) || !string.IsNullOrWhiteSpace(corPrimaria)
+                           || !string.IsNullOrWhiteSpace(corFundo) || !string.IsNullOrWhiteSpace(corTextoSidebar);
+    }
+    @if (hasCustomColors)
+    {
+        <style>
+            :root {
+                @if (!string.IsNullOrWhiteSpace(corSidebar)) { @Html.Raw($"--sidebar-bg: {corSidebar};") }
+                @if (!string.IsNullOrWhiteSpace(corSidebarHover)) { @Html.Raw($"--sidebar-hover: {corSidebarHover};") }
+                @if (!string.IsNullOrWhiteSpace(corPrimaria)) { @Html.Raw($"--sidebar-active: {corPrimaria};") }
+                @if (!string.IsNullOrWhiteSpace(corFundo)) { @Html.Raw($"--body-bg: {corFundo};") }
+                @if (!string.IsNullOrWhiteSpace(corTextoSidebar)) { @Html.Raw($"--sidebar-text: {corTextoSidebar};") }
+            }
+            @if (!string.IsNullOrWhiteSpace(corPrimaria))
+            {
+                @Html.Raw($@"
+                .btn-primary {{ background-color: {corPrimaria}; border-color: {corPrimaria}; }}
+                .btn-primary:hover {{ background-color: {corPrimaria}; border-color: {corPrimaria}; filter: brightness(0.9); }}
+                .sidebar-link.active {{ color: {corPrimaria}; border-left-color: {corPrimaria}; background: rgba(59,130,246,0.1); }}
+                a {{ color: {corPrimaria}; }}
+                ")
+            }
+        </style>
+    }
 </head>
 <body>
     @if (User.Identity?.IsAuthenticated == true)

@@ -5,6 +5,8 @@
     var logoUrl = AppSettings.Get("Aparencia:LogoUrl");
     var appName = AppSettings.Get("Aparencia:AppName") ?? "Financial Import";
     var appSubtitle = AppSettings.Get("Aparencia:AppSubtitle") ?? "Plataforma de importacao contabil integrada ao SAP Business One";
+    var corLoginFundo = AppSettings.Get("Aparencia:CorLoginFundo");
+    var corPrimaria = AppSettings.Get("Aparencia:CorPrimaria");
 }
 
 <!DOCTYPE html>
@@ -204,6 +206,17 @@
         }
 
         @@keyframes spin { to { transform: rotate(360deg); } }
+
+        @if (!string.IsNullOrWhiteSpace(corLoginFundo))
+        {
+            @:.login-brand { background: linear-gradient(160deg, @corLoginFundo 0%, @corLoginFundo 100%) !important; }
+        }
+        @if (!string.IsNullOrWhiteSpace(corPrimaria))
+        {
+            @:.btn-signin { background: @corPrimaria !important; border-color: @corPrimaria !important; }
+            @:.btn-signin:hover:not(:disabled) { filter: brightness(0.9); background: @corPrimaria !important; }
+            @:.step.active .step-bar { background: @corPrimaria !important; }
+        }
     </style>
 </head>
 <body>
