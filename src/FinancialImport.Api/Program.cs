@@ -173,7 +173,12 @@ app.UseSwaggerUI(options =>
 });
 
 app.UseSerilogRequestLogging();
-app.UseHttpsRedirection();
+
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/.well-known/acme-challenge"),
+    appBuilder => appBuilder.UseHttpsRedirection());
+
+app.UseStaticFiles();
 
 app.UseCors("AllowWeb");
 app.UseAuthentication();
