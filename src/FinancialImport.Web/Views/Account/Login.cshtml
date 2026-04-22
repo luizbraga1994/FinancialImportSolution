@@ -1,6 +1,10 @@
 @model FinancialImport.Web.Controllers.LoginViewModel
+@inject FinancialImport.Application.Settings.ISystemSettingsService AppSettings
 @{
     Layout = null;
+    var logoUrl = AppSettings.Get("Aparencia:LogoUrl");
+    var appName = AppSettings.Get("Aparencia:AppName") ?? "Financial Import";
+    var appSubtitle = AppSettings.Get("Aparencia:AppSubtitle") ?? "Plataforma de importacao contabil integrada ao SAP Business One";
 }
 
 <!DOCTYPE html>
@@ -204,9 +208,16 @@
 </head>
 <body>
     <div class="login-brand">
-        <div class="brand-icon-wrapper"><i class="bi bi-stack"></i></div>
-        <h1>Financial Import</h1>
-        <p>Plataforma de importacao contabil integrada ao SAP Business One</p>
+        @if (!string.IsNullOrWhiteSpace(logoUrl))
+        {
+            <img src="@logoUrl" alt="@appName" style="max-height: 88px; max-width: 200px;" class="mb-3" />
+        }
+        else
+        {
+            <div class="brand-icon-wrapper"><i class="bi bi-stack"></i></div>
+        }
+        <h1>@appName</h1>
+        <p>@appSubtitle</p>
     </div>
 
     <div class="login-form-panel">

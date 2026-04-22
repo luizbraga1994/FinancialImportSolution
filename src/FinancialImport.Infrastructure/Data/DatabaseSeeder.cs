@@ -236,6 +236,11 @@ public sealed class DatabaseSeeder
             // ── Layout ───────────────────────────────────────────────────────
             new() { Chave = "Layout:DefaultTipoLancLayout1", Categoria = "Layout", TipoDado = "string", Obrigatorio = false, Valor = "D", Descricao = "Tipo de lancamento padrao para o Layout 1 (D=Debito, C=Credito)" },
 
+            // ── Aparencia ───────────────────────────────────────────────────
+            new() { Chave = "Aparencia:LogoUrl",     Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "",                 Descricao = "URL da logo personalizada (ex: /uploads/logo.png). Deixe vazio para usar o icone padrao." },
+            new() { Chave = "Aparencia:AppName",     Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Financial Import", Descricao = "Nome da aplicacao exibido no sidebar e login" },
+            new() { Chave = "Aparencia:AppSubtitle", Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Plataforma de importacao contabil integrada ao SAP Business One", Descricao = "Subtitulo exibido na tela de login" },
+
             // ── Mensageria (RabbitMQ) ────────────────────────────────────────
             new() { Chave = "RabbitMq:Enabled",          Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",                         Descricao = "Habilitar integracao com RabbitMQ" },
             new() { Chave = "RabbitMq:HostName",         Categoria = "Mensageria", TipoDado = "string", Obrigatorio = false, Valor = "localhost",                      Descricao = "Host do servidor RabbitMQ" },
