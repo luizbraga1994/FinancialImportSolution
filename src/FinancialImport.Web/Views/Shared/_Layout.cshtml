@@ -15,11 +15,12 @@
         var corSidebarHover = AppSettings.Get("Aparencia:CorSidebarHover");
         var corPrimaria = AppSettings.Get("Aparencia:CorPrimaria");
         var corMenuAtivo = AppSettings.Get("Aparencia:CorMenuAtivo");
+        var corMenuAtivoFundo = AppSettings.Get("Aparencia:CorMenuAtivoFundo");
         var corFundo = AppSettings.Get("Aparencia:CorFundo");
         var corTextoSidebar = AppSettings.Get("Aparencia:CorTextoSidebar");
         var hasCustomColors = !string.IsNullOrWhiteSpace(corSidebar) || !string.IsNullOrWhiteSpace(corPrimaria)
                            || !string.IsNullOrWhiteSpace(corFundo) || !string.IsNullOrWhiteSpace(corTextoSidebar)
-                           || !string.IsNullOrWhiteSpace(corMenuAtivo);
+                           || !string.IsNullOrWhiteSpace(corMenuAtivo) || !string.IsNullOrWhiteSpace(corMenuAtivoFundo);
         var hasSidebarGradient = !string.IsNullOrWhiteSpace(corSidebar) && !string.IsNullOrWhiteSpace(corSidebarFim);
         var activeMenuColor = !string.IsNullOrWhiteSpace(corMenuAtivo) ? corMenuAtivo : corPrimaria;
     }
@@ -37,9 +38,12 @@
             {
                 @Html.Raw($".sidebar {{ background: linear-gradient(180deg, {corSidebar} 0%, {corSidebarFim} 100%) !important; }}")
             }
-            @if (!string.IsNullOrWhiteSpace(activeMenuColor))
+            @if (!string.IsNullOrWhiteSpace(activeMenuColor) || !string.IsNullOrWhiteSpace(corMenuAtivoFundo))
             {
-                @Html.Raw($".sidebar-link.active {{ color: {activeMenuColor}; border-left-color: {activeMenuColor}; }}")
+                var activeBg = !string.IsNullOrWhiteSpace(corMenuAtivoFundo) ? corMenuAtivoFundo : "rgba(255,255,255,0.1)";
+                var activeBorder = !string.IsNullOrWhiteSpace(activeMenuColor) ? activeMenuColor : "#fff";
+                var activeText = !string.IsNullOrWhiteSpace(activeMenuColor) ? activeMenuColor : "#fff";
+                @Html.Raw($".sidebar-link.active {{ color: {activeText}; border-left-color: {activeBorder}; background: {activeBg} !important; }}")
             }
             @if (!string.IsNullOrWhiteSpace(corPrimaria))
             {

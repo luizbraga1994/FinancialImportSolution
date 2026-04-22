@@ -245,6 +245,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Aparencia:CorSidebarHover", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "#2d1111",          Descricao = "Cor de hover dos itens do menu lateral" },
             new() { Chave = "Aparencia:CorPrimaria",    Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#dc2626",          Descricao = "Cor primaria (botoes, destaques)" },
             new() { Chave = "Aparencia:CorMenuAtivo",   Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#ffffff",          Descricao = "Cor do texto/icone do item de menu selecionado" },
+            new() { Chave = "Aparencia:CorMenuAtivoFundo", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "",               Descricao = "Cor de fundo do item de menu selecionado. Deixe vazio para usar uma versao transparente da cor do menu ativo." },
             new() { Chave = "Aparencia:CorFundo",       Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#faf5f5",          Descricao = "Cor de fundo da pagina principal" },
             new() { Chave = "Aparencia:CorTextoSidebar", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "#c4a0a0",          Descricao = "Cor do texto inativo no menu lateral" },
             new() { Chave = "Aparencia:CorLoginFundo",  Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#1a0a0a",          Descricao = "Cor de fundo do painel esquerdo da tela de login" },
