@@ -124,13 +124,13 @@ app.UseSerilogRequestLogging(options =>
     };
 });
 
-// NÃO redireciona para HTTPS quando for desafio do Let's Encrypt/ACME
-app.UseWhen(
-    context => !context.Request.Path.StartsWithSegments("/.well-known/acme-challenge"),
-    appBuilder =>
-    {
-        appBuilder.UseHttpsRedirection();
-    });
+//// NÃO redireciona para HTTPS quando for desafio do Let's Encrypt/ACME
+//app.UseWhen(
+//    context => !context.Request.Path.StartsWithSegments("/.well-known/acme-challenge"),
+//    appBuilder =>
+//    {
+//        appBuilder.UseHttpsRedirection();
+//    });
 
 app.UseStaticFiles();
 
