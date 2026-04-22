@@ -92,6 +92,8 @@ builder.Services.AddCors(options =>
         else
         {
             policy.WithOrigins(
+                "https://financialimport.aconsultingbr.com",
+                "http://financialimport.aconsultingbr.com",
                 "https://financialimport.aconsulting.com",
                 "http://financialimport.aconsulting.com");
         }
