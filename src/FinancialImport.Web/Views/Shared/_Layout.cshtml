@@ -11,12 +11,14 @@
     <link href="~/css/site.css" rel="stylesheet" asp-append-version="true" />
     @{
         var corSidebar = AppSettings.Get("Aparencia:CorSidebar");
+        var corSidebarFim = AppSettings.Get("Aparencia:CorSidebarFim");
         var corSidebarHover = AppSettings.Get("Aparencia:CorSidebarHover");
         var corPrimaria = AppSettings.Get("Aparencia:CorPrimaria");
         var corFundo = AppSettings.Get("Aparencia:CorFundo");
         var corTextoSidebar = AppSettings.Get("Aparencia:CorTextoSidebar");
         var hasCustomColors = !string.IsNullOrWhiteSpace(corSidebar) || !string.IsNullOrWhiteSpace(corPrimaria)
                            || !string.IsNullOrWhiteSpace(corFundo) || !string.IsNullOrWhiteSpace(corTextoSidebar);
+        var hasSidebarGradient = !string.IsNullOrWhiteSpace(corSidebar) && !string.IsNullOrWhiteSpace(corSidebarFim);
     }
     @if (hasCustomColors)
     {
@@ -27,6 +29,10 @@
                 @if (!string.IsNullOrWhiteSpace(corPrimaria)) { @Html.Raw($"--sidebar-active: {corPrimaria};") }
                 @if (!string.IsNullOrWhiteSpace(corFundo)) { @Html.Raw($"--body-bg: {corFundo};") }
                 @if (!string.IsNullOrWhiteSpace(corTextoSidebar)) { @Html.Raw($"--sidebar-text: {corTextoSidebar};") }
+            }
+            @if (hasSidebarGradient)
+            {
+                @Html.Raw($".sidebar {{ background: linear-gradient(180deg, {corSidebar} 0%, {corSidebarFim} 100%) !important; }}")
             }
             @if (!string.IsNullOrWhiteSpace(corPrimaria))
             {
