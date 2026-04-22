@@ -98,7 +98,8 @@
                     <div class="settings-fields">
                         @foreach (var setting in currentSettings)
                         {
-                            <div class="settings-field @(setting.Obrigatorio && string.IsNullOrWhiteSpace(setting.Valor) ? "field-missing" : "")">
+                            <div class="settings-field @(setting.Obrigatorio && string.IsNullOrWhiteSpace(setting.Valor) ? "field-missing" : "") @(setting.TipoDado == "color" ? "border-start border-3 ps-3" : "")"
+                                 @if (setting.TipoDado == "color") { <text>style="border-color: @(string.IsNullOrWhiteSpace(setting.Valor) ? "#ccc" : setting.Valor) !important;"</text> }>
                                 <label class="settings-label" for="field_@setting.Chave.Replace(":", "_")">
                                     @setting.Chave
                                     @if (setting.Obrigatorio)
@@ -158,18 +159,20 @@
                                     }
                                     else if (setting.TipoDado == "color")
                                     {
+                                        var colorFieldId = "field_" + setting.Chave.Replace(":", "_");
+                                        var colorPickerId = "color_" + setting.Chave.Replace(":", "_");
                                         <div class="d-flex align-items-center gap-2">
                                             <input type="color" class="form-control form-control-color"
-                                                   id="color_@setting.Chave.Replace(":", "_")"
+                                                   id="@colorPickerId"
                                                    value="@(string.IsNullOrWhiteSpace(setting.Valor) ? "#000000" : setting.Valor)"
-                                                   onchange="document.getElementById('field_@setting.Chave.Replace(":", "_")').value = this.value" />
+                                                   oninput="document.getElementById('@colorFieldId').value = this.value" />
                                             <input type="text" class="form-control settings-input font-monospace"
-                                                   id="field_@setting.Chave.Replace(":", "_")"
+                                                   id="@colorFieldId"
                                                    name="@setting.Chave"
                                                    value="@setting.Valor"
                                                    style="max-width: 120px;"
                                                    placeholder="#000000"
-                                                   onchange="document.getElementById('color_@setting.Chave.Replace(":", "_")').value = this.value" />
+                                                   oninput="document.getElementById('@colorPickerId').value = this.value" />
                                         </div>
                                     }
                                     else
