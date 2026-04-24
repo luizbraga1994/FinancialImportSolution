@@ -199,6 +199,35 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <script>
+            // Keep-alive: pings server every 5 minutes to slide the auth cookie
+            // and silently renew the SAP Service Layer session before it expires.
+            (function () {
+                var KEEPALIVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
+                function ping() {
+                    fetch('@Url.Action("KeepAlive", "Account")', {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        credentials: 'same-origin'
+                    })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        if (!data) return;
+                        if (!data.authenticated) {
+                            window.location.href = '@Url.Action("Login", "Account")';
+                        }
+                    })
+                    .catch(function () { /* silent */ });
+                }
+                setInterval(ping, KEEPALIVE_INTERVAL);
+                // First ping 1 minute after page load
+                setTimeout(ping, 60 * 1000);
+            })();
+        </script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

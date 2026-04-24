@@ -208,7 +208,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Sap:IgnoreSslErrors",      Categoria = "SAP",        TipoDado = "bool",     Obrigatorio = false, Valor = "false", Descricao = "Ignorar erros de certificado SSL" },
             new() { Chave = "Sap:TimeoutSeconds",       Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "180", Descricao = "Timeout de requisicao em segundos" },
             new() { Chave = "Sap:MaxRetryAttempts",     Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "3",   Descricao = "Numero maximo de tentativas de reconexao" },
-            new() { Chave = "Sap:SessionTimeoutMinutes",Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "25",  Descricao = "Minutos de inatividade antes de renovar sessao SAP" },
+            new() { Chave = "Sap:SessionTimeoutMinutes",Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "30",  Descricao = "Minutos de inatividade antes de renovar sessao SAP (renovada automaticamente pelo keep-alive)" },
 
             // ── Seguranca (JWT + Cookie) ─────────────────────────────────────
             new() { Chave = "Jwt:SecretKey",            Categoria = "Seguranca",  TipoDado = "password", Obrigatorio = true,  Descricao = "Chave secreta JWT (minimo 32 caracteres)" },
@@ -217,7 +217,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Jwt:ExpirationMinutes",    Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "480",  Descricao = "Validade do token JWT em minutos" },
             new() { Chave = "Jwt:RefreshExpirationMinutes", Categoria = "Seguranca", TipoDado = "int",   Obrigatorio = false, Valor = "1440", Descricao = "Validade do refresh token em minutos" },
             new() { Chave = "Jwt:ClockSkewMinutes",     Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "1",    Descricao = "Tolerancia de clock em minutos" },
-            new() { Chave = "Cookie:ExpirationHours",   Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "8",    Descricao = "Horas de validade do cookie de autenticacao" },
+            new() { Chave = "Cookie:ExpirationHours",   Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "12",   Descricao = "Horas de validade do cookie de autenticacao (renovado em cada acao do usuario)" },
 
             // ── Importacao ───────────────────────────────────────────────────
             new() { Chave = "Import:MaxFileSizeBytes",   Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "10485760",    Descricao = "Tamanho maximo do arquivo (bytes)" },

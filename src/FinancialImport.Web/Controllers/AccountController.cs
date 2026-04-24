@@ -38,6 +38,7 @@ public class AccountController : Controller
     private readonly IApplicationAuthService _authService;
     private readonly ISapCompanyDiscoveryService _companyDiscovery;
     private readonly ISapCompanySessionService _sapSessionService;
+    private readonly ISapSessionStore _sapSessionStore;
     private readonly ISystemSettingsService _settings;
     private readonly AppDbContext _dbContext;
     private readonly PasswordHasher _hasher;
@@ -49,6 +50,7 @@ public class AccountController : Controller
         IApplicationAuthService authService,
         ISapCompanyDiscoveryService companyDiscovery,
         ISapCompanySessionService sapSessionService,
+        ISapSessionStore sapSessionStore,
         ISystemSettingsService settings,
         AppDbContext dbContext,
         PasswordHasher hasher,
@@ -59,6 +61,7 @@ public class AccountController : Controller
         _authService = authService;
         _companyDiscovery = companyDiscovery;
         _sapSessionService = sapSessionService;
+        _sapSessionStore = sapSessionStore;
         _settings = settings;
         _dbContext = dbContext;
         _hasher = hasher;
@@ -359,6 +362,67 @@ public class AccountController : Controller
 
         TempData["Success"] = "Senha alterada com sucesso.";
         return RedirectToAction("Index", "Home");
+    }
+
+    /// <summary>
+    /// Heartbeat endpoint called periodically by the browser to keep
+    /// the authentication cookie alive (sliding) and refresh the SAP
+    /// Service Layer session when it is near expiration. Returns JSON
+    /// so the client can detect when re-authentication is required.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> KeepAlive(CancellationToken cancellationToken)
+    {
+        if (!User.Identity?.IsAuthenticated ?? true)
+            return Json(new { authenticated = false });
+
+        var userIdClaim = User.FindFirst(ClaimConstants.UserId)?.Value;
+        var companyDb = User.FindFirst(ClaimConstants.CompanyDb)?.Value;
+
+        var sapRenewed = false;
+        var sapActive = false;
+
+        if (long.TryParse(userIdClaim, out var userId) && !string.IsNullOrWhiteSpace(companyDb))
+        {
+            var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+            var now = DateTime.Now;
+            var nearExpiry = session == null
+                          || !session.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase)
+                          || (session.ExpiresAt - now).TotalMinutes < 5;
+
+            if (nearExpiry)
+            {
+                try
+                {
+                    var relogin = await _sapSessionService.SignInCompanyAsync(
+                        companyDb,
+                        _settings.Get("Sap:UserName") ?? "",
+                        _settings.Get("Sap:Password") ?? "",
+                        cancellationToken);
+                    if (relogin.Success)
+                    {
+                        sapRenewed = true;
+                        sapActive = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "KeepAlive failed to renew SAP session for {CompanyDb}.", companyDb);
+                }
+            }
+            else
+            {
+                sapActive = true;
+            }
+        }
+
+        return Json(new
+        {
+            authenticated = true,
+            sapActive,
+            sapRenewed,
+            serverTime = DateTime.Now.ToString("HH:mm:ss")
+        });
     }
 
     [HttpPost]

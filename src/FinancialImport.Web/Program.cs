@@ -33,8 +33,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/AccessDenied";
-        options.ExpireTimeSpan = TimeSpan.FromHours(8); // default; overridden after settings load
+        options.ExpireTimeSpan = TimeSpan.FromHours(12); // default; overridden after settings load
         options.SlidingExpiration = true;
+        options.Cookie.MaxAge = TimeSpan.FromHours(12);
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         options.Cookie.SameSite = SameSiteMode.Lax;
