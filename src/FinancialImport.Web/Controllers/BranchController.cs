@@ -63,7 +63,7 @@ public class BranchController : Controller
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
             var request = new HttpRequestMessage(HttpMethod.Get,
-                "BusinessPlaces?$select=BPLID,BPLName,AliasName,DefaultCurrency,Disabled&$orderby=BPLID");
+                "BusinessPlaces?$select=BPLID,BPLName,AliasName,Disabled&$orderby=BPLID");
             request.Headers.Add("B1SESSION", session.SessionId);
             if (!string.IsNullOrWhiteSpace(session.RouteId))
                 request.Headers.Add("ROUTEID", session.RouteId);

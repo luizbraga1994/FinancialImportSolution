@@ -32,7 +32,6 @@ else
                             <th style="width: 80px;">BPLID</th>
                             <th>Nome</th>
                             <th>Alias</th>
-                            <th>Moeda</th>
                             <th style="width: 100px;">Status</th>
                         </tr>
                     </thead>
@@ -47,7 +46,6 @@ else
                                 </td>
                                 <td class="fw-semibold">@branch.BPLName</td>
                                 <td class="text-muted">@(branch.AliasName ?? "-")</td>
-                                <td><code>@(branch.DefaultCurrency ?? "-")</code></td>
                                 <td>
                                     @if (branch.Disabled)
                                     {
