@@ -16,7 +16,7 @@ public class BranchViewModel
     public bool Disabled { get; set; }
 }
 
-[Authorize]
+[Authorize(Policy = "visualizar_filiais")]
 public class BranchController : Controller
 {
     private readonly ISapSessionStore _sapSessionStore;

@@ -91,9 +91,12 @@
                 <a href="@Url.Action("Index", "Company")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Company" ? "active" : "")" data-loading data-loading-message="Carregando empresas...">
                     <i class="bi bi-building"></i><span>Empresas</span>
                 </a>
-                <a href="@Url.Action("Index", "Branch")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Branch" ? "active" : "")" data-loading data-loading-message="Carregando filiais...">
-                    <i class="bi bi-geo-alt"></i><span>Filiais</span>
-                </a>
+                @if (User.HasClaim("global_admin", "True") || User.HasClaim("global_admin", "true") || User.HasClaim("permission", "visualizar_filiais"))
+                {
+                    <a href="@Url.Action("Index", "Branch")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Branch" ? "active" : "")" data-loading data-loading-message="Carregando filiais...">
+                        <i class="bi bi-geo-alt"></i><span>Filiais</span>
+                    </a>
+                }
 
                 <div class="sidebar-divider"></div>
                 <div class="sidebar-section-title">Sistema</div>

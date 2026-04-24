@@ -1,5 +1,6 @@
 using FinancialImport.Application.DependencyInjection;
 using FinancialImport.Application.Settings;
+using FinancialImport.Domain.Constants;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
 using FinancialImport.Infrastructure.Observability;
@@ -39,7 +40,17 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite = SameSiteMode.Lax;
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var code in PermissionCodes.All)
+    {
+        options.AddPolicy(code, policy =>
+            policy.RequireAssertion(ctx =>
+                ctx.User.HasClaim("global_admin", "True") ||
+                ctx.User.HasClaim("global_admin", "true") ||
+                ctx.User.HasClaim("permission", code)));
+    }
+});
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();

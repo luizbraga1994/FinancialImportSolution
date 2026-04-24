@@ -51,6 +51,7 @@ public sealed class DatabaseSeeder
             (PermissionCodes.VisualizarHistorico, "Visualizar Historico", "Importacao"),
             (PermissionCodes.ReprocessarImportacao, "Reprocessar Importacao", "Importacao"),
             (PermissionCodes.TrocarCompany, "Trocar Company", "Empresa"),
+            (PermissionCodes.VisualizarFiliais, "Visualizar Filiais", "Empresa"),
             (PermissionCodes.GerenciarUsuarios, "Gerenciar Usuarios", "Administracao"),
             (PermissionCodes.GerenciarPerfis, "Gerenciar Perfis", "Administracao"),
             (PermissionCodes.GerenciarPermissoes, "Gerenciar Permissoes", "Administracao"),
@@ -116,7 +117,8 @@ public sealed class DatabaseSeeder
                 .Where(p => p.IsActive && (
                     p.Code == PermissionCodes.ImportarLancamentos ||
                     p.Code == PermissionCodes.VisualizarHistorico ||
-                    p.Code == PermissionCodes.TrocarCompany))
+                    p.Code == PermissionCodes.TrocarCompany ||
+                    p.Code == PermissionCodes.VisualizarFiliais))
                 .ToListAsync(cancellationToken);
 
             foreach (var permission in operatorPermissions)
