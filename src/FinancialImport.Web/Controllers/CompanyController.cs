@@ -2,12 +2,14 @@ using System.Security.Claims;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Settings;
+using FinancialImport.Infrastructure.Data;
 using FinancialImport.Shared.Logging;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinancialImport.Web.Controllers;
 
@@ -17,23 +19,44 @@ public class CompanyController : Controller
     private readonly ISapCompanyDiscoveryService _discoveryService;
     private readonly ISapCompanySessionService _sessionService;
     private readonly ISystemSettingsService _settings;
+    private readonly AppDbContext _dbContext;
     private readonly IAuditLogger _audit;
 
     public CompanyController(
         ISapCompanyDiscoveryService discoveryService,
         ISapCompanySessionService sessionService,
         ISystemSettingsService settings,
+        AppDbContext dbContext,
         IAuditLogger audit)
     {
         _discoveryService = discoveryService;
         _sessionService = sessionService;
         _settings = settings;
+        _dbContext = dbContext;
         _audit = audit;
     }
 
     public async Task<IActionResult> Index(CancellationToken cancellationToken)
     {
         var companies = await _discoveryService.GetAvailableCompaniesAsync(cancellationToken);
+
+        var isGlobalAdmin = User.HasClaim("global_admin", "True") || User.HasClaim("global_admin", "true");
+        if (!isGlobalAdmin)
+        {
+            var userIdClaim = User.FindFirst(ClaimConstants.UserId)?.Value;
+            if (long.TryParse(userIdClaim, out var userId))
+            {
+                var allowedDbs = await _dbContext.Set<Domain.Entities.UserCompanyPermission>()
+                    .AsNoTracking()
+                    .Where(p => p.UserId == userId && p.IsActive)
+                    .Select(p => p.CompanyDb)
+                    .ToListAsync(cancellationToken);
+
+                var allowedSet = new HashSet<string>(allowedDbs, StringComparer.OrdinalIgnoreCase);
+                companies = companies.Where(c => allowedSet.Contains(c.CompanyDb)).ToList();
+            }
+        }
+
         return View(companies);
     }
 
