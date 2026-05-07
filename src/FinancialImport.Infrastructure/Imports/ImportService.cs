@@ -269,7 +269,7 @@ public sealed class ImportService : IImportService
                     accountsValidated = true;
                     foreach (var line in lines)
                     {
-                        if (!string.IsNullOrWhiteSpace(line.AccountCode))
+                        if (!string.IsNullOrWhiteSpace(line.AccountCode) && !SapAccountCodeHelper.IsBusinessPartner(line.AccountCode))
                         {
                             var resolved = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accounts);
                             if (resolved == line.AccountCode && !accounts.ContainsKey(line.AccountCode))
@@ -290,7 +290,7 @@ public sealed class ImportService : IImportService
                             }
                         }
 
-                        if (!string.IsNullOrWhiteSpace(line.ContraAccountCode))
+                        if (!string.IsNullOrWhiteSpace(line.ContraAccountCode) && !SapAccountCodeHelper.IsBusinessPartner(line.ContraAccountCode))
                         {
                             var resolved = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
                             if (resolved == line.ContraAccountCode && !accounts.ContainsKey(line.ContraAccountCode))

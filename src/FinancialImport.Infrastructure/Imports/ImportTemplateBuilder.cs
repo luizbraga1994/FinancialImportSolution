@@ -37,7 +37,7 @@ public static class ImportTemplateBuilder
         // in the same Referencia = single SAP journal with multiple lines).
         var sample = new object?[][]
         {
-            // --- Group 1: single one-sided row (classic debit+contra) ---
+            // --- Group 1: conta contabil + conta contabil (classico) ---
             new object?[]
             {
                 "PAG_FORNECEDOR_045",
@@ -52,6 +52,23 @@ public static class ImportTemplateBuilder
                 1,
                 null,
                 "001"
+            },
+            // --- Group 1b: conta contabil + Parceiro de Negocio (F00012) ---
+            // Contrapartida com letra → enviado como ShortName no SAP
+            new object?[]
+            {
+                "PAG_FORNECEDOR_046",
+                "1.1.1.02.002",
+                "F00012",
+                0m,
+                500.00m,
+                new DateTime(2026, 2, 19),
+                new DateTime(2026, 2, 19),
+                new DateTime(2026, 2, 19),
+                "PAGAMENTO BANCO ITAU C/C 15146-0",
+                1,
+                null,
+                "005"
             },
             // --- Group 2: pre-balanced detailed entry (3 rows → 3 SAP lines) ---
             // Row 1: Valor Credito = 1503,22 on ContaContabil 1612 → SAP: 1612 Debit 1503,22
@@ -156,8 +173,8 @@ public static class ImportTemplateBuilder
         var instructions = new (string Field, string Description, string Required)[]
         {
             ("Referencia",          "Identificador do lancamento. Linhas com a MESMA Referencia + datas iguais sao agrupadas em UM lancamento SAP.", "Obrigatorio"),
-            ("Conta Contabil",      "Codigo da conta contabil principal. O digito verificador (-0, -1, etc) e resolvido automaticamente.", "Obrigatorio"),
-            ("Conta Contrapartida", "Codigo da conta contabil de contrapartida.", "Obrigatorio"),
+            ("Conta Contabil",      "Conta contabil principal (ex: 1.1.1.02.002) OU codigo de Parceiro de Negocio (ex: F00012, C00015). Codigos com letras sao reconhecidos automaticamente como Parceiro de Negocio (ShortName no SAP).", "Obrigatorio"),
+            ("Conta Contrapartida", "Conta contabil de contrapartida OU codigo de Parceiro de Negocio. Mesma regra da Conta Contabil.", "Obrigatorio"),
             ("Valor Credito",       "Se preenchido, a linha SAP usa a CONTA CONTABIL no DEBITO. Preencha apenas Credito OU Debito por linha.", "Condicional"),
             ("Valor Debito",        "Se preenchido, a linha SAP usa a CONTRAPARTIDA no CREDITO. Preencha apenas Credito OU Debito por linha.", "Condicional"),
             ("Data Lancamento",     "Data do lancamento contabil (formato dd/MM/yyyy).", "Obrigatorio"),
@@ -224,10 +241,18 @@ public static class ImportTemplateBuilder
             "  - Debito    3,22 em 3281 → SAP: 3281 Credito    3,22",
             "Total: 1503,22 D = 1503,22 C (balanceado)",
             "",
-            "AUTO-COMPLETE DE CONTAS:",
+            "CONTAS CONTABEIS vs PARCEIROS DE NEGOCIO:",
+            "O sistema detecta automaticamente o tipo pelo codigo:",
+            "  - Somente digitos e pontos (ex: 1.1.1.02.002) → Conta Contabil (AccountCode)",
+            "  - Contem alguma letra (ex: F00012, C00015)    → Parceiro de Negocio (ShortName)",
+            "Parceiros de Negocio NAO sao validados contra o plano de contas.",
+            "Voce pode misturar contas contabeis e parceiros no mesmo lancamento.",
+            "",
+            "AUTO-COMPLETE DE CONTAS CONTABEIS:",
             "O sistema busca o plano de contas do SAP e resolve automaticamente",
             "o digito verificador. Voce pode escrever '1612001100002' ou",
-            "'1612001100002-0' — ambos funcionam."
+            "'1612001100002-0' — ambos funcionam.",
+            "Obs: esta resolucao se aplica apenas a contas contabeis (sem letras)."
         };
 
         foreach (var text in howTo)

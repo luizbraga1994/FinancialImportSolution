@@ -184,20 +184,13 @@ public sealed class JournalEntryBuilder
     }
 
     /// <summary>
-    /// Returns true when <paramref name="code"/> is a Business Partner (contains
-    /// at least one letter). G/L account codes are numeric-only (digits and dots).
-    /// </summary>
-    private static bool IsBusinessPartner(string? code)
-        => !string.IsNullOrWhiteSpace(code) && code.Any(char.IsLetter);
-
-    /// <summary>
     /// Sets either <see cref="SapJournalEntryLine.AccountCode"/> or
     /// <see cref="SapJournalEntryLine.ShortName"/> depending on whether
     /// <paramref name="code"/> is a G/L account or a Business Partner code.
     /// </summary>
     private static void ApplyCode(SapJournalEntryLine line, string? code)
     {
-        if (IsBusinessPartner(code))
+        if (SapAccountCodeHelper.IsBusinessPartner(code))
             line.ShortName = code;
         else
             line.AccountCode = code;
