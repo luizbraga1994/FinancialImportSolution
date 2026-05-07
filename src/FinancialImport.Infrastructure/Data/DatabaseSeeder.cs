@@ -51,6 +51,7 @@ public sealed class DatabaseSeeder
             (PermissionCodes.VisualizarHistorico, "Visualizar Historico", "Importacao"),
             (PermissionCodes.ReprocessarImportacao, "Reprocessar Importacao", "Importacao"),
             (PermissionCodes.TrocarCompany, "Trocar Company", "Empresa"),
+            (PermissionCodes.VisualizarFiliais, "Visualizar Filiais", "Empresa"),
             (PermissionCodes.GerenciarUsuarios, "Gerenciar Usuarios", "Administracao"),
             (PermissionCodes.GerenciarPerfis, "Gerenciar Perfis", "Administracao"),
             (PermissionCodes.GerenciarPermissoes, "Gerenciar Permissoes", "Administracao"),
@@ -116,7 +117,8 @@ public sealed class DatabaseSeeder
                 .Where(p => p.IsActive && (
                     p.Code == PermissionCodes.ImportarLancamentos ||
                     p.Code == PermissionCodes.VisualizarHistorico ||
-                    p.Code == PermissionCodes.TrocarCompany))
+                    p.Code == PermissionCodes.TrocarCompany ||
+                    p.Code == PermissionCodes.VisualizarFiliais))
                 .ToListAsync(cancellationToken);
 
             foreach (var permission in operatorPermissions)
@@ -206,7 +208,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Sap:IgnoreSslErrors",      Categoria = "SAP",        TipoDado = "bool",     Obrigatorio = false, Valor = "false", Descricao = "Ignorar erros de certificado SSL" },
             new() { Chave = "Sap:TimeoutSeconds",       Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "180", Descricao = "Timeout de requisicao em segundos" },
             new() { Chave = "Sap:MaxRetryAttempts",     Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "3",   Descricao = "Numero maximo de tentativas de reconexao" },
-            new() { Chave = "Sap:SessionTimeoutMinutes",Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "25",  Descricao = "Minutos de inatividade antes de renovar sessao SAP" },
+            new() { Chave = "Sap:SessionTimeoutMinutes",Categoria = "SAP",        TipoDado = "int",      Obrigatorio = false, Valor = "30",  Descricao = "Minutos de inatividade antes de renovar sessao SAP (renovada automaticamente pelo keep-alive)" },
 
             // ── Seguranca (JWT + Cookie) ─────────────────────────────────────
             new() { Chave = "Jwt:SecretKey",            Categoria = "Seguranca",  TipoDado = "password", Obrigatorio = true,  Descricao = "Chave secreta JWT (minimo 32 caracteres)" },
@@ -215,7 +217,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Jwt:ExpirationMinutes",    Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "480",  Descricao = "Validade do token JWT em minutos" },
             new() { Chave = "Jwt:RefreshExpirationMinutes", Categoria = "Seguranca", TipoDado = "int",   Obrigatorio = false, Valor = "1440", Descricao = "Validade do refresh token em minutos" },
             new() { Chave = "Jwt:ClockSkewMinutes",     Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "1",    Descricao = "Tolerancia de clock em minutos" },
-            new() { Chave = "Cookie:ExpirationHours",   Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "8",    Descricao = "Horas de validade do cookie de autenticacao" },
+            new() { Chave = "Cookie:ExpirationHours",   Categoria = "Seguranca",  TipoDado = "int",      Obrigatorio = false, Valor = "12",   Descricao = "Horas de validade do cookie de autenticacao (renovado em cada acao do usuario)" },
 
             // ── Importacao ───────────────────────────────────────────────────
             new() { Chave = "Import:MaxFileSizeBytes",   Categoria = "Importacao", TipoDado = "int",     Obrigatorio = false, Valor = "10485760",    Descricao = "Tamanho maximo do arquivo (bytes)" },
@@ -235,6 +237,20 @@ public sealed class DatabaseSeeder
 
             // ── Layout ───────────────────────────────────────────────────────
             new() { Chave = "Layout:DefaultTipoLancLayout1", Categoria = "Layout", TipoDado = "string", Obrigatorio = false, Valor = "D", Descricao = "Tipo de lancamento padrao para o Layout 1 (D=Debito, C=Credito)" },
+
+            // ── Aparencia ───────────────────────────────────────────────────
+            new() { Chave = "Aparencia:LogoUrl",        Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "",                 Descricao = "URL da logo personalizada (ex: /uploads/logo.png). Deixe vazio para usar o icone padrao." },
+            new() { Chave = "Aparencia:AppName",        Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Financial Import", Descricao = "Nome da aplicacao exibido no sidebar e login" },
+            new() { Chave = "Aparencia:AppSubtitle",    Categoria = "Aparencia", TipoDado = "string", Obrigatorio = false, Valor = "Plataforma de importacao contabil integrada ao SAP Business One", Descricao = "Subtitulo exibido na tela de login" },
+            new() { Chave = "Aparencia:CorSidebar",       Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#1a0a0a",          Descricao = "Cor de fundo do menu lateral (sidebar) - cor principal ou inicio do gradiente" },
+            new() { Chave = "Aparencia:CorSidebarFim",    Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "",                 Descricao = "Cor final do gradiente do sidebar. Deixe vazio para cor solida." },
+            new() { Chave = "Aparencia:CorSidebarHover", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "#2d1111",          Descricao = "Cor de hover dos itens do menu lateral" },
+            new() { Chave = "Aparencia:CorPrimaria",    Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#dc2626",          Descricao = "Cor primaria (botoes, destaques)" },
+            new() { Chave = "Aparencia:CorMenuAtivo",   Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#ffffff",          Descricao = "Cor do texto/icone do item de menu selecionado" },
+            new() { Chave = "Aparencia:CorMenuAtivoFundo", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "",               Descricao = "Cor de fundo do item de menu selecionado. Deixe vazio para usar uma versao transparente da cor do menu ativo." },
+            new() { Chave = "Aparencia:CorFundo",       Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#faf5f5",          Descricao = "Cor de fundo da pagina principal" },
+            new() { Chave = "Aparencia:CorTextoSidebar", Categoria = "Aparencia", TipoDado = "color", Obrigatorio = false, Valor = "#c4a0a0",          Descricao = "Cor do texto inativo no menu lateral" },
+            new() { Chave = "Aparencia:CorLoginFundo",  Categoria = "Aparencia", TipoDado = "color",  Obrigatorio = false, Valor = "#1a0a0a",          Descricao = "Cor de fundo do painel esquerdo da tela de login" },
 
             // ── Mensageria (RabbitMQ) ────────────────────────────────────────
             new() { Chave = "RabbitMq:Enabled",          Categoria = "Mensageria", TipoDado = "bool",   Obrigatorio = false, Valor = "false",                         Descricao = "Habilitar integracao com RabbitMQ" },
@@ -302,7 +318,7 @@ public sealed class DatabaseSeeder
             new() { Chave = "Outbox:ClaimTimeoutSeconds",     Categoria = "Mensageria", TipoDado = "int",  Obrigatorio = false, Valor = "120",  Descricao = "Timeout de reserva de mensagem em segundos" },
 
             // ── CORS (API) ───────────────────────────────────────────────────
-            new() { Chave = "Cors:AllowedOrigins",       Categoria = "Seguranca",  TipoDado = "list",   Obrigatorio = false, Valor = "http://localhost:5000,https://localhost:7000", Descricao = "Origens permitidas pelo CORS (separadas por virgula)" },
+            new() { Chave = "Cors:AllowedOrigins",       Categoria = "Seguranca",  TipoDado = "list",   Obrigatorio = false, Valor = "https://financialimport.aconsulting.com,http://localhost:5000,https://localhost:7000,https://localhost:7146", Descricao = "Origens permitidas pelo CORS (separadas por virgula)" },
         };
 
         int added = 0;

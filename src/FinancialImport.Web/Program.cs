@@ -1,5 +1,6 @@
 using FinancialImport.Application.DependencyInjection;
 using FinancialImport.Application.Settings;
+using FinancialImport.Domain.Constants;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.DependencyInjection;
 using FinancialImport.Infrastructure.Observability;
@@ -7,6 +8,7 @@ using FinancialImport.Integration.Hana.DependencyInjection;
 using FinancialImport.Integration.Sap.DependencyInjection;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -31,13 +33,25 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.LoginPath = "/Account/Login";
         options.LogoutPath = "/Account/Logout";
         options.AccessDeniedPath = "/Account/AccessDenied";
-        options.ExpireTimeSpan = TimeSpan.FromHours(8); // default; overridden after settings load
+        options.ExpireTimeSpan = TimeSpan.FromHours(12); // default; overridden after settings load
         options.SlidingExpiration = true;
+        options.Cookie.MaxAge = TimeSpan.FromHours(12);
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.Cookie.SameSite = SameSiteMode.Lax;
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    foreach (var code in PermissionCodes.All)
+    {
+        options.AddPolicy(code, policy =>
+            policy.RequireAssertion(ctx =>
+                ctx.User.HasClaim("global_admin", "True") ||
+                ctx.User.HasClaim("global_admin", "true") ||
+                ctx.User.HasClaim("permission", code)));
+    }
+});
 builder.Services.AddHttpContextAccessor();
 
 builder.Services.AddScoped<FinancialImport.Application.Abstractions.IUserContext, HttpUserContext>();
@@ -103,6 +117,11 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 app.UseMiddleware<CorrelationIdMiddleware>();
 
 app.UseSerilogRequestLogging(options =>
@@ -117,8 +136,16 @@ app.UseSerilogRequestLogging(options =>
     };
 });
 
-app.UseHttpsRedirection();
+//// NÃO redireciona para HTTPS quando for desafio do Let's Encrypt/ACME
+//app.UseWhen(
+//    context => !context.Request.Path.StartsWithSegments("/.well-known/acme-challenge"),
+//    appBuilder =>
+//    {
+//        appBuilder.UseHttpsRedirection();
+//    });
+
 app.UseStaticFiles();
+
 app.UseRouting();
 
 app.UseAuthentication();

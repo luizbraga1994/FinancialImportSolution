@@ -11,15 +11,17 @@ public class SettingsController : Controller
 {
     private readonly ISystemSettingsService _settings;
     private readonly IAuditLogger _audit;
+    private readonly IWebHostEnvironment _env;
     private readonly ILogger<SettingsController> _logger;
 
     private static readonly string[] Categories =
-        ["SAP", "Seguranca", "Importacao", "Mensageria", "Layout"];
+        ["SAP", "Seguranca", "Importacao", "Mensageria", "Layout", "Aparencia"];
 
-    public SettingsController(ISystemSettingsService settings, IAuditLogger audit, ILogger<SettingsController> logger)
+    public SettingsController(ISystemSettingsService settings, IAuditLogger audit, IWebHostEnvironment env, ILogger<SettingsController> logger)
     {
         _settings = settings;
         _audit = audit;
+        _env = env;
         _logger = logger;
     }
 
@@ -111,5 +113,56 @@ public class SettingsController : Controller
 
         TempData["Success"] = "Cache de configuracoes invalidado. Proximas requisicoes recarregarao do banco.";
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadLogo(IFormFile logo, CancellationToken ct)
+    {
+        if (logo == null || logo.Length == 0)
+        {
+            TempData["Error"] = "Selecione um arquivo de imagem.";
+            return RedirectToAction(nameof(Index), new { categoria = "Aparencia" });
+        }
+
+        var allowedExtensions = new[] { ".png", ".jpg", ".jpeg", ".svg", ".ico", ".webp" };
+        var ext = Path.GetExtension(logo.FileName).ToLowerInvariant();
+        if (!allowedExtensions.Contains(ext))
+        {
+            TempData["Error"] = $"Formato '{ext}' nao permitido. Use: {string.Join(", ", allowedExtensions)}";
+            return RedirectToAction(nameof(Index), new { categoria = "Aparencia" });
+        }
+
+        if (logo.Length > 2 * 1024 * 1024)
+        {
+            TempData["Error"] = "Arquivo excede o tamanho maximo de 2 MB.";
+            return RedirectToAction(nameof(Index), new { categoria = "Aparencia" });
+        }
+
+        var uploadsDir = Path.Combine(_env.WebRootPath, "uploads");
+        Directory.CreateDirectory(uploadsDir);
+
+        var fileName = $"logo{ext}";
+        var filePath = Path.Combine(uploadsDir, fileName);
+        await using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await logo.CopyToAsync(stream, ct);
+        }
+
+        var logoUrl = $"/uploads/{fileName}";
+        var userId = User.FindFirst(ClaimConstants.Login)?.Value ?? "sistema";
+        await _settings.SetAsync("Aparencia:LogoUrl", logoUrl, userId, ct);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(SettingsController),
+            Operation = "UploadLogo",
+            Message = $"Logo atualizada por '{userId}': {logoUrl}"
+        }, ct);
+
+        TempData["Success"] = "Logo atualizada com sucesso.";
+        return RedirectToAction(nameof(Index), new { categoria = "Aparencia" });
     }
 }

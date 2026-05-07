@@ -13,6 +13,7 @@
         "Importacao" => "bi-upload",
         "Mensageria" => "bi-broadcast",
         "Layout"     => "bi-layout-text-sidebar",
+        "Aparencia"  => "bi-palette-fill",
         _            => "bi-gear-fill"
     };
 }
@@ -97,7 +98,8 @@
                     <div class="settings-fields">
                         @foreach (var setting in currentSettings)
                         {
-                            <div class="settings-field @(setting.Obrigatorio && string.IsNullOrWhiteSpace(setting.Valor) ? "field-missing" : "")">
+                            <div class="settings-field @(setting.Obrigatorio && string.IsNullOrWhiteSpace(setting.Valor) ? "field-missing" : "") @(setting.TipoDado == "color" ? "border-start border-3 ps-3" : "")"
+                                 @if (setting.TipoDado == "color") { <text>style="border-color: @(string.IsNullOrWhiteSpace(setting.Valor) ? "#ccc" : setting.Valor) !important;"</text> }>
                                 <label class="settings-label" for="field_@setting.Chave.Replace(":", "_")">
                                     @setting.Chave
                                     @if (setting.Obrigatorio)
@@ -155,6 +157,24 @@
                                                name="@setting.Chave"
                                                value="@setting.Valor" />
                                     }
+                                    else if (setting.TipoDado == "color")
+                                    {
+                                        var colorFieldId = "field_" + setting.Chave.Replace(":", "_");
+                                        var colorPickerId = "color_" + setting.Chave.Replace(":", "_");
+                                        <div class="d-flex align-items-center gap-2">
+                                            <input type="color" class="form-control form-control-color"
+                                                   id="@colorPickerId"
+                                                   value="@(string.IsNullOrWhiteSpace(setting.Valor) ? "#000000" : setting.Valor)"
+                                                   oninput="document.getElementById('@colorFieldId').value = this.value" />
+                                            <input type="text" class="form-control settings-input font-monospace"
+                                                   id="@colorFieldId"
+                                                   name="@setting.Chave"
+                                                   value="@setting.Valor"
+                                                   style="max-width: 120px;"
+                                                   placeholder="#000000"
+                                                   oninput="document.getElementById('@colorPickerId').value = this.value" />
+                                        </div>
+                                    }
                                     else
                                     {
                                         <input type="text" class="form-control settings-input"
@@ -180,6 +200,40 @@
                 </div>
             </div>
         </form>
+
+        @if (activeCategory == "Aparencia")
+        {
+            var currentLogoUrl = currentSettings.FirstOrDefault(s => s.Chave == "Aparencia:LogoUrl")?.Valor;
+            <div class="settings-card mt-3">
+                <div class="settings-card-header">
+                    <i class="bi bi-image"></i>
+                    <span>Upload de Logo</span>
+                </div>
+                <div class="p-3">
+                    @if (!string.IsNullOrWhiteSpace(currentLogoUrl))
+                    {
+                        <div class="mb-3 text-center">
+                            <p class="small text-muted mb-2">Logo atual:</p>
+                            <img src="@currentLogoUrl" alt="Logo" style="max-height: 80px; max-width: 200px;" class="border rounded p-2" />
+                        </div>
+                    }
+                    <form asp-action="UploadLogo" method="post" enctype="multipart/form-data">
+                        @Html.AntiForgeryToken()
+                        <div class="d-flex align-items-end gap-3">
+                            <div class="flex-grow-1">
+                                <label class="form-label small fw-semibold">Selecione a imagem da logo</label>
+                                <input type="file" class="form-control form-control-sm" name="logo"
+                                       accept=".png,.jpg,.jpeg,.svg,.ico,.webp" />
+                                <div class="form-text">PNG, JPG, SVG ou WebP. Maximo 2 MB.</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-upload me-1"></i>Enviar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        }
     </div>
 </div>
 

@@ -1,0 +1,162 @@
+@model List<FinancialImport.Web.Controllers.BranchViewModel>
+@{
+    ViewData["Title"] = "Filiais";
+    var companyDb = ViewBag.CompanyDb as string ?? "";
+    var companyName = ViewBag.CompanyName as string ?? "";
+}
+
+<div class="mb-4">
+    <h5 class="fw-bold mb-1"><i class="bi bi-building me-2"></i>Filiais (Business Places)</h5>
+    <p class="text-muted mb-0" style="font-size: 0.85rem;">
+        Filiais cadastradas na empresa <strong>@companyName</strong> (<code>@companyDb</code>)
+    </p>
+</div>
+
+@if (Model.Count == 0)
+{
+    <div class="card border-0">
+        <div class="card-body text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            Nenhuma filial encontrada para esta empresa.
+        </div>
+    </div>
+}
+else
+{
+    <div class="card border-0 mb-3">
+        <div class="card-body p-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold mb-1">Buscar em</label>
+                    <select id="filterField" class="form-select form-select-sm">
+                        <option value="all">Todos os campos</option>
+                        <option value="id">BPLID</option>
+                        <option value="name">Nome</option>
+                        <option value="alias">Alias</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold mb-1">Termo</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="filterText" class="form-control" placeholder="Digite para filtrar..." autocomplete="off" />
+                        <button type="button" class="btn btn-outline-secondary" id="clearFilter" title="Limpar">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold mb-1">Status</label>
+                    <select id="filterStatus" class="form-select form-select-sm">
+                        <option value="all">Todos</option>
+                        <option value="active">Apenas ativas</option>
+                        <option value="inactive">Apenas inativas</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-2 small text-muted" id="filterCount"></div>
+        </div>
+    </div>
+
+    <div class="card border-0">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="branchTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 80px;">BPLID</th>
+                            <th>Nome</th>
+                            <th>Alias</th>
+                            <th style="width: 100px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var branch in Model)
+                        {
+                            <tr class="branch-row @(branch.Disabled ? "text-muted" : "")"
+                                data-id="@branch.BPLId"
+                                data-name="@branch.BPLName.ToLower()"
+                                data-alias="@((branch.AliasName ?? "").ToLower())"
+                                data-status="@(branch.Disabled ? "inactive" : "active")">
+                                <td>
+                                    <span class="badge bg-primary-subtle text-primary-emphasis px-2 py-1 font-monospace">
+                                        @branch.BPLId
+                                    </span>
+                                </td>
+                                <td class="fw-semibold">@branch.BPLName</td>
+                                <td class="text-muted">@(branch.AliasName ?? "-")</td>
+                                <td>
+                                    @if (branch.Disabled)
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary-emphasis">Inativa</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success-emphasis">Ativa</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3 small text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Use o valor da coluna <strong>BPLID</strong> na coluna "Filial" do arquivo de importacao.
+        Total: @Model.Count(b => !b.Disabled) ativa(s), @Model.Count(b => b.Disabled) inativa(s).
+    </div>
+
+    @section Scripts {
+        <script>
+            (function () {
+                var rows = document.querySelectorAll('.branch-row');
+                var fieldSelect = document.getElementById('filterField');
+                var textInput = document.getElementById('filterText');
+                var statusSelect = document.getElementById('filterStatus');
+                var clearBtn = document.getElementById('clearFilter');
+                var countLabel = document.getElementById('filterCount');
+                var total = rows.length;
+
+                function applyFilter() {
+                    var field = fieldSelect.value;
+                    var term = (textInput.value || '').trim().toLowerCase();
+                    var status = statusSelect.value;
+                    var visible = 0;
+
+                    rows.forEach(function (row) {
+                        var matchStatus = status === 'all' || row.getAttribute('data-status') === status;
+                        var matchText = true;
+                        if (term) {
+                            if (field === 'id') matchText = row.getAttribute('data-id').toLowerCase().indexOf(term) !== -1;
+                            else if (field === 'name') matchText = row.getAttribute('data-name').indexOf(term) !== -1;
+                            else if (field === 'alias') matchText = row.getAttribute('data-alias').indexOf(term) !== -1;
+                            else {
+                                matchText = row.getAttribute('data-id').toLowerCase().indexOf(term) !== -1
+                                         || row.getAttribute('data-name').indexOf(term) !== -1
+                                         || row.getAttribute('data-alias').indexOf(term) !== -1;
+                            }
+                        }
+                        if (matchStatus && matchText) { row.style.display = ''; visible++; }
+                        else { row.style.display = 'none'; }
+                    });
+                    countLabel.textContent = visible === total
+                        ? ''
+                        : 'Exibindo ' + visible + ' de ' + total + ' filial(is).';
+                }
+
+                fieldSelect.addEventListener('change', applyFilter);
+                textInput.addEventListener('input', applyFilter);
+                statusSelect.addEventListener('change', applyFilter);
+                clearBtn.addEventListener('click', function () {
+                    textInput.value = '';
+                    fieldSelect.value = 'all';
+                    statusSelect.value = 'all';
+                    applyFilter();
+                });
+            })();
+        </script>
+    }
+}

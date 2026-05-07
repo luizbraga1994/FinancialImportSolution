@@ -4,7 +4,9 @@ using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Infrastructure.Security;
 using FinancialImport.Application.Settings;
+using FinancialImport.Shared.Logging;
 using FinancialImport.Web.Context;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -24,13 +26,23 @@ public class LoginViewModel
     public List<SelectListItem> Companies { get; set; } = new();
 }
 
+public class ChangePasswordViewModel
+{
+    public string CurrentPassword { get; set; } = string.Empty;
+    public string NewPassword { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
 public class AccountController : Controller
 {
     private readonly IApplicationAuthService _authService;
     private readonly ISapCompanyDiscoveryService _companyDiscovery;
     private readonly ISapCompanySessionService _sapSessionService;
+    private readonly ISapSessionStore _sapSessionStore;
     private readonly ISystemSettingsService _settings;
     private readonly AppDbContext _dbContext;
+    private readonly PasswordHasher _hasher;
+    private readonly IAuditLogger _audit;
     private readonly ILoginAuditContextAccessor _loginAuditContextAccessor;
     private readonly ILogger<AccountController> _logger;
 
@@ -38,16 +50,22 @@ public class AccountController : Controller
         IApplicationAuthService authService,
         ISapCompanyDiscoveryService companyDiscovery,
         ISapCompanySessionService sapSessionService,
+        ISapSessionStore sapSessionStore,
         ISystemSettingsService settings,
         AppDbContext dbContext,
+        PasswordHasher hasher,
+        IAuditLogger audit,
         ILoginAuditContextAccessor loginAuditContextAccessor,
         ILogger<AccountController> logger)
     {
         _authService = authService;
         _companyDiscovery = companyDiscovery;
         _sapSessionService = sapSessionService;
+        _sapSessionStore = sapSessionStore;
         _settings = settings;
         _dbContext = dbContext;
+        _hasher = hasher;
+        _audit = audit;
         _loginAuditContextAccessor = loginAuditContextAccessor;
         _logger = logger;
     }
@@ -278,6 +296,133 @@ public class AccountController : Controller
             ModelState.AddModelError(string.Empty, ex.Message);
             return View(model);
         }
+    }
+
+    [HttpGet]
+    public IActionResult ChangePassword()
+    {
+        return View(new ChangePasswordViewModel());
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(model.CurrentPassword) || string.IsNullOrWhiteSpace(model.NewPassword))
+        {
+            ModelState.AddModelError(string.Empty, "Preencha todos os campos.");
+            return View(model);
+        }
+
+        if (model.NewPassword != model.ConfirmPassword)
+        {
+            ModelState.AddModelError(string.Empty, "A nova senha e a confirmacao nao conferem.");
+            return View(model);
+        }
+
+        if (model.NewPassword.Length < 6)
+        {
+            ModelState.AddModelError(string.Empty, "A nova senha deve ter no minimo 6 caracteres.");
+            return View(model);
+        }
+
+        var loginClaim = User.FindFirst(ClaimConstants.Login)?.Value;
+        if (string.IsNullOrWhiteSpace(loginClaim))
+        {
+            ModelState.AddModelError(string.Empty, "Sessao invalida. Faca login novamente.");
+            return View(model);
+        }
+
+        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Login == loginClaim, cancellationToken);
+        if (user == null)
+        {
+            ModelState.AddModelError(string.Empty, "Usuario nao encontrado.");
+            return View(model);
+        }
+
+        if (!_hasher.Verify(model.CurrentPassword, user.PasswordSalt!, user.PasswordHash))
+        {
+            ModelState.AddModelError(string.Empty, "Senha atual incorreta.");
+            return View(model);
+        }
+
+        var (hash, salt) = _hasher.HashPassword(model.NewPassword);
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _audit.WriteAsync(new AuditLogEntry
+        {
+            Level = LogSeverities.Info,
+            Category = LogCategories.Audit,
+            Source = nameof(AccountController),
+            Operation = "AlterarSenha",
+            Message = $"Senha alterada pelo usuario '{loginClaim}'."
+        }, cancellationToken);
+
+        TempData["Success"] = "Senha alterada com sucesso.";
+        return RedirectToAction("Index", "Home");
+    }
+
+    /// <summary>
+    /// Heartbeat endpoint called periodically by the browser to keep
+    /// the authentication cookie alive (sliding) and refresh the SAP
+    /// Service Layer session when it is near expiration. Returns JSON
+    /// so the client can detect when re-authentication is required.
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> KeepAlive(CancellationToken cancellationToken)
+    {
+        if (!User.Identity?.IsAuthenticated ?? true)
+            return Json(new { authenticated = false });
+
+        var userIdClaim = User.FindFirst(ClaimConstants.UserId)?.Value;
+        var companyDb = User.FindFirst(ClaimConstants.CompanyDb)?.Value;
+
+        var sapRenewed = false;
+        var sapActive = false;
+
+        if (long.TryParse(userIdClaim, out var userId) && !string.IsNullOrWhiteSpace(companyDb))
+        {
+            var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
+            var now = DateTime.Now;
+            var nearExpiry = session == null
+                          || !session.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase)
+                          || (session.ExpiresAt - now).TotalMinutes < 5;
+
+            if (nearExpiry)
+            {
+                try
+                {
+                    var relogin = await _sapSessionService.SignInCompanyAsync(
+                        companyDb,
+                        _settings.Get("Sap:UserName") ?? "",
+                        _settings.Get("Sap:Password") ?? "",
+                        cancellationToken);
+                    if (relogin.Success)
+                    {
+                        sapRenewed = true;
+                        sapActive = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "KeepAlive failed to renew SAP session for {CompanyDb}.", companyDb);
+                }
+            }
+            else
+            {
+                sapActive = true;
+            }
+        }
+
+        return Json(new
+        {
+            authenticated = true,
+            sapActive,
+            sapRenewed,
+            serverTime = DateTime.Now.ToString("HH:mm:ss")
+        });
     }
 
     [HttpPost]
