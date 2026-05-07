@@ -16,5 +16,6 @@ public sealed class LancamentoContabilImportado
     public string? TipoLanc { get; set; }
     public string HistoricoLinha { get; set; } = string.Empty;
     public string? Filial { get; set; }
+    public string? CentroCusto { get; set; }
     public Dictionary<string, string?> CamposOriginais { get; set; } = new();
 }

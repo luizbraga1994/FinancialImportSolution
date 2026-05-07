@@ -244,6 +244,11 @@ namespace FinancialImport.Infrastructure.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("Filial");
 
+                    b.Property<string>("CostingCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("CentroCusto");
+
                     b.Property<string>("BusinessKeyHash")
                         .IsRequired()
                         .HasMaxLength(64)

@@ -39,4 +39,7 @@ public sealed class SapJournalEntryLine
 
     [JsonPropertyName("BPLID")]
     public int? BPLID { get; set; }
+
+    [JsonPropertyName("CostingCode")]
+    public string? CostingCode { get; set; }
 }

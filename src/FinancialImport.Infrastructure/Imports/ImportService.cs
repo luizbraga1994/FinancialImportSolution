@@ -225,6 +225,7 @@ public sealed class ImportService : IImportService
                 DebitAmount = info.Source.ValorDebito,
                 LineMemo = info.Source.HistoricoLinha,
                 BranchCode = info.Source.Filial,
+                CostingCode = info.Source.CentroCusto,
                 CompanyDb = companyDb,
                 Status = status,
                 ValidationMessage = info.ValidationMessage,

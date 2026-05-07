@@ -28,6 +28,7 @@ public static class ImportTemplateBuilder
             "Data Documento",
             "Observacao Linha",
             "Filial",
+            "Centro de Custo",
             "Seq Lancamento"
         };
 
@@ -49,6 +50,7 @@ public static class ImportTemplateBuilder
                 new DateTime(2026, 2, 19),
                 "PAGAMENTO NF 12345 FORNECEDOR XYZ LTDA",
                 1,
+                null,
                 "001"
             },
             // --- Group 2: pre-balanced detailed entry (3 rows → 3 SAP lines) ---
@@ -65,6 +67,7 @@ public static class ImportTemplateBuilder
                 new DateTime(2026, 2, 18),
                 "VR REF JUROS S/ EMPRESTIMO CREDITO PESSOAL CCB N. 16119",
                 1,
+                "CC001",
                 "002"
             },
             // Row 2: Valor Debito = 1500 on Contrapartida 4999 → SAP: 4999 Credit 1500
@@ -80,6 +83,7 @@ public static class ImportTemplateBuilder
                 new DateTime(2026, 2, 18),
                 "VR REF JUROS S/ EMPRESTIMO",
                 1,
+                "CC001",
                 "003"
             },
             // Row 3: Valor Debito = 3,22 on Contrapartida 3281 → SAP: 3281 Credit 3,22
@@ -95,6 +99,7 @@ public static class ImportTemplateBuilder
                 new DateTime(2026, 2, 18),
                 "Taxa",
                 1,
+                null,
                 "004"
             }
         };
@@ -160,6 +165,7 @@ public static class ImportTemplateBuilder
             ("Data Documento",      "Data do documento fiscal. Se omitida, usa Data Lancamento.", "Opcional"),
             ("Observacao Linha",    "Historico/memo que aparece na linha do lancamento no SAP.", "Obrigatorio"),
             ("Filial",              "Codigo da filial (BPL ID). Mapeamento definido em Empresas > Filiais.", "Condicional"),
+            ("Centro de Custo",     "Codigo do centro de custo (CostingCode) enviado para cada linha do lancamento SAP.", "Opcional"),
             ("Seq Lancamento",      "Numero sequencial do lancamento dentro do arquivo. Entra na chave de deduplicacao quando configurado.", "Opcional"),
         };
 

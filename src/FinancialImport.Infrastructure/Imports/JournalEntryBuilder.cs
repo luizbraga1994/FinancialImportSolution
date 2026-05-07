@@ -92,7 +92,8 @@ public sealed class JournalEntryBuilder
                         Debit = debitAmount,
                         Credit = 0m,
                         LineMemo = memo,
-                        BPLID = bplId
+                        BPLID = bplId,
+                        CostingCode = line.CostingCode
                     });
                     creditLines.Add(new SapJournalEntryLine
                     {
@@ -100,7 +101,8 @@ public sealed class JournalEntryBuilder
                         Debit = 0m,
                         Credit = creditAmount,
                         LineMemo = memo,
-                        BPLID = bplId
+                        BPLID = bplId,
+                        CostingCode = line.CostingCode
                     });
                 }
                 else if (creditAmount > 0m)
@@ -111,7 +113,8 @@ public sealed class JournalEntryBuilder
                         Debit = 0m,
                         Credit = creditAmount,
                         LineMemo = memo,
-                        BPLID = bplId
+                        BPLID = bplId,
+                        CostingCode = line.CostingCode
                     });
                 }
                 else if (debitAmount > 0m)
@@ -122,7 +125,8 @@ public sealed class JournalEntryBuilder
                         Debit = debitAmount,
                         Credit = 0m,
                         LineMemo = memo,
-                        BPLID = bplId
+                        BPLID = bplId,
+                        CostingCode = line.CostingCode
                     });
                 }
                 continue;
@@ -164,7 +168,8 @@ public sealed class JournalEntryBuilder
                 Debit = accountDebit,
                 Credit = accountCredit,
                 LineMemo = memo,
-                BPLID = bplId
+                BPLID = bplId,
+                CostingCode = line.CostingCode
             };
 
             (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
@@ -175,7 +180,8 @@ public sealed class JournalEntryBuilder
                 Debit = accountCredit,
                 Credit = accountDebit,
                 LineMemo = memo,
-                BPLID = bplId
+                BPLID = bplId,
+                CostingCode = line.CostingCode
             };
 
             (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);

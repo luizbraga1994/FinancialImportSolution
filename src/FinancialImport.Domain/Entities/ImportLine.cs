@@ -33,6 +33,7 @@ public sealed class ImportLine
     public decimal? DebitAmount { get; set; }
     public string LineMemo { get; set; } = string.Empty;
     public string? BranchCode { get; set; }
+    public string? CostingCode { get; set; }
     public string CompanyDb { get; set; } = string.Empty;
     public ImportLineStatus Status { get; set; }
     public string? ValidationMessage { get; set; }
