@@ -86,48 +86,25 @@ public sealed class JournalEntryBuilder
                 //     "Valor Debito"  → Contrapartida on DEBIT side
                 if (creditAmount > 0m && debitAmount > 0m)
                 {
-                    debitLines.Add(new SapJournalEntryLine
-                    {
-                        AccountCode = line.AccountCode,
-                        Debit = debitAmount,
-                        Credit = 0m,
-                        LineMemo = memo,
-                        BPLID = bplId,
-                        CostingCode = line.CostingCode
-                    });
-                    creditLines.Add(new SapJournalEntryLine
-                    {
-                        AccountCode = line.ContraAccountCode,
-                        Debit = 0m,
-                        Credit = creditAmount,
-                        LineMemo = memo,
-                        BPLID = bplId,
-                        CostingCode = line.CostingCode
-                    });
+                    var dl = new SapJournalEntryLine { Debit = debitAmount, Credit = 0m, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
+                    ApplyCode(dl, line.AccountCode);
+                    debitLines.Add(dl);
+
+                    var cl = new SapJournalEntryLine { Debit = 0m, Credit = creditAmount, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
+                    ApplyCode(cl, line.ContraAccountCode);
+                    creditLines.Add(cl);
                 }
                 else if (creditAmount > 0m)
                 {
-                    creditLines.Add(new SapJournalEntryLine
-                    {
-                        AccountCode = line.AccountCode,
-                        Debit = 0m,
-                        Credit = creditAmount,
-                        LineMemo = memo,
-                        BPLID = bplId,
-                        CostingCode = line.CostingCode
-                    });
+                    var cl = new SapJournalEntryLine { Debit = 0m, Credit = creditAmount, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
+                    ApplyCode(cl, line.AccountCode);
+                    creditLines.Add(cl);
                 }
                 else if (debitAmount > 0m)
                 {
-                    debitLines.Add(new SapJournalEntryLine
-                    {
-                        AccountCode = line.ContraAccountCode,
-                        Debit = debitAmount,
-                        Credit = 0m,
-                        LineMemo = memo,
-                        BPLID = bplId,
-                        CostingCode = line.CostingCode
-                    });
+                    var dl = new SapJournalEntryLine { Debit = debitAmount, Credit = 0m, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
+                    ApplyCode(dl, line.ContraAccountCode);
+                    debitLines.Add(dl);
                 }
                 continue;
             }
@@ -164,25 +141,25 @@ public sealed class JournalEntryBuilder
             // Main account (ContaContabil)
             var mainLine = new SapJournalEntryLine
             {
-                AccountCode = line.AccountCode,
                 Debit = accountDebit,
                 Credit = accountCredit,
                 LineMemo = memo,
                 BPLID = bplId,
                 CostingCode = line.CostingCode
             };
+            ApplyCode(mainLine, line.AccountCode);
 
             (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
 
             var contraLine = new SapJournalEntryLine
             {
-                AccountCode = line.ContraAccountCode,
                 Debit = accountCredit,
                 Credit = accountDebit,
                 LineMemo = memo,
                 BPLID = bplId,
                 CostingCode = line.CostingCode
             };
+            ApplyCode(contraLine, line.ContraAccountCode);
 
             (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);
         }
@@ -204,6 +181,26 @@ public sealed class JournalEntryBuilder
             TotalCredit = totalCredit,
             IsBalanced = balanced
         };
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="code"/> is a Business Partner (contains
+    /// at least one letter). G/L account codes are numeric-only (digits and dots).
+    /// </summary>
+    private static bool IsBusinessPartner(string? code)
+        => !string.IsNullOrWhiteSpace(code) && code.Any(char.IsLetter);
+
+    /// <summary>
+    /// Sets either <see cref="SapJournalEntryLine.AccountCode"/> or
+    /// <see cref="SapJournalEntryLine.ShortName"/> depending on whether
+    /// <paramref name="code"/> is a G/L account or a Business Partner code.
+    /// </summary>
+    private static void ApplyCode(SapJournalEntryLine line, string? code)
+    {
+        if (IsBusinessPartner(code))
+            line.ShortName = code;
+        else
+            line.AccountCode = code;
     }
 
     private static string Truncate(string? value, int max)

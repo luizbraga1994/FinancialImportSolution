@@ -238,7 +238,9 @@ public sealed class ImportProcessor : IImportProcessor
             {
                 foreach (var line in build.Payload.JournalEntryLines)
                 {
-                    line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accountCodes);
+                    // Skip Business Partner lines — ShortName is not in the chart of accounts.
+                    if (!string.IsNullOrWhiteSpace(line.AccountCode))
+                        line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accountCodes);
                 }
             }
 
@@ -326,7 +328,7 @@ public sealed class ImportProcessor : IImportProcessor
                 detailsBuilder.AppendLine($"Linhas afetadas: {groupLines.Count}");
                 detailsBuilder.AppendLine($"Debito total: {build.TotalDebit:N2}");
                 detailsBuilder.AppendLine($"Credito total: {build.TotalCredit:N2}");
-                detailsBuilder.AppendLine($"Contas utilizadas: {string.Join(", ", build.Payload.JournalEntryLines.Select(l => l.AccountCode).Distinct())}");
+                detailsBuilder.AppendLine($"Contas utilizadas: {string.Join(", ", build.Payload.JournalEntryLines.Select(l => l.AccountCode ?? l.ShortName).Distinct())}");
                 detailsBuilder.AppendLine();
                 detailsBuilder.AppendLine("--- Resposta completa do SAP ---");
                 detailsBuilder.AppendLine(sapResult.RawResponse ?? "(sem corpo de resposta)");
