@@ -1,188 +1,217 @@
 # FinancialImportSolution
 
-Sistema de importação de lançamentos contábeis para o **SAP Business One**, construído em **.NET 10** com arquitetura em camadas. Oferece interface Web (MVC/Razor) e API REST, integrando-se ao SAP via **Service Layer** e descobrindo empresas disponíveis diretamente no **SAP HANA**.
+Sistema de importação de lançamentos contábeis para o **SAP Business One**, construído em **.NET 10** com arquitetura em camadas limpa. Oferece interface Web (MVC/Razor) e API REST, integrando-se ao SAP via **Service Layer** e descobrindo empresas disponíveis diretamente no **SAP HANA**.
 
 ---
 
 ## Sumário
 
-- [Visão geral](#visão-geral)
+- [Visão Geral](#visão-geral)
 - [Arquitetura](#arquitetura)
-- [Estrutura do repositório](#estrutura-do-repositório)
-- [Stack tecnológica](#stack-tecnológica)
+- [Estrutura do Repositório](#estrutura-do-repositório)
+- [Stack Tecnológica](#stack-tecnológica)
 - [Pré-requisitos](#pré-requisitos)
-- [Configuração](#configuração)
-- [Banco de dados](#banco-de-dados)
-- [Como executar](#como-executar)
+- [Configuração Completa](#configuração-completa)
+- [Banco de Dados](#banco-de-dados)
+- [Como Executar](#como-executar)
+- [Fluxo de Importação](#fluxo-de-importação)
+- [Layouts de Importação](#layouts-de-importação)
 - [Endpoints da API](#endpoints-da-api)
-- [Layouts de importação](#layouts-de-importação)
-- [Modelo de permissões](#modelo-de-permissões)
+- [Modelo de Permissões](#modelo-de-permissões)
+- [Autenticação e Autorização](#autenticação-e-autorização)
 - [Integrações SAP](#integrações-sap)
+- [Mensageria e Padrão Outbox](#mensageria-e-padrão-outbox)
+- [Logs, Auditoria e Rastreabilidade](#logs-auditoria-e-rastreabilidade)
 - [Testes](#testes)
-- [Logs e auditoria](#logs-e-auditoria)
+- [Deployment e Produção](#deployment-e-produção)
+- [Segurança](#segurança)
+- [Guia de Desenvolvimento](#guia-de-desenvolvimento)
 
 ---
 
-## Visão geral
+## Visão Geral
 
-O **FinancialImportSolution** automatiza o processo de importação de lançamentos contábeis em massa para o SAP Business One. Fluxo resumido:
+O **FinancialImportSolution** automatiza o processo de importação de lançamentos contábeis em massa para o SAP Business One. Resolve o problema de operadores que precisam lançar centenas de entradas contábeis manualmente no SAP, substituindo esse processo por uma interface simples de upload de arquivo.
 
-1. Usuário faz login na aplicação e seleciona a empresa (database) SAP desejada.
-2. Faz upload de um arquivo (XLSX, CSV ou TXT) com os lançamentos.
-3. O sistema detecta o layout automaticamente, valida cada linha e mostra uma pré-visualização agrupada.
-4. Após confirmação, os lançamentos válidos são enviados ao SAP via Service Layer (`POST /b1s/v1/JournalEntries`).
-5. Todo o histórico, status (incluindo erros do SAP) e auditoria ficam registrados no MySQL para consulta posterior.
+### Fluxo Principal
 
-Principais recursos:
+```
+Usuário → Upload de arquivo (XLSX/CSV/TXT)
+       → Detecção automática de layout
+       → Validação de cada linha (FluentValidation)
+       → Deduplicação por hash (arquivo + linha de negócio)
+       → Pré-visualização agrupada por conta
+       → Confirmação → POST /JournalEntries no SAP Service Layer
+       → Histórico completo com status e erros do SAP no MySQL
+```
 
-- Detecção automática de layout (dois layouts nativos suportados).
-- Deduplicação por hash de arquivo e de linha (impede reimportação acidental).
-- Múltiplos usuários com controle granular por perfil, permissão e empresa permitida.
-- Mapeamento de filial do arquivo → `BPLId` do SAP por empresa.
-- Sessões SAP gerenciadas por usuário/empresa com expiração.
-- Download de template XLSX pronto (Layout 2).
-- Autenticação dupla: **JWT** na API e **Cookies** na Web.
-- Logs estruturados com **Serilog** (console + arquivo rotativo diário).
+### Principais Recursos
+
+| Recurso | Descrição |
+|---------|-----------|
+| Detecção automática de layout | Dois layouts nativos reconhecidos por cabeçalho |
+| Deduplicação | Hash de arquivo + hash de chave de negócio por linha |
+| Controle de acesso granular | RBAC por perfil, permissão e empresa SAP |
+| Sessões SAP por usuário | Sessão isolada por usuário/empresa com keep-alive |
+| Template XLSX para download | Layout 2 pronto para preenchimento |
+| Autenticação dupla | JWT na API e Cookies na Web |
+| Correlation ID fim a fim | Rastreabilidade completa de cada requisição |
+| Mensageria opcional | RabbitMQ (comandos) + Kafka (eventos) com Outbox |
+| Idempotência no SAP | Dispatch único garantido por hash de grupo |
+| Logs estruturados | Serilog + tabela `LogSistema` com índices otimizados |
 
 ---
 
 ## Arquitetura
 
-Arquitetura em camadas com duas "fachadas" (API e Web) compartilhando as mesmas camadas de aplicação e infraestrutura:
+Arquitetura em camadas (Clean Architecture) com duas "fachadas" (API REST e Web MVC) compartilhando as mesmas camadas de Aplicação, Domínio e Infraestrutura.
 
 ```
-┌──────────────────────┐      ┌──────────────────────┐
-│  FinancialImport.Web │      │  FinancialImport.Api │
-│   (MVC + Razor)      │      │   (REST + Swagger)   │
-└──────────┬───────────┘      └──────────┬───────────┘
-           │                             │
-           └──────────────┬──────────────┘
-                          │
-              ┌───────────▼────────────┐
-              │  Application (CQRS,    │
-              │  serviços, parsers,    │
-              │  validators)           │
-              └───────────┬────────────┘
-                          │
-              ┌───────────▼────────────┐
-              │  Domain (entidades,    │
-              │  enums, constantes)    │
-              └───────────┬────────────┘
-                          │
-    ┌─────────────────────┼─────────────────────┐
-    │                     │                     │
-┌───▼────────┐   ┌────────▼────────┐   ┌────────▼────────┐
-│ Infrastruc │   │ Integration.Sap │   │ Integration.Hana│
-│ (EF Core,  │   │ (Service Layer) │   │ (ADO.NET HANA)  │
-│  MySQL,    │   │                 │   │                 │
-│  JWT, Hash)│   │                 │   │                 │
-└────────────┘   └─────────────────┘   └─────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                       PRESENTATION LAYER                        │
+│  ┌───────────────────────────┐  ┌───────────────────────────┐   │
+│  │   FinancialImport.Web     │  │   FinancialImport.Api     │   │
+│  │  (MVC + Razor Views)      │  │  (REST + Swagger/OpenAPI) │   │
+│  │  Cookie Auth, 11 ctrlrs   │  │  JWT Bearer, 9 ctrlrs     │   │
+│  └─────────────┬─────────────┘  └─────────────┬─────────────┘   │
+└────────────────┼────────────────────────────────┼───────────────┘
+                 └──────────────┬─────────────────┘
+                                │
+┌───────────────────────────────▼───────────────────────────────┐
+│                      APPLICATION LAYER                        │
+│  Serviços (ImportService, AuthService, UserService...)        │
+│  Parsers (Layout1Parser, Layout2Parser)                       │
+│  Validators (FluentValidation por layout)                     │
+│  DTOs / Commands / Queries                                    │
+│  Interfaces de repositórios e integrações                     │
+└───────────────────────────────┬───────────────────────────────┘
+                                │
+┌───────────────────────────────▼───────────────────────────────┐
+│                        DOMAIN LAYER                           │
+│  Entidades (User, ImportFile, ImportLine, OutboxMessage...)   │
+│  Enums (ImportStatus, LineStatus, MessageStatus...)           │
+│  Constantes (PermissionCodes, LayoutNames...)                 │
+└───────────────────────────────┬───────────────────────────────┘
+                                │
+          ┌─────────────────────┼──────────────────────┐
+          │                     │                      │
+┌─────────▼──────────┐ ┌────────▼────────┐ ┌──────────▼────────┐
+│   Infrastructure   │ │ Integration.Sap │ │ Integration.Hana  │
+│  EF Core + MySQL   │ │  SAP Service    │ │  SAP HANA ADO.NET │
+│  JWT / Hashing     │ │  Layer (REST)   │ │  Company Discovery│
+│  RabbitMQ / Kafka  │ │  Session Mgmt   │ │  SBOCOMMON.SRGC   │
+│  Outbox/Inbox      │ └─────────────────┘ └───────────────────┘
+│  Serilog Sinks     │
+└────────────────────┘
+             │
+┌────────────▼──────────────────┐
+│       FinancialImport.Shared  │
+│  IClock, abstrações cruzadas  │
+└───────────────────────────────┘
 ```
 
-Padrões aplicados:
+### Padrões Aplicados
 
-- **Clean/Layered Architecture** — dependências sempre apontando para o Domain.
-- **Repository Pattern** para acesso a dados (`IImportRepository`).
-- **Strategy Pattern** para parsing de layouts (`ILayoutImportParser`).
-- **Dependency Injection** via métodos de extensão por camada.
-- **Context Accessors** (`IUserContext`, `ICompanyContext`) resolvem o usuário/empresa atual a partir do `HttpContext`.
-- **FluentValidation** para regras de negócio sobre linhas importadas.
-- **Serilog** para logs estruturados.
-- **Transactional Outbox** (`MensagensOutbox`) + **Inbox** (`MensagensInbox`) para garantir entrega ao broker e idempotência de consumidores.
-- **Messaging dual-broker**: **RabbitMQ** para comandos internos (fila, retry, DLQ) e **Kafka** para eventos de domínio/integração.
-- **Idempotent dispatch** ao SAP via tabela `LancamentoSapDispatch` com unique index `(CompanyDb, GroupKeyHash)`.
-- **Correlation ID fim-a-fim** via `CorrelationIdMiddleware` + `ICorrelationContextAccessor` (AsyncLocal) propagado em logs, headers HTTP e envelopes de mensageria.
+| Padrão | Uso |
+|--------|-----|
+| Clean Architecture | Dependências sempre apontam para o Domain |
+| Repository Pattern | `IImportRepository` isola acesso a dados |
+| Strategy Pattern | `ILayoutImportParser` permite parsers plugáveis |
+| Dependency Injection | Métodos de extensão por camada (`AddApplication()`, `AddInfrastructure()`) |
+| Context Accessors | `IUserContext`, `ICompanyContext` via `HttpContext` (AsyncLocal) |
+| Transactional Outbox | `MensagensOutbox` garante entrega ao broker sem 2-phase commit |
+| Inbox Idempotency | `MensagensInbox` deduplica mensagens reentregues |
+| Correlation ID | `CorrelationIdMiddleware` propaga ID em logs, headers e mensagens |
+| Idempotent SAP Dispatch | Unique index `(CompanyDb, GroupKeyHash)` em `LancamentoSapDispatch` |
+| Deduplication by Hash | SHA-256 do conteúdo do arquivo e dos campos de negócio por linha |
 
-> 📘 Para a visão completa da evolução arquitetural (mensageria, outbox, idempotência, observabilidade e remoção de hardcoded), leia **[docs/architecture-evolution.md](docs/architecture-evolution.md)**.
+> Para a visão completa da evolução arquitetural (mensageria, outbox, idempotência, observabilidade), leia **[docs/architecture-evolution.md](docs/architecture-evolution.md)**.
 
 ---
 
-## Estrutura do repositório
+## Estrutura do Repositório
 
 ```
 FinancialImportSolution/
 ├── src/
-│   ├── FinancialImport.Domain/           # Entidades, enums, constantes de permissões
-│   ├── FinancialImport.Application/      # Serviços, parsers, validators, DTOs
-│   ├── FinancialImport.Infrastructure/   # EF Core, MySQL, repositórios, JWT, hashing
-│   ├── FinancialImport.Integration.Sap/  # Integração com SAP Service Layer
-│   ├── FinancialImport.Integration.Hana/ # Descoberta de empresas via SAP HANA
-│   ├── FinancialImport.Shared/           # Abstrações compartilhadas (IClock, etc.)
-│   ├── FinancialImport.Api/              # REST API + Swagger + JWT
-│   └── FinancialImport.Web/              # MVC + Razor Views (UI principal)
+│   ├── FinancialImport.Domain/              # Entidades, enums, constantes (~25 arquivos)
+│   ├── FinancialImport.Application/         # Serviços, parsers, validators, DTOs (~45 arquivos)
+│   ├── FinancialImport.Infrastructure/      # EF Core, MySQL, JWT, hashing, messaging (~40 arquivos)
+│   ├── FinancialImport.Integration.Sap/     # Cliente SAP Service Layer (~8 arquivos)
+│   ├── FinancialImport.Integration.Hana/    # Descoberta de empresas via HANA (~8 arquivos)
+│   ├── FinancialImport.Shared/              # Abstrações compartilhadas, IClock (~16 arquivos)
+│   ├── FinancialImport.Api/                 # REST API (9 controllers) com Swagger
+│   └── FinancialImport.Web/                 # MVC (11 controllers) com Razor Views
 ├── tests/
-│   └── FinancialImport.Tests/            # Testes unitários (xUnit)
+│   └── FinancialImport.Tests/               # Testes unitários xUnit 2.9
 ├── scripts/
-│   └── 01_InitialCreate.sql              # Script inicial do banco MySQL
-├── Directory.Build.props                 # TargetFramework net10.0, Nullable enable
-└── FinancialImportSolution.slnx          # Solução (.slnx)
+│   └── 01_InitialCreate.sql                 # Schema MySQL para criação manual
+├── docs/
+│   └── architecture-evolution.md            # Evolução da arquitetura e decisões técnicas
+├── Directory.Build.props                     # TargetFramework net10.0, Nullable enable
+└── FinancialImportSolution.slnx             # Arquivo de solução (.slnx)
 ```
 
 ---
 
-## Stack tecnológica
+## Stack Tecnológica
 
-| Camada / Tópico      | Tecnologia                                                   |
-| -------------------- | ------------------------------------------------------------ |
-| Runtime              | .NET 10.0                                                    |
-| Linguagem            | C# (LangVersion latest, `Nullable enable`)                   |
-| Web / API            | ASP.NET Core MVC + Razor Views, Swashbuckle (Swagger)        |
-| ORM                  | Entity Framework Core 9.0                                    |
-| Banco principal      | MySQL 8.0+ (provider Pomelo.EntityFrameworkCore.MySql 9.0)   |
-| Banco externo        | SAP HANA (via `Sap.Data.Hana` ADO.NET)                       |
-| Integração ERP       | SAP Business One Service Layer (REST / JSON)                 |
-| Auth (API)           | JWT Bearer (HS256)                                           |
-| Auth (Web)           | Cookie Authentication (8h, sliding)                          |
-| Validação            | FluentValidation 11.10                                       |
-| Leitura XLSX         | ClosedXML 0.104                                              |
-| Logging              | Serilog (Console + File rolling diário)                      |
-| Testes               | xUnit 2.9                                                    |
+| Camada / Tópico | Tecnologia |
+|-----------------|------------|
+| Runtime | .NET 10.0 |
+| Linguagem | C# (LangVersion latest, `Nullable enable`) |
+| Web / API | ASP.NET Core MVC + Razor Views, Swashbuckle (Swagger/OpenAPI) |
+| ORM | Entity Framework Core 9.0 |
+| Banco principal | MySQL 8.0+ (Pomelo.EntityFrameworkCore.MySql 9.0) |
+| Banco externo | SAP HANA (via `Sap.Data.Hana` ADO.NET, carregado dinamicamente) |
+| ERP integrado | SAP Business One Service Layer (REST / JSON) |
+| Autenticação (API) | JWT Bearer HS256 |
+| Autenticação (Web) | Cookie Authentication (sliding 12h) |
+| Validação | FluentValidation 11.10 |
+| Leitura de XLSX | ClosedXML 0.104 |
+| Logging | Serilog (Console + File rolling diário) |
+| Mensageria (comandos) | RabbitMQ 6.8.1 (opcional, `Enabled: false` por padrão) |
+| Mensageria (eventos) | Confluent.Kafka 2.6.1 (opcional, `Enabled: false` por padrão) |
+| Testes | xUnit 2.9.2 + FluentAssertions 6.12.1 |
 
 ---
 
 ## Pré-requisitos
 
-- **.NET SDK 10.0**
-- **MySQL 8.0+** acessível para a aplicação
-- Acesso ao **SAP Business One Service Layer** (URL, usuário e senha manager)
-- Acesso ao **SAP HANA** (para descoberta de empresas) + cliente `Sap.Data.Hana` instalado
-  - Caminho padrão (Windows): `C:\Program Files\sap\hdbclient\dotnetcore\v8.0\Sap.Data.Hana.Net.v8.0.dll`
-- Porta 3306 liberada para o MySQL
+- **.NET SDK 10.0** (`dotnet --version` deve retornar `10.x.x`)
+- **MySQL 8.0+** acessível pela aplicação (porta padrão 3306)
+- Acesso ao **SAP Business One Service Layer** (URL, usuário `manager`, senha)
+- Acesso ao **SAP HANA** para descoberta de empresas + driver `Sap.Data.Hana` instalado
+  - Windows: `C:\Program Files\sap\hdbclient\dotnetcore\v8.0\Sap.Data.Hana.Net.v8.0.dll`
+  - Linux: caminho personalizado via `HanaDbConnection:ProviderAssemblyPath`
+- (Opcional) **RabbitMQ 3.12+** para processamento assíncrono
+- (Opcional) **Apache Kafka 3.x** para eventos de domínio
 
 ---
 
-## Configuração
+## Configuração Completa
 
-As configurações ficam em `appsettings.json` / `appsettings.Development.json` dentro dos projetos `FinancialImport.Api` e `FinancialImport.Web`. Nunca versione senhas reais — use **User Secrets** ou variáveis de ambiente em produção.
+As configurações ficam em `appsettings.json` e `appsettings.Development.json` dentro de `src/FinancialImport.Api/` e `src/FinancialImport.Web/`.
 
-### Connection string (MySQL)
+> **IMPORTANTE**: Nunca versione senhas reais. Use **User Secrets** em desenvolvimento e **variáveis de ambiente** em produção.
+
+### Connection String (MySQL)
 
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Server=localhost;Database=FinancialImport;User=root;Password=******;Port=3306;"
+  "DefaultConnection": "Server=localhost;Database=FinancialImport;User=root;Password=******;Port=3306;CharSet=utf8mb4;"
 }
 ```
 
-### JWT (usado pela API)
+### JWT (API REST)
 
 ```json
 "Jwt": {
-  "SecretKey": "chave-com-no-minimo-32-caracteres",
+  "SecretKey": "chave-com-no-minimo-32-caracteres-aqui",
   "Issuer": "FinancialImport",
   "Audience": "FinancialImportClients",
   "ExpirationMinutes": 480,
   "RefreshExpirationMinutes": 1440
-}
-```
-
-### CORS (API)
-
-```json
-"Cors": {
-  "AllowedOrigins": [
-    "https://localhost:7000",
-    "http://localhost:5000"
-  ]
 }
 ```
 
@@ -201,11 +230,13 @@ As configurações ficam em `appsettings.json` / `appsettings.Development.json` 
 }
 ```
 
-### SAP HANA (descoberta de empresas)
+> Em produção, defina `IgnoreSslErrors: false` e use um certificado válido.
+
+### SAP HANA (Descoberta de Empresas)
 
 ```json
 "HanaDbConnection": {
-  "Server": "seu-hana",
+  "Server": "seu-hana-server",
   "Port": 30015,
   "Database": "SBOCOMMON",
   "UserID": "SYSTEM",
@@ -214,20 +245,86 @@ As configurações ficam em `appsettings.json` / `appsettings.Development.json` 
   "MinPoolSize": 10,
   "ConnectionTimeout": 60,
   "CommandTimeout": 300,
-  "ProviderInvariantName": "Sap.Data.Hana",
   "ProviderAssemblyPath": "C:\\Program Files\\sap\\hdbclient\\dotnetcore\\v8.0\\Sap.Data.Hana.Net.v8.0.dll"
 }
 ```
 
-### Parsing de layout
+### Importação e Parsing
 
 ```json
 "LayoutParsing": {
   "DefaultTipoLancLayout1": "D"
+},
+"Imports": {
+  "MaxFileSizeBytes": 10485760,
+  "AllowedExtensions": [".csv", ".txt", ".xlsx"],
+  "Processing": {
+    "UseAsyncConfirmation": false,
+    "MaxRetryAttempts": 3
+  },
+  "Deduplication": {
+    "KeyFields": ["SeqLancamento", "CompanyDb", "Reference", "DebitAccount", "CreditAccount", "PostingDate", "DueDate", "Amount", "Memo", "BranchCode"]
+  },
+  "Truncation": {
+    "MemoMaxLength": 254,
+    "ReferenceMaxLength": 200,
+    "LineMemoMaxLength": 254
+  }
 }
 ```
 
-### Admin padrão (seed inicial)
+### CORS (API)
+
+```json
+"Cors": {
+  "AllowedOrigins": [
+    "https://localhost:7000",
+    "http://localhost:5000"
+  ]
+}
+```
+
+### RabbitMQ (Opcional)
+
+```json
+"Messaging": {
+  "RabbitMq": {
+    "Enabled": false,
+    "Host": "localhost",
+    "Port": 5672,
+    "VirtualHost": "/",
+    "Username": "guest",
+    "Password": "guest",
+    "Exchange": "financialimport.exchange",
+    "DeadLetterExchange": "financialimport.dlx",
+    "Channels": {
+      "ImportProcess": "import.process.command",
+      "ImportReprocess": "import.reprocess.command",
+      "SapDispatch": "sap.dispatch.command",
+      "AuditWrite": "audit.write.command"
+    }
+  }
+}
+```
+
+### Kafka (Opcional)
+
+```json
+"Messaging": {
+  "Kafka": {
+    "Enabled": false,
+    "BootstrapServers": "localhost:9092",
+    "Topics": {
+      "ImportEvents": "import.events",
+      "SapEvents": "sap.events",
+      "SecurityEvents": "security.events",
+      "AuditEvents": "audit.events"
+    }
+  }
+}
+```
+
+### Admin Seed (Primeiro Acesso)
 
 ```json
 "AdminSeed": {
@@ -237,55 +334,96 @@ As configurações ficam em `appsettings.json` / `appsettings.Development.json` 
 }
 ```
 
-> Troque a senha do admin imediatamente após o primeiro login.
+> Troque a senha do admin imediatamente após o primeiro login em produção.
 
 ---
 
-## Banco de dados
+## Banco de Dados
 
-O schema é criado automaticamente na inicialização via **EF Core Migrations** (`context.Database.Migrate()`), e um `DatabaseSeeder` cria o usuário admin e as permissões padrão.
+O schema é criado automaticamente na inicialização via **EF Core Migrations** (`context.Database.Migrate()`). O `DatabaseSeeder` cria o usuário admin, perfis padrão e permissões básicas.
 
-Também existe o script completo `scripts/01_InitialCreate.sql` para criação manual do banco em ambientes onde migrations automáticas não são desejadas.
+Também existe o script `scripts/01_InitialCreate.sql` para criação manual em ambientes onde migrations automáticas não são desejadas (ex: DBA controla o schema).
 
-### Tabelas principais
+### Tabelas do Schema
 
-| Tabela                     | Descrição                                                    |
-| -------------------------- | ------------------------------------------------------------ |
-| `Usuarios`                 | Usuários do sistema, flag `AdminGlobal`                      |
-| `Perfis`                   | Perfis de acesso (papéis)                                    |
-| `Permissoes`               | Permissões granulares por código                             |
-| `UsuarioPerfil`            | N:N usuário × perfil                                         |
-| `PerfilPermissao`          | N:N perfil × permissão                                       |
-| `UsuarioEmpresaPermitida`  | Controla quais empresas (databases SAP) o usuário acessa     |
-| `AuditoriaLogin`           | Log de tentativas de login (IP, user agent, sucesso/falha)   |
-| `SessaoEmpresaUsuario`     | Sessões SAP ativas por usuário/empresa com expiração         |
-| `ImportacaoArquivo`        | Arquivos importados (status, layout, hash, contagens)        |
-| `ImportacaoLinha`          | Linhas individuais do arquivo (status, resposta SAP, hash)   |
-| `MapeamentoFilialSap`      | Mapeamento de filial do arquivo → `BPLId` do SAP             |
-| `ConfiguracaoLayout`       | Layouts de importação configuráveis                          |
-| `ConfiguracaoLayoutCampo`  | Campos de cada layout                                        |
-| `LogSistema`               | Log geral da aplicação                                       |
-| `Regras`                   | Parâmetros/regras chave-valor                                |
+#### Segurança e Controle de Acesso
 
-Deduplicação é garantida por índices únicos compostos:
-- `ImportacaoArquivo`: `(CompanyDb, HashArquivo)` — mesmo arquivo não é importado 2×.
-- `ImportacaoLinha`: `(CompanyDb, HashChaveNegocio)` — mesma linha não é enviada 2× ao SAP.
+| Tabela | Descrição |
+|--------|-----------|
+| `Usuarios` | Contas de usuário com hash/salt da senha, flag `AdminGlobal` |
+| `Perfis` | Papéis (roles) de acesso |
+| `Permissoes` | Permissões granulares por código único |
+| `UsuarioPerfil` | N:N usuário ↔ perfil |
+| `PerfilPermissao` | N:N perfil ↔ permissão |
+| `UsuarioEmpresaPermitida` | Controla quais databases SAP o usuário pode acessar |
+| `AuditoriaLogin` | Log de tentativas de login (IP, user agent, sucesso/falha) |
+| `SessaoEmpresaUsuario` | Sessões SAP ativas por usuário/empresa com data de expiração |
+
+#### Importação
+
+| Tabela | Descrição |
+|--------|-----------|
+| `ImportacaoArquivo` | Cabeçalho da importação: status, layout detectado, hash, contagens |
+| `ImportacaoLinha` | Linhas individuais: conta, data, valor, status, resposta do SAP, hash |
+| `MapeamentoFilialSap` | Mapeia código de filial do arquivo → `BPLId` do SAP por empresa |
+| `LancamentoSapDispatch` | Rastreamento idempotente de despachos ao SAP |
+
+#### Configuração
+
+| Tabela | Descrição |
+|--------|-----------|
+| `ConfiguracaoLayout` | Definições de layout de importação |
+| `ConfiguracaoLayoutCampo` | Campos de cada layout com metadados |
+| `ConfiguracaoSistema` | Configurações chave-valor gerenciadas via DB (com UI administrativa) |
+| `Regras` | Parâmetros/regras de negócio chave-valor |
+| `LogSistema` | Log de auditoria estruturado com correlation ID |
+
+#### Mensageria (Padrão Outbox)
+
+| Tabela | Descrição |
+|--------|-----------|
+| `MensagensOutbox` | Mensagens pendentes de publicação no broker (transacional) |
+| `MensagensInbox` | Deduplicação de mensagens consumidas (idempotência de consumidor) |
+
+### Índices de Deduplicação
+
+```sql
+-- Mesmo arquivo não é importado duas vezes para a mesma empresa
+UNIQUE INDEX IX_ImportacaoArquivo (CompanyDb, HashArquivo)
+
+-- Mesma linha de negócio não é enviada duas vezes ao SAP
+UNIQUE INDEX IX_ImportacaoLinha (CompanyDb, HashChaveNegocio)
+
+-- Mesmo grupo não é despachado duas vezes ao SAP
+UNIQUE INDEX IX_LancamentoSapDispatch (CompanyDb, GroupKeyHash)
+```
 
 ---
 
-## Como executar
+## Como Executar
 
-### 1. Clonar e restaurar
+### 1. Clonar e Restaurar
 
 ```bash
 git clone https://github.com/luizbraga1994/financialimportsolution.git
-cd financialimportsolution
+cd FinancialImportSolution
 dotnet restore FinancialImportSolution.slnx
 ```
 
-### 2. Configurar `appsettings.Development.json`
+### 2. Configurar Credenciais (User Secrets — desenvolvimento)
 
-Ajuste `ConnectionStrings:DefaultConnection`, `Jwt:SecretKey`, `SapServiceLayer` e `HanaDbConnection` tanto em `src/FinancialImport.Api` quanto em `src/FinancialImport.Web`.
+```bash
+# Para a API
+cd src/FinancialImport.Api
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Server=localhost;Database=FinancialImport;User=root;Password=SUA_SENHA;Port=3306;"
+dotnet user-secrets set "Jwt:SecretKey" "sua-chave-secreta-com-32-chars-minimo"
+dotnet user-secrets set "SapServiceLayer:Password" "sua-senha-sap"
+dotnet user-secrets set "HanaDbConnection:Password" "sua-senha-hana"
+
+# Para a Web (repetir os mesmos segredos)
+cd ../FinancialImport.Web
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "..."
+```
 
 ### 3. Compilar
 
@@ -293,13 +431,13 @@ Ajuste `ConnectionStrings:DefaultConnection`, `Jwt:SecretKey`, `SapServiceLayer`
 dotnet build FinancialImportSolution.slnx
 ```
 
-### 4. Rodar a aplicação Web (MVC)
+### 4. Rodar a Aplicação Web (MVC)
 
 ```bash
 dotnet run --project src/FinancialImport.Web/FinancialImport.Web.csproj
 ```
 
-Acesse `https://localhost:7000` (ou a porta configurada) e faça login com as credenciais do seed (`admin` / `Admin@123`).
+Acesse `https://localhost:7000` e faça login com `admin` / `Admin@123`.
 
 ### 5. Rodar a API REST
 
@@ -307,99 +445,335 @@ Acesse `https://localhost:7000` (ou a porta configurada) e faça login com as cr
 dotnet run --project src/FinancialImport.Api/FinancialImport.Api.csproj
 ```
 
-Swagger disponível em `/swagger`. Use `POST /api/v1/auth/login` para obter o token JWT e depois envie `Authorization: Bearer <token>` nas demais chamadas.
+Swagger disponível em `https://localhost:5000/swagger`. Obtenha o token via `POST /api/v1/auth/login` e envie `Authorization: Bearer <token>` nas demais chamadas.
 
-> Na primeira execução, o EF Core aplica todas as migrations e o `DatabaseSeeder` cria o usuário admin e as permissões básicas.
+### 6. Primeiro Acesso
+
+Na primeira execução:
+1. EF Core aplica todas as migrations automaticamente
+2. `DatabaseSeeder` cria o usuário `admin`, permissões base e perfis padrão
+3. Cache de configurações é carregado do banco
+4. Troque a senha do admin imediatamente em produção
+
+### 7. Executar Testes
+
+```bash
+dotnet test FinancialImportSolution.slnx
+```
+
+---
+
+## Fluxo de Importação
+
+### Fase de Preview (Upload + Validação)
+
+```
+1. Usuário faz upload do arquivo (XLSX/CSV/TXT, máx. 10 MB)
+2. Sistema calcula SHA-256 do arquivo
+   → Se já existe (CompanyDb, HashArquivo), retorna erro de duplicata
+3. Detecta layout inspecionando cabeçalhos da primeira linha
+4. Parser do layout correto processa cada linha
+5. FluentValidation valida cada linha individualmente
+6. BusinessKeyBuilder constrói hash dos campos de negócio configurados
+   → Linhas com hash já existente no banco são marcadas como duplicatas
+7. Linhas agrupadas por conta formam a pré-visualização
+8. Persiste ImportacaoArquivo (status: Pending) + ImportacaoLinha no MySQL
+9. Retorna preview agrupado ao usuário
+```
+
+### Fase de Confirmação
+
+#### Modo Síncrono (`UseAsyncConfirmation: false`, padrão)
+
+```
+1. Usuário confirma o preview
+2. Serviço processa imediatamente no thread da requisição
+3. Para cada grupo válido:
+   a. Verifica LancamentoSapDispatch (idempotência)
+   b. Se novo: POST /JournalEntries no SAP Service Layer
+   c. Registra DocEntry (sucesso) ou mensagem de erro (falha)
+4. Atualiza status de ImportacaoArquivo e ImportacaoLinha
+5. Retorna resultado completo
+```
+
+#### Modo Assíncrono (`UseAsyncConfirmation: true`)
+
+```
+1. Usuário confirma o preview
+2. Serviço insere OutboxMessage na mesma transação EF
+3. Resposta imediata ao usuário (status: Processing)
+4. OutboxDispatcher (background service, poll 5s):
+   a. Marca mensagem como InFlight
+   b. Publica no RabbitMQ/Kafka
+5. ImportProcessWorker consome:
+   a. Verifica Inbox (idempotência de consumidor)
+   b. Processa e despacha ao SAP
+   c. Marca mensagem como Dispatched
+6. Em caso de falha: exponential backoff + DLQ após max tentativas
+```
+
+### Deduplicação em 3 Camadas
+
+| Nível | Mecanismo | Tabela |
+|-------|-----------|--------|
+| Arquivo | SHA-256 do conteúdo binário | `ImportacaoArquivo` |
+| Linha de negócio | SHA-256 dos campos configurados | `ImportacaoLinha` |
+| Despacho SAP | SHA-256 do grupo de lançamentos | `LancamentoSapDispatch` |
+
+---
+
+## Layouts de Importação
+
+Dois parsers nativos implementam `ILayoutImportParser`. O layout correto é detectado automaticamente pelos cabeçalhos da primeira linha do arquivo.
+
+### Layout 1 — Técnico
+
+Identificado pelo cabeçalho `CODCONTACONTABIL`.
+
+| Coluna | Obrigatório | Descrição |
+|--------|-------------|-----------|
+| `CODCONTACONTABIL` | Sim | Código da conta contábil |
+| `DTLANCCONTABIL` | Sim | Data do lançamento (dd/MM/yyyy) |
+| `TIPOLANC` | Não | D = Débito, C = Crédito (default configurável) |
+| `REFERENCIA` | Não | Referência do lançamento |
+| `VLR` | Sim | Valor do lançamento |
+| `MEMO` | Não | Histórico/observação |
+| `CODFILIAL` | Não | Código da filial (mapeado para BPLId) |
+
+> Quando `TIPOLANC` não é informado, usa o valor de `LayoutParsing:DefaultTipoLancLayout1` (padrão: `"D"`).
+
+### Layout 2 — Amigável (Recomendado para Usuários Finais)
+
+Identificado pelo cabeçalho `Conta Contabil`.
+
+| Coluna | Obrigatório | Descrição |
+|--------|-------------|-----------|
+| `Conta Contabil` | Sim | Código da conta contábil |
+| `Data Lancamento` | Sim | Data (dd/MM/yyyy) |
+| `Valor Credito` | Cond. | Valor a crédito (preencher OU débito) |
+| `Valor Debito` | Cond. | Valor a débito (preencher OU crédito) |
+| `Referencia` | Não | Referência do lançamento |
+| `Memo` | Não | Histórico/observação |
+| `Filial` | Não | Código da filial |
+
+Um **template XLSX** pode ser baixado em `/Import/DownloadTemplate` (Web) ou gerado via `ImportTemplateBuilder`.
+
+### Formatos de Arquivo Aceitos
+
+| Formato | Extensão | Parser |
+|---------|----------|--------|
+| Excel | `.xlsx` | ClosedXML (primeiro sheet) |
+| CSV | `.csv` | Delimitador vírgula, primeira linha = cabeçalho |
+| Texto delimitado | `.txt` | Delimitador ponto-e-vírgula ou tab |
+
+### Validações por Linha (FluentValidation)
+
+- Conta contábil obrigatória e não vazia
+- Data de lançamento válida e não futura (configurável)
+- Valor numérico válido e maior que zero
+- Layout 2: exatamente um dos valores (débito OU crédito) deve ser preenchido
+- Truncamento automático: Memo (254 chars), Referência (200 chars)
 
 ---
 
 ## Endpoints da API
 
-Todos os endpoints (exceto login e health) exigem JWT Bearer e, quando aplicável, uma policy de autorização.
+Todos os endpoints (exceto `/health` e `/api/v1/auth/login`) exigem `Authorization: Bearer <token>`.
 
 ### Autenticação — `/api/v1/auth`
 
-| Método | Rota     | Descrição                                        |
-| ------ | -------- | ------------------------------------------------ |
-| POST   | `/login` | Autentica usuário, retorna JWT + refresh token   |
-| GET    | `/me`    | Dados do usuário autenticado (claims atuais)     |
+| Método | Rota | Descrição | Auth |
+|--------|------|-----------|------|
+| `POST` | `/login` | Autentica usuário, retorna JWT + refresh token | Anônimo |
+| `GET` | `/me` | Dados do usuário autenticado e permissões | JWT |
+
+**Request de login:**
+```json
+{
+  "login": "admin",
+  "password": "Admin@123"
+}
+```
+
+**Response de login:**
+```json
+{
+  "success": true,
+  "data": {
+    "accessToken": "eyJ...",
+    "refreshToken": "...",
+    "expiresAt": "2025-01-01T16:00:00Z"
+  }
+}
+```
 
 ### Empresas — `/api/v1/companies`
 
-| Método | Rota      | Descrição                                                      |
-| ------ | --------- | -------------------------------------------------------------- |
-| GET    | `/`       | Lista empresas acessíveis ao usuário (via HANA + permissões)   |
-| POST   | `/login`  | Abre sessão SAP na empresa selecionada                         |
-| POST   | `/logout` | Encerra sessão SAP ativa                                       |
+| Método | Rota | Descrição | Policy |
+|--------|------|-----------|--------|
+| `GET` | `/` | Lista empresas acessíveis (HANA + permissões do usuário) | JWT |
+| `POST` | `/login` | Abre sessão SAP na empresa selecionada | `TrocarCompany` |
+| `POST` | `/logout` | Encerra sessão SAP ativa | JWT |
 
 ### Importações — `/api/v1/imports`
 
-| Método | Rota                        | Policy                    | Descrição                           |
-| ------ | --------------------------- | ------------------------- | ----------------------------------- |
-| POST   | `/preview`                  | `ImportarLancamentos`     | Upload + parse + validação          |
-| POST   | `/{importFileId}/confirm`   | `ImportarLancamentos`     | Processa e envia lançamentos ao SAP |
-| POST   | `/{importFileId}/reprocess` | `ReprocessarImportacao`   | Reprocessa linhas com erro          |
-| GET    | `/history`                  | `VisualizarHistorico`     | Histórico paginado de importações   |
-| GET    | `/{importFileId}/lines`     | `VisualizarHistorico`     | Linhas paginadas de uma importação  |
+| Método | Rota | Policy | Descrição |
+|--------|------|--------|-----------|
+| `POST` | `/preview` | `ImportarLancamentos` | Upload + parse + validação, retorna pré-visualização |
+| `POST` | `/{importFileId}/confirm` | `ImportarLancamentos` | Processa e envia lançamentos ao SAP |
+| `POST` | `/{importFileId}/reprocess` | `ReprocessarImportacao` | Reprocessa linhas com erro |
+| `GET` | `/history` | `VisualizarHistorico` | Histórico paginado de importações |
+| `GET` | `/{importFileId}/lines` | `VisualizarHistorico` | Linhas paginadas de uma importação |
+
+**Preview Request** (`multipart/form-data`):
+```
+file: [arquivo binário]
+```
+
+**Preview Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "importFileId": "guid",
+    "detectedLayout": "Layout2",
+    "totalLines": 50,
+    "validLines": 48,
+    "duplicateLines": 2,
+    "groups": [
+      {
+        "debitAccount": "1.1.1.01",
+        "creditAccount": "2.1.1.01",
+        "totalAmount": 1500.00,
+        "lineCount": 3
+      }
+    ]
+  }
+}
+```
 
 ### Administração
 
-| Controller                  | Rota base                      | Policy                 |
-| --------------------------- | ------------------------------ | ---------------------- |
-| `UsersApiController`        | `/api/v1/users`                | `GerenciarUsuarios`    |
-| `ProfilesApiController`     | `/api/v1/profiles`             | `GerenciarPerfis`      |
-| `PermissionsApiController`  | `/api/v1/permissions`          | `GerenciarPermissoes`  |
-| `BranchMappingApiController`| `/api/v1/branch-mappings`      | `GerenciarUsuarios`    |
-| `LogsApiController`         | `/api/v1/logs`                 | `VisualizarLogs`       |
-| `HealthApiController`       | `/health`                      | (anônimo)              |
+| Controller | Rota Base | Policy | Operações |
+|------------|-----------|--------|-----------|
+| `UsersApiController` | `/api/v1/users` | `GerenciarUsuarios` | CRUD usuários, trocar senha |
+| `ProfilesApiController` | `/api/v1/profiles` | `GerenciarPerfis` | CRUD perfis, atribuir permissões |
+| `PermissionsApiController` | `/api/v1/permissions` | `GerenciarPermissoes` | Listar/visualizar permissões |
+| `BranchMappingApiController` | `/api/v1/branch-mappings` | `GerenciarUsuarios` | Mapeamento filial → BPLId por empresa |
+| `LogsApiController` | `/api/v1/logs` | `VisualizarLogs` | Consulta logs e auditoria |
+| `HealthApiController` | `/health` | Anônimo | Health check (EF DbContext) |
 
-Todas as respostas são encapsuladas em `ApiResponse<T>`; listagens usam `PagedResult<T>`.
+**Formato de resposta padrão:**
+```json
+{
+  "success": true,
+  "data": { ... },
+  "message": null,
+  "errors": []
+}
+```
+
+**Paginação:**
+```json
+{
+  "success": true,
+  "data": {
+    "items": [...],
+    "totalCount": 150,
+    "page": 1,
+    "pageSize": 20,
+    "totalPages": 8
+  }
+}
+```
 
 ---
 
-## Layouts de importação
+## Modelo de Permissões
 
-Dois parsers nativos (ambos implementam `ILayoutImportParser`) — o layout correto é resolvido automaticamente inspecionando os cabeçalhos do arquivo:
+A autorização é baseada em **códigos de permissão** (não em roles estáticas). Cada policy do ASP.NET Core é gerada dinamicamente a partir dos códigos:
 
-### Layout 1 — técnico
+```csharp
+// Gerado para cada código em PermissionCodes.All
+options.AddPolicy(code, policy =>
+    policy.RequireAssertion(ctx =>
+        ctx.User.HasClaim("global_admin", "true") ||
+        ctx.User.HasClaim("permission", code)));
+```
 
-Identificado pelos cabeçalhos `CODCONTACONTABIL` e `DTLANCCONTABIL`. Outros campos: `TIPOLANC`, `REFERENCIA`, `VLR`, etc. Quando `TIPOLANC` não é informado, o valor default vem de `LayoutParsing:DefaultTipoLancLayout1` (por padrão `"D"` = débito).
+### Permissões Disponíveis
 
-### Layout 2 — amigável
+| Código | Descrição | Perfil Padrão |
+|--------|-----------|---------------|
+| `importar_lancamentos` | Importar lançamentos contábeis | Administrador, Operador |
+| `visualizar_historico` | Visualizar histórico de importações | Administrador, Operador |
+| `reprocessar_importacao` | Reprocessar importações com erro | Administrador, Operador |
+| `trocar_company` | Trocar de empresa SAP | Administrador, Operador |
+| `visualizar_filiais` | Visualizar filiais disponíveis | Administrador, Operador |
+| `gerenciar_usuarios` | CRUD de usuários e empresas permitidas | Administrador |
+| `gerenciar_perfis` | CRUD de perfis | Administrador |
+| `gerenciar_permissoes` | Gerenciar permissões e atribuições | Administrador |
+| `visualizar_logs` | Visualizar logs e auditoria do sistema | Administrador |
 
-Identificado pelos cabeçalhos `Conta Contabil`, `Valor Credito`, `Valor Debito`. É o layout recomendado para usuários finais. Um **template XLSX** pode ser baixado diretamente pela UI (`/Import/DownloadTemplate`) ou gerado programaticamente pelo `ImportTemplateBuilder`.
+### Hierarquia de Acesso
 
-Formatos aceitos: **XLSX** (via `ClosedXML`), **CSV** e **TXT** (parser delimitado). O primeiro sheet / primeira linha é sempre tratado como cabeçalho.
+```
+Usuário
+  ├── AdminGlobal = true  →  acesso irrestrito a tudo
+  └── AdminGlobal = false
+        ├── Perfis (N:N)
+        │     └── Permissões (N:N)  →  define o que pode fazer
+        └── Empresas Permitidas (N:N)  →  define onde pode operar
+```
 
-Validações de linha (FluentValidation):
-- Conta contábil obrigatória
-- Data de lançamento válida
-- Valores numéricos válidos (débito OU crédito)
-- Outros campos obrigatórios por layout
+### Perfis Padrão
+
+| Perfil | Permissões |
+|--------|------------|
+| **Administrador** | Todas as permissões, acesso a todas as empresas |
+| **Operador** | importar, visualizar histórico, reprocessar, trocar empresa, visualizar filiais |
 
 ---
 
-## Modelo de permissões
+## Autenticação e Autorização
 
-Autorização é baseada em **códigos de permissão** (não em roles estáticas). Cada policy do ASP.NET Core corresponde a um código:
+### API REST (JWT Bearer)
 
-| Código                    | Descrição                             |
-| ------------------------- | ------------------------------------- |
-| `importar_lancamentos`    | Importar lançamentos contábeis        |
-| `visualizar_historico`    | Visualizar histórico de importações   |
-| `reprocessar_importacao`  | Reprocessar importações com erro      |
-| `trocar_company`          | Trocar de empresa SAP                 |
-| `gerenciar_usuarios`      | CRUD de usuários                      |
-| `gerenciar_perfis`        | CRUD de perfis                        |
-| `gerenciar_permissoes`    | CRUD de permissões                    |
-| `visualizar_logs`         | Visualizar logs do sistema            |
+```
+POST /api/v1/auth/login
+  → Retorna accessToken (8h) + refreshToken (24h)
+  → Claims: user_id, email, global_admin, permission (uma por permissão)
 
-Relacionamentos:
+Headers das requisições autenticadas:
+  Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+```
 
-- Usuário → Perfis (N:N)
-- Perfil → Permissões (N:N)
-- Usuário → Empresas permitidas (N:N) — só enxerga/loga em empresas autorizadas.
-- Flag `AdminGlobal` no usuário ignora todas as restrições.
+O `SecretKey` do JWT é carregado do banco (`ConfiguracaoSistema`) na inicialização via `DbConfigureJwtBearerOptions`, permitindo rotação sem redeploy.
+
+### Web MVC (Cookie Authentication)
+
+```
+POST /Account/Login
+  → Valida credenciais, cria claims identity
+  → Seta cookie seguro HTTPOnly com sliding expiration (12h)
+
+Logout:
+  POST /Account/Logout
+  → Invalida cookie + encerra sessão SAP ativa
+```
+
+### SAP Session Management
+
+Cada usuário mantém uma sessão SAP isolada por empresa:
+
+```
+POST /api/v1/companies/login  (ou Web /Company/Login)
+  → SapCompanySessionService faz POST /b1s/v1/Login no SAP
+  → Armazena SessionId + RouteId em SapSessionStore (memória)
+  → Persiste em SessaoEmpresaUsuario (MySQL) para recovery
+  → JavaScript client-side envia keep-alive a cada 25min
+  → Timeout: 30min sem atividade
+```
 
 ---
 
@@ -407,36 +781,385 @@ Relacionamentos:
 
 ### SAP Service Layer (`FinancialImport.Integration.Sap`)
 
-- **`SapCompanySessionService`** — faz `POST /b1s/v1/Login` com `CompanyDB`/user/password, armazena `SessionId` e `RouteId` no `SapSessionStore` e gerencia logout. Opção `IgnoreSslErrors` disponível para ambientes com certificados self-signed.
-- **`SapJournalEntryService`** — faz `POST /b1s/v1/JournalEntries` incluindo cabeçalhos `B1SESSION` e `ROUTEID`, tratando respostas de erro do SAP (`error.message.value`) e registrando payloads em log.
+**`SapCompanySessionService`**
+- `POST /b1s/v1/Login` com `CompanyDB`, usuário e senha
+- Armazena `B1SESSION` e `ROUTEID` no `SapSessionStore`
+- Gerencia logout (`POST /b1s/v1/Logout`)
+- Suporte a `IgnoreSslErrors` para ambientes com certificados self-signed
 
-Usa `IHttpClientFactory` com um named client `SapServiceLayer` configurado a partir de `SapServiceLayerOptions` (timeouts, retries, headers).
+**`SapJournalEntryService`**
+- `POST /b1s/v1/JournalEntries` com headers `B1SESSION` e `ROUTEID`
+- Payload mapeado a partir de `ImportLine` entities
+- Trata `error.message.value` das respostas de erro do SAP
+- Registra payload de request/response em `LogSistema`
+- Retry automático com backoff configurável (`MaxRetryAttempts`)
+
+Usa `IHttpClientFactory` com named client `SapServiceLayer`:
+```csharp
+services.AddHttpClient("SapServiceLayer", client => {
+    client.BaseAddress = new Uri(options.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+});
+```
 
 ### SAP HANA (`FinancialImport.Integration.Hana`)
 
-- **`SapCompanyDiscoveryService`** — carrega dinamicamente o provider `Sap.Data.Hana` (`DbProviderFactory`) e consulta `SBOCOMMON.SRGC` para retornar a lista de empresas disponíveis (`dbName`, `cmpName`, `cmpStatus`). É usado na tela de login/troca de empresa para mostrar apenas as empresas que o usuário tem permissão de acessar.
+**`SapCompanyDiscoveryService`**
+- Carrega `Sap.Data.Hana` dinamicamente via `DbProviderFactory` (evita dependência hard em DLL)
+- Consulta `SBOCOMMON.SRGC` para listar empresas disponíveis
+- Retorna: `dbName` (CompanyDB), `cmpName` (nome da empresa), status
+- Cruzado com `UsuarioEmpresaPermitida` para filtrar por permissão do usuário
+
+```sql
+SELECT "CompanyDB", "CompanyName", "CompStat"
+FROM "SBOCOMMON"."SRGC"
+WHERE "CompStat" = 'A'
+ORDER BY "CompanyName"
+```
+
+---
+
+## Mensageria e Padrão Outbox
+
+A mensageria é **completamente opcional** (desabilitada por padrão). Quando habilitada, garante entrega de mensagens sem 2-phase commit via padrão Transactional Outbox.
+
+### Quando Usar Qual Broker
+
+| Caso de Uso | Broker | Canal/Topic |
+|-------------|--------|-------------|
+| Processar importação (transacional) | RabbitMQ | `import.process.command` |
+| Reprocessar com DLQ e backoff | RabbitMQ | `import.reprocess.command` |
+| Despachar ao SAP (confiável) | RabbitMQ | `sap.dispatch.command` |
+| Evento de validação de importação | Kafka | `import.events` |
+| Evento de sucesso/falha no SAP | Kafka | `sap.events` |
+| Evento de segurança (login negado) | Kafka | `security.events` |
+| Evento de auditoria | Kafka | `audit.events` |
+
+### Ciclo de Vida do Outbox
+
+```
+[Business Transaction]
+  INSERT MensagensOutbox (status: Pending)
+  INSERT/UPDATE dados de negócio
+  COMMIT (atômico)
+
+[OutboxDispatcher - background, poll 5s]
+  SELECT ... WHERE Status = 'Pending' LIMIT 50
+  UPDATE Status = 'InFlight'
+  PUBLISH to RabbitMQ/Kafka
+  UPDATE Status = 'Dispatched' (sucesso)
+  UPDATE Status = 'Failed', RetryCount++ (falha)
+
+[Após MaxRetryAttempts]
+  UPDATE Status = 'DeadLettered'
+  INSERT LogSistema (categoria: Error)
+```
+
+### Idempotência de Consumidor
+
+```
+[Consumer recebe mensagem]
+  SELECT FROM MensagensInbox WHERE Consumer = ? AND MessageId = ?
+  → Existe: ACK sem reprocessar (já processado)
+  → Não existe:
+      INSERT MensagensInbox
+      [Processar mensagem]
+      UPDATE ProcessedAt
+```
+
+---
+
+## Logs, Auditoria e Rastreabilidade
+
+### Serilog
+
+Configurado em `Program.cs` com sinks:
+- **Console** — todos os ambientes (formato compacto)
+- **File** — rolling diário em `logs/log-.txt`
+  - Desenvolvimento: retenção 7 dias, nível Debug
+  - Produção: retenção 60 dias, nível Information
+
+Enriquecimento automático: `MachineName`, `Environment`, `Application`, `CorrelationId`.
+
+### Correlation ID (Fim a Fim)
+
+Cada requisição HTTP recebe um `CorrelationId` único:
+
+```
+Request chega → CorrelationIdMiddleware
+  → Lê X-Correlation-Id do header (se presente)
+  → Ou gera novo GUID
+  → Armazena em ICorrelationContextAccessor (AsyncLocal)
+  → Propaga em:
+       - Response header: X-Correlation-Id
+       - Serilog LogContext: CorrelationId
+       - Tabela LogSistema: CorrelationId
+       - Headers de mensagens RabbitMQ/Kafka
+       - Payload de request ao SAP
+```
+
+### Tabela LogSistema
+
+| Coluna | Descrição |
+|--------|-----------|
+| `Categoria` | Técnico / Funcional / Auditoria / Integração / Segurança |
+| `Nivel` | Information / Warning / Error / Critical |
+| `Operacao` | Preview / Confirmar / Despachar / Processar / Login / etc. |
+| `CorrelationId` | Rastreamento fim a fim |
+| `UsuarioId` | Quem executou |
+| `ImportacaoArquivoId` | Qual arquivo (quando aplicável) |
+| `DuracaoMs` | Tempo de execução em milissegundos |
+| `Mensagem` | Descrição estruturada |
+| `Dados` | JSON com contexto adicional |
+| `StackTrace` | Stack trace completo (somente em erros) |
+| `Hostname` | Servidor que processou |
+
+**Índices para consulta eficiente:**
+- `IX_LogSistema_DataHora`
+- `IX_LogSistema_UsuarioId`
+- `IX_LogSistema_CorrelationId`
+- `IX_LogSistema_Categoria_Nivel`
+- `IX_LogSistema_ImportacaoArquivoId`
+
+### AuditoriaLogin
+
+Todas as tentativas de login são registradas:
+- Timestamp, usuário, IP, User-Agent
+- Sucesso ou falha + motivo da falha
+- Útil para análise de segurança e suporte
 
 ---
 
 ## Testes
 
-Projeto: `tests/FinancialImport.Tests` (xUnit 2.9.2).
+**Projeto:** `tests/FinancialImport.Tests` (xUnit 2.9.2 + FluentAssertions 6.12.1)
 
 ```bash
 dotnet test FinancialImportSolution.slnx
+dotnet test FinancialImportSolution.slnx --collect:"XPlat Code Coverage"
 ```
 
-> A suíte atual é um stub; testes adicionais devem cobrir parsers, validators, `ImportService` (preview/process) e a integração com SAP (com HttpClient mockado).
+### Cobertura Planejada
+
+| Componente | Tipo de Teste |
+|------------|---------------|
+| `Layout1Parser` / `Layout2Parser` | Unitário — cenários válidos, inválidos, edge cases |
+| `ImportLineValidator` | Unitário — cada regra FluentValidation |
+| `BusinessKeyBuilder` | Unitário — hash determinístico, campos configurados |
+| `ImportService.PreviewAsync` | Unitário — mock repositório e parsers |
+| `ImportService.ConfirmAsync` | Unitário — mock SAP client |
+| `SapJournalEntryService` | Integração — `HttpClient` mockado |
+| `OutboxDispatcher` | Unitário — mock broker e repositório |
+| `DatabaseSeeder` | Integração — banco em memória |
 
 ---
 
-## Logs e auditoria
+## Deployment e Produção
 
-- **Serilog** configurado em `Program.cs` com sinks `Console` e `File` (rotativo diário em `logs/log-.txt`).
-- Nível mínimo: `Information`.
-- Todas as tentativas de login ficam em `AuditoriaLogin` (IP, user agent, sucesso/falha, motivo).
-- Eventos gerais da aplicação ficam em `LogSistema` (indexado por `DateTime` e `UserId`).
-- Erros não tratados da API são capturados pelo `GlobalExceptionMiddleware` e retornados como `ApiResponse` padronizado.
+### Variáveis de Ambiente (recomendado)
+
+```bash
+# Connection string
+ConnectionStrings__DefaultConnection="Server=prod-mysql;Database=FinancialImport;..."
+
+# JWT
+Jwt__SecretKey="chave-super-secreta-producao-32chars"
+
+# SAP
+SapServiceLayer__BaseUrl="https://sap-prod:50000/"
+SapServiceLayer__Password="senha-producao"
+SapServiceLayer__IgnoreSslErrors="false"
+
+# HANA
+HanaDbConnection__Server="hana-prod"
+HanaDbConnection__Password="senha-hana-producao"
+```
+
+### Health Check
+
+```
+GET /health
+→ 200 OK: { "status": "Healthy", "checks": { "database": "Healthy" } }
+→ 503: banco inacessível
+```
+
+### Migrations em Produção
+
+Opção 1 — Automático (padrão):
+```csharp
+// Em Program.cs — aplica migrations no startup
+context.Database.Migrate();
+```
+
+Opção 2 — Manual (recomendado para prod):
+```bash
+dotnet ef migrations script --project src/FinancialImport.Infrastructure \
+  --startup-project src/FinancialImport.Api \
+  --output migration.sql
+# Revisar e executar migration.sql no DBA
+```
+
+### Considerações de Produção
+
+| Item | Recomendação |
+|------|-------------|
+| SSL/TLS | Certificado válido para SAP Service Layer e aplicação web |
+| `IgnoreSslErrors` | Sempre `false` em produção |
+| Logs | Garantir `logs/` com permissão de escrita e rotação/retenção configurada |
+| Forwarded Headers | Middleware ativo para proxy reverso (nginx/IIS/caddy) |
+| CORS | Origens específicas, sem wildcard |
+| Admin Seed | Trocar senha após primeiro deploy |
+| Backups MySQL | Rotina de backup do schema `FinancialImport` |
+| Connection Pool | Ajustar `MaxPoolSize` conforme carga esperada |
+
+### Proxy Reverso (exemplo nginx)
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name financialimport.empresa.com;
+
+    location / {
+        proxy_pass http://localhost:7000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+---
+
+## Segurança
+
+### Credenciais e Segredos
+
+- **Nunca** versionar `appsettings.json` com senhas reais
+- Desenvolvimento: **User Secrets** (`dotnet user-secrets`)
+- Produção: **variáveis de ambiente** ou cofre de segredos (Azure Key Vault, AWS Secrets Manager, etc.)
+
+### Hashing de Senhas
+
+Senhas armazenadas com **PBKDF2 + salt único por usuário**:
+```
+Hash = PBKDF2(password, salt, iterations, algorithm)
+Colunas: SenhaHash (varbinary), SenhaSalt (varbinary)
+```
+
+### JWT
+
+- Algoritmo: HS256
+- `SecretKey` mínimo 32 caracteres
+- Carregado do banco na inicialização (rotação sem redeploy)
+- `ClockSkew` configurável para tolerância de clock entre servidores
+
+### CORS
+
+```json
+// Produção: origens específicas
+"Cors": {
+  "AllowedOrigins": ["https://financialimport.empresa.com"]
+}
+// Desenvolvimento: permite localhost em múltiplas portas
+```
+
+### Cabeçalhos de Segurança
+
+Recomendado adicionar via middleware ou proxy reverso:
+```
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Content-Security-Policy: default-src 'self'
+Strict-Transport-Security: max-age=31536000
+```
+
+### Auditoria
+
+- Todas as autenticações registradas em `AuditoriaLogin`
+- Todas as operações críticas registradas em `LogSistema`
+- Registros imutáveis (apenas INSERT, sem UPDATE/DELETE)
+- Correlation ID em todos os registros para rastreabilidade
+
+---
+
+## Guia de Desenvolvimento
+
+### Adicionando um Novo Layout de Importação
+
+1. Criar classe `Layout3Parser : ILayoutImportParser` em `FinancialImport.Application/Imports/Parsers/`
+2. Implementar `CanHandle(string[] headers)` — retorna `true` para o cabeçalho identificador
+3. Implementar `ParseAsync(Stream file)` — retorna `IEnumerable<ImportLineDto>`
+4. Criar `Layout3Validator : AbstractValidator<ImportLineDto>` em `.../Validators/`
+5. Registrar no DI em `FinancialImport.Application/DependencyInjection/ServiceCollectionExtensions.cs`
+6. O `LayoutDetector` resolverá automaticamente o parser correto
+
+### Adicionando uma Nova Permissão
+
+1. Adicionar constante em `FinancialImport.Domain/Constants/PermissionCodes.cs`
+2. A policy é gerada automaticamente (loop sobre `PermissionCodes.All`)
+3. O `DatabaseSeeder` criará a entrada em `Permissoes` no próximo startup
+4. Atribuir ao perfil desejado via UI administrativa ou migration de dados
+
+### Convenções de Código
+
+- **Nomenclatura**: PascalCase para tipos/métodos, camelCase para variáveis locais
+- **Async/Await**: todos os métodos que tocam I/O são assíncronos
+- **Nullable**: habilitado — todos os tipos de referência são não-nulos por padrão
+- **Validation**: FluentValidation para regras de negócio, Data Annotations para DTO simples
+- **Logging**: `ILogger<T>` injetado, structured logging com propriedades nomeadas
+
+### Estrutura de um Serviço Típico
+
+```csharp
+public class ExemploService(
+    IExemploRepository repository,
+    IUserContext userContext,
+    ILogger<ExemploService> logger,
+    IClock clock) : IExemploService
+{
+    public async Task<ResultDto> ExecutarAsync(Command cmd, CancellationToken ct = default)
+    {
+        logger.LogInformation("Iniciando {Operacao} para usuário {UserId}",
+            nameof(ExecutarAsync), userContext.UserId);
+
+        var entidade = await repository.ObterAsync(cmd.Id, ct);
+        // ... lógica de negócio
+        await repository.SalvarAsync(entidade, ct);
+
+        return ResultDto.FromEntidade(entidade);
+    }
+}
+```
+
+### Rodando com RabbitMQ Local (Docker)
+
+```bash
+docker run -d --name rabbitmq \
+  -p 5672:5672 -p 15672:15672 \
+  rabbitmq:3-management
+
+# Management UI: http://localhost:15672 (guest/guest)
+```
+
+Habilitar em `appsettings.Development.json`:
+```json
+"Messaging": { "RabbitMq": { "Enabled": true } }
+```
+
+### Rodando com Kafka Local (Docker)
+
+```bash
+docker run -d --name kafka \
+  -p 9092:9092 \
+  -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092 \
+  confluentinc/cp-kafka:latest
+```
+
+Habilitar em `appsettings.Development.json`:
+```json
+"Messaging": { "Kafka": { "Enabled": true } }
+```
 
 ---
 
