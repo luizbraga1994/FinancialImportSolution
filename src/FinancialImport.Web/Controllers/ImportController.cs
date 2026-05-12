@@ -299,7 +299,7 @@ public class ImportController : Controller
                             .ToListAsync(cancellationToken);
 
                         invalidAccounts = codesInFile
-                            .Where(c => !accounts.ContainsKey(c))
+                            .Where(c => !AccountCodeRules.IsBusinessPartner(c) && !accounts.ContainsKey(c))
                             .OrderBy(c => c)
                             .ToList();
                         accountsValidated = true;
@@ -411,7 +411,7 @@ public class ImportController : Controller
                             .Distinct()
                             .ToListAsync(cancellationToken);
 
-                        var invalid = codesInFile.Where(c => !accounts.ContainsKey(c!)).ToList();
+                        var invalid = codesInFile.Where(c => !AccountCodeRules.IsBusinessPartner(c) && !accounts.ContainsKey(c!)).ToList();
                         if (invalid.Count > 0)
                         {
                             TempData["Error"] = $"Importacao bloqueada: {invalid.Count} conta(s) nao encontrada(s) no plano de contas do SAP ({string.Join(", ", invalid.Take(10))}). Corrija o arquivo ou cadastre as contas no SAP.";
