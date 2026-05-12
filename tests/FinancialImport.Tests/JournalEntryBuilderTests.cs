@@ -25,11 +25,14 @@ public class JournalEntryBuilderTests
     [Fact]
     public void Build_should_emit_debit_and_credit_rows_per_input_line()
     {
+        // One-sided input (legacy mode): two debit-only lines from different accounts.
+        // groupCreditTotal = 0 → alreadyBalanced = false → each line generates
+        // its own debit+contra-credit pair → 4 SAP lines total.
         var builder = Create();
         var lines = new List<ImportLine>
         {
             Line(debit: 100m, credit: 0m, account: "1100", contra: "2200"),
-            Line(debit: 0m, credit: 100m, account: "3300", contra: "4400")
+            Line(debit: 100m, credit: 0m, account: "3300", contra: "4400")
         };
 
         var result = builder.Build("key", "hash", lines, bplId: 1);
