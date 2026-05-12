@@ -820,9 +820,9 @@ public class ImportController : Controller
                                 }
                                 else
                                 {
-                                    if (!string.IsNullOrWhiteSpace(line.AccountCode) && !AccountCodeRules.IsBusinessPartner(line.AccountCode))
+                                    if (!string.IsNullOrWhiteSpace(line.AccountCode))
                                         line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode!, accounts);
-                                    if (!string.IsNullOrWhiteSpace(line.ContraAccountCode) && !AccountCodeRules.IsBusinessPartner(line.ContraAccountCode))
+                                    if (!string.IsNullOrWhiteSpace(line.ContraAccountCode))
                                         line.ContraAccountCode = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
                                 }
                             }

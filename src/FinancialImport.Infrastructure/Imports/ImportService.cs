@@ -269,19 +269,24 @@ public sealed class ImportService : IImportService
                     accountsValidated = true;
                     foreach (var line in lines)
                     {
-                        if (!string.IsNullOrWhiteSpace(line.AccountCode) && !SapAccountCodeHelper.IsBusinessPartner(line.AccountCode))
+                        if (!string.IsNullOrWhiteSpace(line.AccountCode))
                         {
                             var resolved = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accounts);
                             if (resolved == line.AccountCode && !accounts.ContainsKey(line.AccountCode))
                             {
-                                invalidAccountCodes.Add(line.AccountCode);
-                                var msg = $"Conta '{line.AccountCode}' nao encontrada no plano de contas do SAP.";
-                                line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
-                                if (line.Status == ImportLineStatus.Valid)
+                                // Not found in COA. Only flag as invalid for purely numeric G/L codes;
+                                // letter-containing codes may be Business Partners that live outside the COA.
+                                if (!SapAccountCodeHelper.IsBusinessPartner(line.AccountCode))
                                 {
-                                    line.Status = ImportLineStatus.Invalid;
-                                    validCount--;
-                                    invalidCount++;
+                                    invalidAccountCodes.Add(line.AccountCode);
+                                    var msg = $"Conta '{line.AccountCode}' nao encontrada no plano de contas do SAP.";
+                                    line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
+                                    if (line.Status == ImportLineStatus.Valid)
+                                    {
+                                        line.Status = ImportLineStatus.Invalid;
+                                        validCount--;
+                                        invalidCount++;
+                                    }
                                 }
                             }
                             else
@@ -290,19 +295,24 @@ public sealed class ImportService : IImportService
                             }
                         }
 
-                        if (!string.IsNullOrWhiteSpace(line.ContraAccountCode) && !SapAccountCodeHelper.IsBusinessPartner(line.ContraAccountCode))
+                        if (!string.IsNullOrWhiteSpace(line.ContraAccountCode))
                         {
                             var resolved = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
                             if (resolved == line.ContraAccountCode && !accounts.ContainsKey(line.ContraAccountCode))
                             {
-                                invalidAccountCodes.Add(line.ContraAccountCode);
-                                var msg = $"Contrapartida '{line.ContraAccountCode}' nao encontrada no plano de contas do SAP.";
-                                line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
-                                if (line.Status == ImportLineStatus.Valid)
+                                // Not found in COA. Only flag as invalid for purely numeric G/L codes;
+                                // letter-containing codes may be Business Partners that live outside the COA.
+                                if (!SapAccountCodeHelper.IsBusinessPartner(line.ContraAccountCode))
                                 {
-                                    line.Status = ImportLineStatus.Invalid;
-                                    validCount--;
-                                    invalidCount++;
+                                    invalidAccountCodes.Add(line.ContraAccountCode);
+                                    var msg = $"Contrapartida '{line.ContraAccountCode}' nao encontrada no plano de contas do SAP.";
+                                    line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
+                                    if (line.Status == ImportLineStatus.Valid)
+                                    {
+                                        line.Status = ImportLineStatus.Invalid;
+                                        validCount--;
+                                        invalidCount++;
+                                    }
                                 }
                             }
                             else
