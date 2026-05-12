@@ -56,6 +56,7 @@ public sealed class Layout1Parser : ILayoutImportParser
                 TipoLanc = tipo,
                 HistoricoLinha = row.GetRequired("HIST"),
                 Filial = row.Get("FILIAL"),
+                CentroCusto = row.Get("CENTROCUSTO"),
                 CamposOriginais = new Dictionary<string, string?>
                 {
                     ["CODCONTACONTABIL"] = row.Get("CODCONTACONTABIL"),
@@ -66,7 +67,8 @@ public sealed class Layout1Parser : ILayoutImportParser
                     ["HIST"] = row.Get("HIST"),
                     ["TIPOLANC"] = row.Get("TIPOLANC"),
                     ["FILIAL"] = row.Get("FILIAL"),
-                    ["SEQLANC"] = row.Get("SEQLANC")
+                    ["SEQLANC"] = row.Get("SEQLANC"),
+                    ["CENTROCUSTO"] = row.Get("CENTROCUSTO")
                 }
             });
         }

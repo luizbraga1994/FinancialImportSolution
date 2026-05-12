@@ -53,6 +53,7 @@ public sealed class Layout2Parser : ILayoutImportParser
         var referenciaCol = FindColumn(context.Headers, new[] { "Referencia", "Referência", "Reference", "Observacao", "Observação" });
         var filialCol = FindColumn(context.Headers, new[] { "Filial", "Branch", "BranchCode", "BPLID", "BPLId" });
         var seqLancamentoCol = FindColumn(context.Headers, new[] { "Seq Lancamento", "SeqLancamento", "Sequence" });
+        var centroCustoCol = FindColumn(context.Headers, new[] { "Centro de Custo", "CentroCusto", "CostingCode", "Centro Custo", "Cost Center" });
 
         foreach (var row in context.Rows)
         {
@@ -89,6 +90,7 @@ public sealed class Layout2Parser : ILayoutImportParser
                 ValorDebito = debito > 0 ? debito : null,
                 HistoricoLinha = lineMemo,
                 Filial = row.Get(filialCol ?? "Filial"),
+                CentroCusto = centroCustoCol != null ? row.Get(centroCustoCol) : null,
                 CamposOriginais = context.Headers.ToDictionary(h => h, h => row.Get(h))
             });
         }

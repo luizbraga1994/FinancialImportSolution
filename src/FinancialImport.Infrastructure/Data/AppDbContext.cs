@@ -199,6 +199,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.DebitAmount).HasColumnName("ValorDebito").HasColumnType("decimal(18,2)");
             entity.Property(e => e.LineMemo).HasColumnName("HistoricoLinha").HasMaxLength(200).IsRequired();
             entity.Property(e => e.BranchCode).HasColumnName("Filial").HasMaxLength(20);
+            entity.Property(e => e.CostingCode).HasColumnName("CentroCusto").HasMaxLength(20);
             entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
             entity.Property(e => e.Status).HasColumnName("Status").HasConversion<string>().HasMaxLength(40).IsRequired();
             entity.Property(e => e.ValidationMessage).HasColumnName("MensagemValidacao").HasMaxLength(400);
