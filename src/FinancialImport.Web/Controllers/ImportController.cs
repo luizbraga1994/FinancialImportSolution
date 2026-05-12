@@ -804,8 +804,12 @@ public class ImportController : Controller
                         {
                             foreach (var line in lines.Where(l => l.Status == ImportLineStatus.Valid))
                             {
-                                var acctOk = string.IsNullOrWhiteSpace(line.AccountCode) || accounts.ContainsKey(line.AccountCode);
-                                var contraOk = string.IsNullOrWhiteSpace(line.ContraAccountCode) || accounts.ContainsKey(line.ContraAccountCode);
+                                var acctOk = string.IsNullOrWhiteSpace(line.AccountCode)
+                                    || AccountCodeRules.IsBusinessPartner(line.AccountCode)
+                                    || accounts.ContainsKey(line.AccountCode);
+                                var contraOk = string.IsNullOrWhiteSpace(line.ContraAccountCode)
+                                    || AccountCodeRules.IsBusinessPartner(line.ContraAccountCode)
+                                    || accounts.ContainsKey(line.ContraAccountCode);
                                 if (!acctOk || !contraOk)
                                 {
                                     line.Status = ImportLineStatus.Invalid;
@@ -816,8 +820,9 @@ public class ImportController : Controller
                                 }
                                 else
                                 {
-                                    line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode!, accounts);
-                                    if (!string.IsNullOrWhiteSpace(line.ContraAccountCode))
+                                    if (!string.IsNullOrWhiteSpace(line.AccountCode) && !AccountCodeRules.IsBusinessPartner(line.AccountCode))
+                                        line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode!, accounts);
+                                    if (!string.IsNullOrWhiteSpace(line.ContraAccountCode) && !AccountCodeRules.IsBusinessPartner(line.ContraAccountCode))
                                         line.ContraAccountCode = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
                                 }
                             }
