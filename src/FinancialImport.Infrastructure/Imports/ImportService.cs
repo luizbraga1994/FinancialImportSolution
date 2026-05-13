@@ -40,6 +40,7 @@ public sealed class ImportService : IImportService
     private readonly ICommandBus _commandBus;
     private readonly ISapSessionStore _sapSessionStore;
     private readonly ISapChartOfAccountsService _chartOfAccounts;
+    private readonly ISapBusinessPartnerService _businessPartners;
     private readonly ISapCompanySessionService _sapSessionService;
     private readonly ISystemSettingsService _settings;
     private readonly IAuditLogger _audit;
@@ -61,6 +62,7 @@ public sealed class ImportService : IImportService
         ICommandBus commandBus,
         ISapSessionStore sapSessionStore,
         ISapChartOfAccountsService chartOfAccounts,
+        ISapBusinessPartnerService businessPartners,
         ISapCompanySessionService sapSessionService,
         ISystemSettingsService settings,
         IAuditLogger audit,
@@ -81,6 +83,7 @@ public sealed class ImportService : IImportService
         _commandBus = commandBus;
         _sapSessionStore = sapSessionStore;
         _chartOfAccounts = chartOfAccounts;
+        _businessPartners = businessPartners;
         _sapSessionService = sapSessionService;
         _settings = settings;
         _audit = audit;
@@ -264,6 +267,16 @@ public sealed class ImportService : IImportService
             if (session != null)
             {
                 var accounts = await _chartOfAccounts.GetAccountCodesAsync(session, cancellationToken);
+                IReadOnlySet<string> cardCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                try
+                {
+                    cardCodes = await _businessPartners.GetCardCodesAsync(session, cancellationToken);
+                }
+                catch (Exception bpEx)
+                {
+                    _logger.LogWarning(bpEx, "Failed to fetch Business Partners from SAP (non-critical). BP codes will not be validated.");
+                }
+
                 if (accounts.Count > 0)
                 {
                     accountsValidated = true;
@@ -274,9 +287,24 @@ public sealed class ImportService : IImportService
                             var resolved = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accounts);
                             if (resolved == line.AccountCode && !accounts.ContainsKey(line.AccountCode))
                             {
-                                // Not found in COA. Only flag as invalid for purely numeric G/L codes;
-                                // letter-containing codes may be Business Partners that live outside the COA.
-                                if (!SapAccountCodeHelper.IsBusinessPartner(line.AccountCode))
+                                if (SapAccountCodeHelper.IsBusinessPartner(line.AccountCode))
+                                {
+                                    // Letter-code not in COA → must be a Business Partner card code.
+                                    // Validate against the BP list when available.
+                                    if (cardCodes.Count > 0 && !cardCodes.Contains(line.AccountCode))
+                                    {
+                                        invalidAccountCodes.Add(line.AccountCode);
+                                        var msg = $"Business Partner '{line.AccountCode}' nao encontrado no SAP.";
+                                        line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
+                                        if (line.Status == ImportLineStatus.Valid)
+                                        {
+                                            line.Status = ImportLineStatus.Invalid;
+                                            validCount--;
+                                            invalidCount++;
+                                        }
+                                    }
+                                }
+                                else
                                 {
                                     invalidAccountCodes.Add(line.AccountCode);
                                     var msg = $"Conta '{line.AccountCode}' nao encontrada no plano de contas do SAP.";
@@ -300,9 +328,22 @@ public sealed class ImportService : IImportService
                             var resolved = _chartOfAccounts.ResolveAccountCode(line.ContraAccountCode, accounts);
                             if (resolved == line.ContraAccountCode && !accounts.ContainsKey(line.ContraAccountCode))
                             {
-                                // Not found in COA. Only flag as invalid for purely numeric G/L codes;
-                                // letter-containing codes may be Business Partners that live outside the COA.
-                                if (!SapAccountCodeHelper.IsBusinessPartner(line.ContraAccountCode))
+                                if (SapAccountCodeHelper.IsBusinessPartner(line.ContraAccountCode))
+                                {
+                                    if (cardCodes.Count > 0 && !cardCodes.Contains(line.ContraAccountCode))
+                                    {
+                                        invalidAccountCodes.Add(line.ContraAccountCode);
+                                        var msg = $"Business Partner '{line.ContraAccountCode}' nao encontrado no SAP.";
+                                        line.ValidationMessage = string.IsNullOrWhiteSpace(line.ValidationMessage) ? msg : line.ValidationMessage + "; " + msg;
+                                        if (line.Status == ImportLineStatus.Valid)
+                                        {
+                                            line.Status = ImportLineStatus.Invalid;
+                                            validCount--;
+                                            invalidCount++;
+                                        }
+                                    }
+                                }
+                                else
                                 {
                                     invalidAccountCodes.Add(line.ContraAccountCode);
                                     var msg = $"Contrapartida '{line.ContraAccountCode}' nao encontrada no plano de contas do SAP.";
