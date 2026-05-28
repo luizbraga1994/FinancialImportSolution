@@ -179,8 +179,10 @@ public sealed class ImportService : IImportService
             lineInfos.Add((sourceLine, businessKey, businessKeyHash, valid, validationMessage));
         }
 
-        var existingKeys = await _repository.GetExistingBusinessKeysAsync(
-            companyDb, businessKeyHashes, cancellationToken);
+        var existingKeys = context.AllowDuplicate
+            ? new HashSet<string>()
+            : await _repository.GetExistingBusinessKeysAsync(
+                companyDb, businessKeyHashes, cancellationToken);
 
         var validCount = 0;
         var invalidCount = 0;
@@ -395,6 +397,15 @@ public sealed class ImportService : IImportService
             if (existingFile != null)
             {
                 await _repository.RemoveLinesForFileAsync(existingFile.Id, cancellationToken);
+
+                // Remove previous dispatch records so the processor re-sends to SAP
+                // instead of treating the groups as already dispatched (idempotency bypass).
+                if (context.AllowDuplicate)
+                {
+                    await _dbContext.JournalEntryDispatches
+                        .Where(d => d.ImportFileId == existingFile.Id)
+                        .ExecuteDeleteAsync(cancellationToken);
+                }
 
                 existingFile.UserId = userId;
                 existingFile.OriginalFileName = context.FileName;
