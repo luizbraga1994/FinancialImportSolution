@@ -384,7 +384,7 @@ public sealed class AppDbContext : DbContext
                 .WithMany(f => f.Dispatches)
                 .HasForeignKey(e => e.ImportFileId)
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.CompanyDb, e.GroupKeyHash }).IsUnique();
+            entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash }).IsUnique().HasDatabaseName("IX_LancamentoSapDispatch_ImportFileId_GroupKeyHash");
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_LancamentoSapDispatch_Status");
             entity.HasIndex(e => e.ImportFileId).HasDatabaseName("IX_LancamentoSapDispatch_Arquivo");
         });

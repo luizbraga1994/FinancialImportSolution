@@ -812,6 +812,13 @@ public class ImportController : Controller
             return RedirectToAction(nameof(Preview), new { id });
         }
 
+        // Remove stale dispatch records so the processor makes fresh SAP calls.
+        // Without this, the per-file idempotency guard would skip SAP for any group
+        // that was already dispatched in a previous confirm attempt on this same file.
+        await _dbContext.JournalEntryDispatches
+            .Where(d => d.ImportFileId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+
         var affected = await _dbContext.ImportLines
             .Where(l => l.ImportFileId == id && l.Status == ImportLineStatus.Duplicated)
             .ExecuteUpdateAsync(s => s.SetProperty(l => l.Status, ImportLineStatus.Valid), cancellationToken);
@@ -820,6 +827,7 @@ public class ImportController : Controller
         {
             importFile.ValidLines += affected;
             importFile.DuplicatedLines = Math.Max(0, importFile.DuplicatedLines - affected);
+            importFile.Status = ImportStatus.Validated;
             _dbContext.ImportFiles.Update(importFile);
             await _dbContext.SaveChangesAsync(cancellationToken);
             TempData["Success"] = $"{affected} linha(s) liberada(s) para reenvio. Clique em 'Confirmar Importacao' para enviar ao SAP.";

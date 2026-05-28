@@ -172,7 +172,7 @@ public sealed class ImportProcessor : IImportProcessor
             // (in case they were marked SapError before) and skip SAP.
             var existingDispatch = await _dbContext.JournalEntryDispatches
                 .FirstOrDefaultAsync(d =>
-                    d.CompanyDb == importFile.CompanyDb && d.GroupKeyHash == group.Key, cancellationToken);
+                    d.ImportFileId == importFile.Id && d.GroupKeyHash == group.Key, cancellationToken);
 
             if (existingDispatch is { Status: JournalDispatchStatus.Dispatched })
             {
