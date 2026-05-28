@@ -225,7 +225,8 @@ public sealed class ImportProcessor : IImportProcessor
             }
 
             int? bplId = ResolveBplId(groupLines[0], importFile, branchMappings);
-            var build = _entryBuilder.Build(dispatch.GroupKey, dispatch.GroupKeyHash, groupLines, bplId);
+            var build = _entryBuilder.Build(dispatch.GroupKey, dispatch.GroupKeyHash, groupLines, bplId,
+                accountCodes.Count > 0 ? accountCodes : null);
             if (!build.IsBalanced)
             {
                 _logger.LogWarning(
@@ -233,12 +234,12 @@ public sealed class ImportProcessor : IImportProcessor
                     importFile.Id, dispatch.GroupKey, build.TotalDebit, build.TotalCredit);
             }
 
-            // Auto-resolve partial account codes to full SAP codes (with check digit)
+            // Auto-resolve partial G/L account codes to full SAP codes (with check digit).
+            // Business Partner lines (ShortName) are not in the chart of accounts and are left as-is.
             if (accountCodes.Count > 0)
             {
                 foreach (var line in build.Payload.JournalEntryLines)
                 {
-                    // Skip Business Partner lines — ShortName is not in the chart of accounts.
                     if (!string.IsNullOrWhiteSpace(line.AccountCode))
                         line.AccountCode = _chartOfAccounts.ResolveAccountCode(line.AccountCode, accountCodes);
                 }

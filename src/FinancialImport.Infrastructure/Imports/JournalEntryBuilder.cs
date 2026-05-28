@@ -24,7 +24,8 @@ public sealed class JournalEntryBuilder
         string groupKey,
         string groupKeyHash,
         IReadOnlyList<ImportLine> lines,
-        int? bplId)
+        int? bplId,
+        IReadOnlyDictionary<string, string>? accountCodes = null)
     {
         if (lines.Count == 0)
             throw new ArgumentException("Cannot build a journal entry for an empty group.", nameof(lines));
@@ -87,23 +88,23 @@ public sealed class JournalEntryBuilder
                 if (creditAmount > 0m && debitAmount > 0m)
                 {
                     var dl = new SapJournalEntryLine { Debit = debitAmount, Credit = 0m, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
-                    ApplyCode(dl, line.AccountCode);
+                    ApplyCode(dl, line.AccountCode, accountCodes);
                     debitLines.Add(dl);
 
                     var cl = new SapJournalEntryLine { Debit = 0m, Credit = creditAmount, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
-                    ApplyCode(cl, line.ContraAccountCode);
+                    ApplyCode(cl, line.ContraAccountCode, accountCodes);
                     creditLines.Add(cl);
                 }
                 else if (creditAmount > 0m)
                 {
                     var cl = new SapJournalEntryLine { Debit = 0m, Credit = creditAmount, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
-                    ApplyCode(cl, line.AccountCode);
+                    ApplyCode(cl, line.AccountCode, accountCodes);
                     creditLines.Add(cl);
                 }
                 else if (debitAmount > 0m)
                 {
                     var dl = new SapJournalEntryLine { Debit = debitAmount, Credit = 0m, LineMemo = memo, BPLID = bplId, CostingCode = line.CostingCode };
-                    ApplyCode(dl, line.ContraAccountCode);
+                    ApplyCode(dl, line.ContraAccountCode, accountCodes);
                     debitLines.Add(dl);
                 }
                 continue;
@@ -147,7 +148,7 @@ public sealed class JournalEntryBuilder
                 BPLID = bplId,
                 CostingCode = line.CostingCode
             };
-            ApplyCode(mainLine, line.AccountCode);
+            ApplyCode(mainLine, line.AccountCode, accountCodes);
 
             (mainLine.Debit > 0m ? debitLines : creditLines).Add(mainLine);
 
@@ -159,7 +160,7 @@ public sealed class JournalEntryBuilder
                 BPLID = bplId,
                 CostingCode = line.CostingCode
             };
-            ApplyCode(contraLine, line.ContraAccountCode);
+            ApplyCode(contraLine, line.ContraAccountCode, accountCodes);
 
             (contraLine.Debit > 0m ? debitLines : creditLines).Add(contraLine);
         }
@@ -187,13 +188,25 @@ public sealed class JournalEntryBuilder
     /// Sets either <see cref="SapJournalEntryLine.AccountCode"/> or
     /// <see cref="SapJournalEntryLine.ShortName"/> depending on whether
     /// <paramref name="code"/> is a G/L account or a Business Partner code.
+    /// When <paramref name="accountCodes"/> is provided, a code found in the
+    /// chart of accounts is always treated as a G/L account even if it
+    /// contains letters. The letter heuristic is only used as a fallback.
     /// </summary>
-    private static void ApplyCode(SapJournalEntryLine line, string? code)
+    private static void ApplyCode(SapJournalEntryLine line, string? code, IReadOnlyDictionary<string, string>? accountCodes)
     {
-        if (SapAccountCodeHelper.IsBusinessPartner(code))
+        if (IsBusinessPartnerCode(code, accountCodes))
             line.ShortName = code;
         else
             line.AccountCode = code;
+    }
+
+    private static bool IsBusinessPartnerCode(string? code, IReadOnlyDictionary<string, string>? accountCodes)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return false;
+        // A code present in the chart of accounts is always a G/L account.
+        if (accountCodes != null && accountCodes.ContainsKey(code)) return false;
+        // Fallback: no COA available (or code not in COA) — letters signal a Business Partner.
+        return SapAccountCodeHelper.IsBusinessPartner(code);
     }
 
     private static string Truncate(string? value, int max)
