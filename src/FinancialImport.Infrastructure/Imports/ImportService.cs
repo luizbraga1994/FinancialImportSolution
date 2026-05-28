@@ -451,8 +451,14 @@ public sealed class ImportService : IImportService
                 importFileId = file.Id;
             }
 
-            foreach (var line in lines) line.ImportFileId = importFileId;
-            await _dbContext.ImportLines.AddRangeAsync(lines, cancellationToken);
+            // Duplicated lines are only shown in the preview; they already exist
+            // in the DB (from a previous import file) and the unique constraint on
+            // (CompanyDb, HashChaveNegocio) would reject inserting them again.
+            var linesToInsert = lines
+                .Where(l => l.Status != ImportLineStatus.Duplicated)
+                .ToList();
+            foreach (var line in linesToInsert) line.ImportFileId = importFileId;
+            await _dbContext.ImportLines.AddRangeAsync(linesToInsert, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             // Publish integration event via transactional outbox.
