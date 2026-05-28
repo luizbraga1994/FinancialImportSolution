@@ -113,15 +113,14 @@ public sealed class ImportService : IImportService
 
         if (existingFile != null
             && existingFile.Status != ImportStatus.Failed
-            && existingFile.Status != ImportStatus.Rejected)
+            && existingFile.Status != ImportStatus.Rejected
+            && !context.AllowDuplicate)
         {
             return new ImportPreviewResult
             {
                 CorrelationId = correlationId,
-                Errors = new[]
-                {
-                    $"Arquivo ja importado para esta company. Status atual: {existingFile.Status}"
-                }
+                IsDuplicateFile = true,
+                ExistingFileStatus = existingFile.Status.ToString()
             };
         }
 

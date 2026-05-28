@@ -166,6 +166,19 @@ public class ImportController : Controller
 
             var result = await _importService.PreviewAsync(context, cancellationToken);
 
+            if (result.IsDuplicateFile)
+            {
+                // Save the file to a temp path and ask the user via modal
+                var key = Guid.NewGuid().ToString("N");
+                var tmpPath = Path.Combine(Path.GetTempPath(), $"fi_{key}.tmp");
+                await System.IO.File.WriteAllBytesAsync(tmpPath, context.FileBytes, cancellationToken);
+
+                TempData["DuplicateKey"] = key;
+                TempData["DuplicateFileName"] = file.FileName;
+                TempData["DuplicateStatus"] = result.ExistingFileStatus;
+                return RedirectToAction(nameof(Index));
+            }
+
             if (result.ImportFileId == 0)
             {
                 TempData["Error"] = result.Errors.FirstOrDefault() ?? "Nao foi possivel processar o arquivo.";
@@ -187,6 +200,55 @@ public class ImportController : Controller
             _logger.LogError(ex,
                 "Unexpected error during preview of {FileName} for {Company}.", file.FileName, companyDb);
             // Don't leak internal details to end users
+            TempData["Error"] = "Erro inesperado ao processar o arquivo. Verifique os logs de sistema.";
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmDuplicate(string key, string fileName, CancellationToken cancellationToken)
+    {
+        var tmpPath = Path.Combine(Path.GetTempPath(), $"fi_{key}.tmp");
+        if (!System.IO.File.Exists(tmpPath))
+        {
+            TempData["Error"] = "Sessao expirada. Faca o upload do arquivo novamente.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        byte[] fileBytes;
+        try
+        {
+            fileBytes = await System.IO.File.ReadAllBytesAsync(tmpPath, cancellationToken);
+            System.IO.File.Delete(tmpPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read pending duplicate temp file {Key}.", key);
+            TempData["Error"] = "Erro ao recuperar arquivo temporario. Faca o upload novamente.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            using var ms = new MemoryStream(fileBytes);
+            var context = await _fileReader.ReadAsync(ms, fileName, cancellationToken);
+            context.AllowDuplicate = true;
+
+            var result = await _importService.PreviewAsync(context, cancellationToken);
+
+            if (result.ImportFileId == 0)
+            {
+                TempData["Error"] = result.Errors.FirstOrDefault() ?? "Nao foi possivel processar o arquivo.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            TempData["CorrelationId"] = result.CorrelationId;
+            return RedirectToAction(nameof(Preview), new { id = result.ImportFileId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error confirming duplicate upload for {FileName}.", fileName);
             TempData["Error"] = "Erro inesperado ao processar o arquivo. Verifique os logs de sistema.";
             return RedirectToAction(nameof(Index));
         }
