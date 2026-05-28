@@ -405,15 +405,6 @@ public sealed class ImportService : IImportService
                     await _dbContext.JournalEntryDispatches
                         .Where(d => d.ImportFileId == existingFile.Id)
                         .ExecuteDeleteAsync(cancellationToken);
-
-                    // Lines from OTHER import files that share the same business key
-                    // hashes must also be removed before reinsertion. The global unique
-                    // constraint on (CompanyDb, HashChaveNegocio) spans ALL files, so
-                    // leftover rows from previous imports would block the insert below.
-                    var hashList = businessKeyHashes.ToList();
-                    await _dbContext.ImportLines
-                        .Where(l => l.CompanyDb == companyDb && hashList.Contains(l.BusinessKeyHash))
-                        .ExecuteDeleteAsync(cancellationToken);
                 }
 
                 existingFile.UserId = userId;
@@ -460,14 +451,8 @@ public sealed class ImportService : IImportService
                 importFileId = file.Id;
             }
 
-            // Duplicated lines are only shown in the preview; they already exist
-            // in the DB (from a previous import file) and the unique constraint on
-            // (CompanyDb, HashChaveNegocio) would reject inserting them again.
-            var linesToInsert = lines
-                .Where(l => l.Status != ImportLineStatus.Duplicated)
-                .ToList();
-            foreach (var line in linesToInsert) line.ImportFileId = importFileId;
-            await _dbContext.ImportLines.AddRangeAsync(linesToInsert, cancellationToken);
+            foreach (var line in lines) line.ImportFileId = importFileId;
+            await _dbContext.ImportLines.AddRangeAsync(lines, cancellationToken);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             // Publish integration event via transactional outbox.

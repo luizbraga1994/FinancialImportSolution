@@ -209,7 +209,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64);
             entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
             entity.HasOne(e => e.ImportFile).WithMany(f => f.Lines).HasForeignKey(e => e.ImportFileId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.CompanyDb, e.BusinessKeyHash }).IsUnique();
+            entity.HasIndex(e => new { e.ImportFileId, e.BusinessKeyHash }).IsUnique().HasDatabaseName("IX_ImportacaoLinha_ImportFileId_HashChaveNegocio");
             entity.HasIndex(e => e.ImportFileId);
             entity.HasIndex(e => e.Reference).HasDatabaseName("IX_ImportacaoLinha_Referencia");
             entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash }).HasDatabaseName("IX_ImportacaoLinha_Grupo");

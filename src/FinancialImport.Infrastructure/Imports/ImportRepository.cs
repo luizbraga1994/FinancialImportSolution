@@ -1,5 +1,6 @@
 using FinancialImport.Application.Imports;
 using FinancialImport.Domain.Entities;
+using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,9 +38,15 @@ public sealed class ImportRepository : IImportRepository
         if (businessKeyHashes.Count == 0)
             return new HashSet<string>();
 
+        // Exclude Duplicated-status lines: a line flagged Duplicated was never sent to SAP
+        // (it just marks "this hash already existed in another file at upload time").
+        // Counting it as "existing" would cause every subsequent upload to also mark the
+        // same hash as Duplicated, even if no confirmed import ever processed it.
         var found = await _dbContext.ImportLines
             .AsNoTracking()
-            .Where(l => l.CompanyDb == companyDb && businessKeyHashes.Contains(l.BusinessKeyHash))
+            .Where(l => l.CompanyDb == companyDb
+                        && businessKeyHashes.Contains(l.BusinessKeyHash)
+                        && l.Status != ImportLineStatus.Duplicated)
             .Select(l => l.BusinessKeyHash)
             .Distinct()
             .ToListAsync(cancellationToken);

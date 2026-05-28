@@ -345,8 +345,9 @@ namespace FinancialImport.Infrastructure.Migrations
                     b.HasIndex("Reference")
                         .HasDatabaseName("IX_ImportacaoLinha_Referencia");
 
-                    b.HasIndex("CompanyDb", "BusinessKeyHash")
-                        .IsUnique();
+                    b.HasIndex("ImportFileId", "BusinessKeyHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ImportacaoLinha_ImportFileId_HashChaveNegocio");
 
                     b.ToTable("ImportacaoLinha", (string)null);
                 });
