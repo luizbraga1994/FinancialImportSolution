@@ -38,15 +38,15 @@ public sealed class ImportRepository : IImportRepository
         if (businessKeyHashes.Count == 0)
             return new HashSet<string>();
 
-        // Exclude Duplicated-status lines: a line flagged Duplicated was never sent to SAP
-        // (it just marks "this hash already existed in another file at upload time").
-        // Counting it as "existing" would cause every subsequent upload to also mark the
-        // same hash as Duplicated, even if no confirmed import ever processed it.
+        // Only lines that were actually sent to SAP (Imported) constitute genuine
+        // duplicates. Lines in other statuses (Valid/Invalid/Excluded/SapError/Duplicated)
+        // were never successfully committed to SAP, so they must not block a fresh upload
+        // from treating the same business key as a new, sendable entry.
         var found = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.CompanyDb == companyDb
                         && businessKeyHashes.Contains(l.BusinessKeyHash)
-                        && l.Status != ImportLineStatus.Duplicated)
+                        && l.Status == ImportLineStatus.Imported)
             .Select(l => l.BusinessKeyHash)
             .Distinct()
             .ToListAsync(cancellationToken);
