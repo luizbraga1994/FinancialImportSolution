@@ -457,6 +457,19 @@ else
             <i class="bi bi-shield-exclamation me-1"></i> Bloqueado
         </button>
     }
+    else if (Model.ValidLines == 0 && Model.DuplicatedLines > 0
+             && Model.Status != ImportStatus.Completed
+             && Model.Status != ImportStatus.PartiallyCompleted
+             && Model.Status != ImportStatus.Processing)
+    {
+        <form asp-action="ForceReimport" asp-route-id="@Model.ImportFileId" method="post" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-warning px-4"
+                    onclick="return confirm('Atencao: @Model.DuplicatedLines linha(s) ja foram enviadas ao SAP anteriormente. Reimporta-las pode gerar lancamentos duplicados no SAP. Deseja continuar?');">
+                <i class="bi bi-arrow-repeat me-1"></i> Reimportar Duplicadas (@Model.DuplicatedLines)
+            </button>
+        </form>
+    }
     else if (!canReprocess)
     {
         <button type="button" class="btn btn-primary px-4" disabled

@@ -792,6 +792,42 @@ public class ImportController : Controller
         return RedirectToAction(nameof(Preview), new { id });
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForceReimport(long id, CancellationToken cancellationToken)
+    {
+        var companyDb = _companyContext.CompanyDb;
+        var importFile = await _dbContext.ImportFiles
+            .SingleOrDefaultAsync(f => f.Id == id && f.CompanyDb == companyDb, cancellationToken);
+
+        if (importFile == null)
+        {
+            TempData["Error"] = "Importacao nao encontrada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (importFile.Status == ImportStatus.Processing)
+        {
+            TempData["Error"] = "Nao e possivel alterar linhas enquanto a importacao esta em processamento.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        var affected = await _dbContext.ImportLines
+            .Where(l => l.ImportFileId == id && l.Status == ImportLineStatus.Duplicated)
+            .ExecuteUpdateAsync(s => s.SetProperty(l => l.Status, ImportLineStatus.Valid), cancellationToken);
+
+        if (affected > 0)
+        {
+            importFile.ValidLines += affected;
+            importFile.DuplicatedLines = Math.Max(0, importFile.DuplicatedLines - affected);
+            _dbContext.ImportFiles.Update(importFile);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            TempData["Success"] = $"{affected} linha(s) liberada(s) para reenvio. Clique em 'Confirmar Importacao' para enviar ao SAP.";
+        }
+
+        return RedirectToAction(nameof(Preview), new { id });
+    }
+
     /// <summary>
     /// Updates account codes for lines with SapError status so the operator
     /// can fix invalid accounts directly in the browser and Reprocess
