@@ -482,18 +482,15 @@ public sealed class ImportProcessor : IImportProcessor
 
         if (string.IsNullOrWhiteSpace(branchCode)) return null;
 
-        // Check the mapping table first (supports text aliases like "SP", "MATRIZ").
-        var mapping = mappings.FirstOrDefault(m =>
-            m.FileBranchCode.Equals(branchCode, StringComparison.OrdinalIgnoreCase));
-
-        if (mapping != null) return mapping.BplId;
-
-        // Fallback: if the file already contains the numeric BPLID (as documented
-        // on the Filiais page), use it directly without requiring a mapping entry.
+        // The Filial column contains the SAP BPLID directly as an integer.
+        // The mapping table is checked as a fallback for legacy text-code configs.
         if (int.TryParse(branchCode, out var directBplId) && directBplId > 0)
             return directBplId;
 
-        return null;
+        var mapping = mappings.FirstOrDefault(m =>
+            m.FileBranchCode.Equals(branchCode, StringComparison.OrdinalIgnoreCase));
+
+        return mapping?.BplId;
     }
 
     private static int? ExtractDocEntry(string? rawResponse)
