@@ -1,6 +1,7 @@
 using FinancialImport.Application.Abstractions;
 using FinancialImport.Application.Models;
 using FinancialImport.Application.Sap;
+using FinancialImport.Application.Settings;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
@@ -20,15 +21,21 @@ public class BranchViewModel
 public class BranchController : Controller
 {
     private readonly ISapSessionStore _sapSessionStore;
+    private readonly ISapCompanySessionService _sapSessionService;
+    private readonly ISystemSettingsService _settings;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<BranchController> _logger;
 
     public BranchController(
         ISapSessionStore sapSessionStore,
+        ISapCompanySessionService sapSessionService,
+        ISystemSettingsService settings,
         IHttpClientFactory httpClientFactory,
         ILogger<BranchController> logger)
     {
         _sapSessionStore = sapSessionStore;
+        _sapSessionService = sapSessionService;
+        _settings = settings;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
@@ -54,14 +61,28 @@ public class BranchController : Controller
         var session = await _sapSessionStore.GetActiveSessionAsync(userId, cancellationToken);
         if (session == null || !session.CompanyDb.Equals(companyDb, StringComparison.OrdinalIgnoreCase))
         {
-            TempData["Error"] = "Sem sessao SAP ativa. Selecione a empresa novamente.";
-            return RedirectToAction("Index", "Company");
+            var loginResult = await _sapSessionService.SignInCompanyAsync(
+                companyDb,
+                _settings.Get("Sap:UserName") ?? "",
+                _settings.Get("Sap:Password") ?? "",
+                cancellationToken);
+
+            if (!loginResult.Success || loginResult.Session == null)
+            {
+                TempData["Error"] = "Nao foi possivel autenticar no SAP. Verifique as configuracoes.";
+                return RedirectToAction("Index", "Company");
+            }
+
+            session = loginResult.Session;
         }
 
         var branches = new List<BranchViewModel>();
         try
         {
             var client = _httpClientFactory.CreateClient("SapServiceLayer");
+            var reloginAttempted = false;
+
+        retry:
             var request = new HttpRequestMessage(HttpMethod.Get,
                 "BusinessPlaces?$select=BPLID,BPLName,AliasName,Disabled&$orderby=BPLID");
             request.Headers.Add("B1SESSION", session.SessionId);
@@ -69,6 +90,22 @@ public class BranchController : Controller
                 request.Headers.Add("ROUTEID", session.RouteId);
 
             var response = await client.SendAsync(request, cancellationToken);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !reloginAttempted)
+            {
+                reloginAttempted = true;
+                var relogin = await _sapSessionService.SignInCompanyAsync(
+                    companyDb,
+                    _settings.Get("Sap:UserName") ?? "",
+                    _settings.Get("Sap:Password") ?? "",
+                    cancellationToken);
+
+                if (relogin.Success && relogin.Session != null)
+                {
+                    session = relogin.Session;
+                    goto retry;
+                }
+            }
 
             if (response.IsSuccessStatusCode)
             {
