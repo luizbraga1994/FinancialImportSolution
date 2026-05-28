@@ -405,6 +405,15 @@ public sealed class ImportService : IImportService
                     await _dbContext.JournalEntryDispatches
                         .Where(d => d.ImportFileId == existingFile.Id)
                         .ExecuteDeleteAsync(cancellationToken);
+
+                    // Lines from OTHER import files that share the same business key
+                    // hashes must also be removed before reinsertion. The global unique
+                    // constraint on (CompanyDb, HashChaveNegocio) spans ALL files, so
+                    // leftover rows from previous imports would block the insert below.
+                    var hashList = businessKeyHashes.ToList();
+                    await _dbContext.ImportLines
+                        .Where(l => l.CompanyDb == companyDb && hashList.Contains(l.BusinessKeyHash))
+                        .ExecuteDeleteAsync(cancellationToken);
                 }
 
                 existingFile.UserId = userId;
