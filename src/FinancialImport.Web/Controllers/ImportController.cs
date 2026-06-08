@@ -269,7 +269,9 @@ public class ImportController : Controller
 
         // Build group summaries with two separate queries to avoid client-side
         // evaluation of GroupBy+Take that would load all 35k lines into memory.
-        // Step 1: pure SQL aggregates only — no correlated First() subqueries.
+        // Step 1: minimal SQL — only COUNT and SUM aggregates to guarantee
+        // no correlated subqueries. Boolean flags (IsExcluded, IsImported)
+        // are computed in-memory from allLinesDtos loaded in Step 2.
         var groupSummaries = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == id)
@@ -280,8 +282,6 @@ public class ImportController : Controller
                 LineCount = g.Count(),
                 TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
                 TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
-                IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
-                IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
             })
             .ToListAsync(cancellationToken);
 
@@ -315,10 +315,15 @@ public class ImportController : Controller
                     SapDocEntry = l.SapDocEntry
                 }).ToList());
 
-        // Reference and PostingDate come from the first line in each group
-        // (in-memory, already loaded above — avoids correlated SQL subqueries).
+        // Compute per-group boolean flags and derive Reference/PostingDate in-memory
+        // from allLinesDtos — avoids any correlated SQL subqueries.
+        var allByGroup = allLinesDtos
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var groups = groupSummaries.Select(g =>
         {
+            var gAllLines = allByGroup.TryGetValue(g.GroupKeyHash, out var al) ? al : new();
             var gLines = linesByGroup.TryGetValue(g.GroupKeyHash, out var ls) ? ls : new();
             var firstLine = gLines.FirstOrDefault();
             return new ImportPreviewGroup
@@ -329,8 +334,8 @@ public class ImportController : Controller
                 LineCount = g.LineCount,
                 TotalCredit = g.TotalCredit,
                 TotalDebit = g.TotalDebit,
-                IsExcluded = g.IsExcluded,
-                IsImported = g.IsImported,
+                IsExcluded = gAllLines.Count > 0 && gAllLines.All(l => l.Status == ImportLineStatus.Excluded),
+                IsImported = gAllLines.Any(l => l.Status == ImportLineStatus.Imported),
                 Lines = gLines
             };
         })
