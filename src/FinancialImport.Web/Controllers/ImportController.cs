@@ -269,7 +269,7 @@ public class ImportController : Controller
 
         // Build group summaries with two separate queries to avoid client-side
         // evaluation of GroupBy+Take that would load all 35k lines into memory.
-        // Step 1: aggregates only (pure SQL)
+        // Step 1: pure SQL aggregates only — no correlated First() subqueries.
         var groupSummaries = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == id)
@@ -277,16 +277,12 @@ public class ImportController : Controller
             .Select(g => new
             {
                 GroupKeyHash = g.Key,
-                Reference = g.OrderBy(l => l.Id).First().Reference ?? string.Empty,
-                PostingDate = g.OrderBy(l => l.Id).First().PostingDate,
                 LineCount = g.Count(),
                 TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
                 TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
                 IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
                 IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
             })
-            .OrderBy(g => g.PostingDate)
-            .ThenBy(g => g.Reference)
             .ToListAsync(cancellationToken);
 
         // Step 2: load sample lines WITHOUT the heavy SourceJson column.
@@ -319,18 +315,28 @@ public class ImportController : Controller
                     SapDocEntry = l.SapDocEntry
                 }).ToList());
 
-        var groups = groupSummaries.Select(g => new ImportPreviewGroup
+        // Reference and PostingDate come from the first line in each group
+        // (in-memory, already loaded above — avoids correlated SQL subqueries).
+        var groups = groupSummaries.Select(g =>
         {
-            GroupKeyHash = g.GroupKeyHash,
-            Reference = g.Reference,
-            PostingDate = g.PostingDate,
-            LineCount = g.LineCount,
-            TotalCredit = g.TotalCredit,
-            TotalDebit = g.TotalDebit,
-            IsExcluded = g.IsExcluded,
-            IsImported = g.IsImported,
-            Lines = linesByGroup.TryGetValue(g.GroupKeyHash, out var lines) ? lines : new()
-        }).ToList();
+            var gLines = linesByGroup.TryGetValue(g.GroupKeyHash, out var ls) ? ls : new();
+            var firstLine = gLines.FirstOrDefault();
+            return new ImportPreviewGroup
+            {
+                GroupKeyHash = g.GroupKeyHash,
+                Reference = firstLine?.Reference ?? string.Empty,
+                PostingDate = firstLine?.PostingDate ?? default,
+                LineCount = g.LineCount,
+                TotalCredit = g.TotalCredit,
+                TotalDebit = g.TotalDebit,
+                IsExcluded = g.IsExcluded,
+                IsImported = g.IsImported,
+                Lines = gLines
+            };
+        })
+        .OrderBy(g => g.PostingDate)
+        .ThenBy(g => g.Reference)
+        .ToList();
 
         // Account validation: try live re-check against SAP chart of accounts.
         // If the SAP session is unavailable, fall back to what was already
