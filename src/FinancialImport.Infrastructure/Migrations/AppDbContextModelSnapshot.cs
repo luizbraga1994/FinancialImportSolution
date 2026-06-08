@@ -349,6 +349,9 @@ namespace FinancialImport.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("IX_ImportacaoLinha_ImportFileId_HashChaveNegocio");
 
+                    b.HasIndex("ImportFileId", "GroupKeyHash", "Status")
+                        .HasDatabaseName("IX_ImportacaoLinha_FileIdGroupStatus");
+
                     b.ToTable("ImportacaoLinha", (string)null);
                 });
 

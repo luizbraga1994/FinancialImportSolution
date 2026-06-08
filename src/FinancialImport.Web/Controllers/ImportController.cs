@@ -285,14 +285,29 @@ public class ImportController : Controller
             })
             .ToListAsync(cancellationToken);
 
-        // Step 2: load sample lines WITHOUT the heavy SourceJson column.
-        // Use a projection so EF doesn't materialise the full entity blob.
+        // Step 2a: compact flag data — only 3 tiny columns for all lines.
+        // The covering index IX_ImportacaoLinha_FileIdGroupStatus
+        // (ImportFileId, GroupKeyHash, Status) with InnoDB's implicit PK
+        // appended gives MySQL an index-only scan: no clustered-index reads
+        // even for 34 k rows, avoiding the SourceJson JSON column overhead.
         const int maxLinesPerGroup = 20;
-        var allLinesDtos = await _dbContext.ImportLines
+        var lineFlags = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == id)
-            .OrderBy(l => l.GroupKeyHash)
-            .ThenBy(l => l.Id)
+            .Select(l => new { l.Id, l.GroupKeyHash, l.Status })
+            .ToListAsync(cancellationToken);
+
+        // Identify the first maxLinesPerGroup row IDs per group in memory.
+        var topLineIds = lineFlags
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty)
+            .SelectMany(g => g.OrderBy(l => l.Id).Take(maxLinesPerGroup).Select(l => l.Id))
+            .ToHashSet();
+
+        // Step 2b: load display columns only for the ~(groups × 20) sample rows
+        // via PK-IN lookup — never more than a few hundred rows regardless of file size.
+        var sampleDisplayLines = await _dbContext.ImportLines
+            .AsNoTracking()
+            .Where(l => topLineIds.Contains(l.Id))
             .Select(l => new
             {
                 l.Id, l.GroupKeyHash, l.Reference, l.AccountCode, l.ContraAccountCode,
@@ -301,11 +316,11 @@ public class ImportController : Controller
             })
             .ToListAsync(cancellationToken);
 
-        var linesByGroup = allLinesDtos
+        var linesByGroup = sampleDisplayLines
             .GroupBy(l => l.GroupKeyHash ?? string.Empty)
             .ToDictionary(
                 g => g.Key,
-                g => g.Take(maxLinesPerGroup).Select(l => new ImportLine
+                g => g.OrderBy(l => l.Id).Select(l => new ImportLine
                 {
                     Id = l.Id, GroupKeyHash = l.GroupKeyHash, Reference = l.Reference,
                     AccountCode = l.AccountCode, ContraAccountCode = l.ContraAccountCode,
@@ -315,9 +330,8 @@ public class ImportController : Controller
                     SapDocEntry = l.SapDocEntry
                 }).ToList());
 
-        // Compute per-group boolean flags and derive Reference/PostingDate in-memory
-        // from allLinesDtos — avoids any correlated SQL subqueries.
-        var allByGroup = allLinesDtos
+        // Compute per-group boolean flags from lineFlags (all lines, compact).
+        var allByGroup = lineFlags
             .GroupBy(l => l.GroupKeyHash ?? string.Empty)
             .ToDictionary(g => g.Key, g => g.ToList());
 

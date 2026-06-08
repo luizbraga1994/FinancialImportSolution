@@ -298,6 +298,7 @@ public sealed class ImportProcessor : IImportProcessor
                     line.SapDocEntry = docEntry;
                     imported++;
                 }
+                importFile.ImportedLines = imported;
 
                 await _eventPublisher.PublishAsync(new SapDispatchSucceededEvent
                 {

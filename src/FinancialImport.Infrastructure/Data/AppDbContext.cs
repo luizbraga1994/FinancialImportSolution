@@ -214,6 +214,7 @@ public sealed class AppDbContext : DbContext
             entity.HasIndex(e => e.Reference).HasDatabaseName("IX_ImportacaoLinha_Referencia");
             entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash }).HasDatabaseName("IX_ImportacaoLinha_Grupo");
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_ImportacaoLinha_Status");
+            entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash, e.Status }).HasDatabaseName("IX_ImportacaoLinha_FileIdGroupStatus");
         });
 
         modelBuilder.Entity<SystemLog>(entity =>
