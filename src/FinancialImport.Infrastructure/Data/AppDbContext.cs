@@ -209,11 +209,12 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64);
             entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
             entity.HasOne(e => e.ImportFile).WithMany(f => f.Lines).HasForeignKey(e => e.ImportFileId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.CompanyDb, e.BusinessKeyHash }).IsUnique();
+            entity.HasIndex(e => new { e.ImportFileId, e.BusinessKeyHash }).IsUnique().HasDatabaseName("IX_ImportacaoLinha_ImportFileId_HashChaveNegocio");
             entity.HasIndex(e => e.ImportFileId);
             entity.HasIndex(e => e.Reference).HasDatabaseName("IX_ImportacaoLinha_Referencia");
             entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash }).HasDatabaseName("IX_ImportacaoLinha_Grupo");
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_ImportacaoLinha_Status");
+            entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash, e.Status }).HasDatabaseName("IX_ImportacaoLinha_FileIdGroupStatus");
         });
 
         modelBuilder.Entity<SystemLog>(entity =>
@@ -384,7 +385,7 @@ public sealed class AppDbContext : DbContext
                 .WithMany(f => f.Dispatches)
                 .HasForeignKey(e => e.ImportFileId)
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.CompanyDb, e.GroupKeyHash }).IsUnique();
+            entity.HasIndex(e => new { e.ImportFileId, e.GroupKeyHash }).IsUnique().HasDatabaseName("IX_LancamentoSapDispatch_ImportFileId_GroupKeyHash");
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_LancamentoSapDispatch_Status");
             entity.HasIndex(e => e.ImportFileId).HasDatabaseName("IX_LancamentoSapDispatch_Arquivo");
         });

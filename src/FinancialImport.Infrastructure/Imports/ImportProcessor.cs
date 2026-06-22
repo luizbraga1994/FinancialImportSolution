@@ -172,7 +172,7 @@ public sealed class ImportProcessor : IImportProcessor
             // (in case they were marked SapError before) and skip SAP.
             var existingDispatch = await _dbContext.JournalEntryDispatches
                 .FirstOrDefaultAsync(d =>
-                    d.CompanyDb == importFile.CompanyDb && d.GroupKeyHash == group.Key, cancellationToken);
+                    d.ImportFileId == importFile.Id && d.GroupKeyHash == group.Key, cancellationToken);
 
             if (existingDispatch is { Status: JournalDispatchStatus.Dispatched })
             {
@@ -298,6 +298,7 @@ public sealed class ImportProcessor : IImportProcessor
                     line.SapDocEntry = docEntry;
                     imported++;
                 }
+                importFile.ImportedLines = imported;
 
                 await _eventPublisher.PublishAsync(new SapDispatchSucceededEvent
                 {
@@ -481,6 +482,11 @@ public sealed class ImportProcessor : IImportProcessor
             : importFile.BranchDefault;
 
         if (string.IsNullOrWhiteSpace(branchCode)) return null;
+
+        // The Filial column contains the SAP BPLID directly as an integer.
+        // The mapping table is checked as a fallback for legacy text-code configs.
+        if (int.TryParse(branchCode, out var directBplId) && directBplId > 0)
+            return directBplId;
 
         var mapping = mappings.FirstOrDefault(m =>
             m.FileBranchCode.Equals(branchCode, StringComparison.OrdinalIgnoreCase));

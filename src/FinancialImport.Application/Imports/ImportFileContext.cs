@@ -11,6 +11,7 @@ public sealed class ImportFileContext
     public string? DetectedLayout { get; set; }
     public string? BranchDefault { get; set; }
     public bool UseBranchFromFile { get; set; } = true;
+    public bool AllowDuplicate { get; set; } = false;
 }
 
 public sealed class ImportRow

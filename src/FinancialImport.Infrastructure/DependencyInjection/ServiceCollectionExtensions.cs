@@ -50,6 +50,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConfigureNamedOptions<JwtBearerOptions>, DbConfigureJwtBearerOptions>();
         services.AddSingleton<IConfigureOptions<RabbitMqOptions>, DbConfigureRabbitMqOptions>();
         services.AddSingleton<IConfigureOptions<KafkaOptions>, DbConfigureKafkaOptions>();
+        services.AddSingleton<IPostConfigureOptions<RabbitMqOptions>, RabbitMqConfigOverride>();
+        services.AddSingleton<IPostConfigureOptions<KafkaOptions>, KafkaConfigOverride>();
         services.AddSingleton<IConfigureOptions<ImportProcessingOptions>, DbConfigureImportOptions>();
         services.AddSingleton<IConfigureOptions<LayoutParsingOptions>, DbConfigureLayoutOptions>();
         services.AddSingleton<IConfigureOptions<OutboxOptions>, DbConfigureOutboxOptions>();

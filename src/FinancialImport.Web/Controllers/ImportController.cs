@@ -166,6 +166,19 @@ public class ImportController : Controller
 
             var result = await _importService.PreviewAsync(context, cancellationToken);
 
+            if (result.IsDuplicateFile)
+            {
+                // Save the file to a temp path and ask the user via modal
+                var key = Guid.NewGuid().ToString("N");
+                var tmpPath = Path.Combine(Path.GetTempPath(), $"fi_{key}.tmp");
+                await System.IO.File.WriteAllBytesAsync(tmpPath, context.FileBytes, cancellationToken);
+
+                TempData["DuplicateKey"] = key;
+                TempData["DuplicateFileName"] = file.FileName;
+                TempData["DuplicateStatus"] = result.ExistingFileStatus;
+                return RedirectToAction(nameof(Index));
+            }
+
             if (result.ImportFileId == 0)
             {
                 TempData["Error"] = result.Errors.FirstOrDefault() ?? "Nao foi possivel processar o arquivo.";
@@ -192,6 +205,55 @@ public class ImportController : Controller
         }
     }
 
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConfirmDuplicate(string key, string fileName, CancellationToken cancellationToken)
+    {
+        var tmpPath = Path.Combine(Path.GetTempPath(), $"fi_{key}.tmp");
+        if (!System.IO.File.Exists(tmpPath))
+        {
+            TempData["Error"] = "Sessao expirada. Faca o upload do arquivo novamente.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        byte[] fileBytes;
+        try
+        {
+            fileBytes = await System.IO.File.ReadAllBytesAsync(tmpPath, cancellationToken);
+            System.IO.File.Delete(tmpPath);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read pending duplicate temp file {Key}.", key);
+            TempData["Error"] = "Erro ao recuperar arquivo temporario. Faca o upload novamente.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            using var ms = new MemoryStream(fileBytes);
+            var context = await _fileReader.ReadAsync(ms, fileName, cancellationToken);
+            context.AllowDuplicate = true;
+
+            var result = await _importService.PreviewAsync(context, cancellationToken);
+
+            if (result.ImportFileId == 0)
+            {
+                TempData["Error"] = result.Errors.FirstOrDefault() ?? "Nao foi possivel processar o arquivo.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            TempData["CorrelationId"] = result.CorrelationId;
+            return RedirectToAction(nameof(Preview), new { id = result.ImportFileId });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error confirming duplicate upload for {FileName}.", fileName);
+            TempData["Error"] = "Erro inesperado ao processar o arquivo. Verifique os logs de sistema.";
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
     [HttpGet]
     public async Task<IActionResult> Preview(long id, CancellationToken cancellationToken)
     {
@@ -207,7 +269,9 @@ public class ImportController : Controller
 
         // Build group summaries with two separate queries to avoid client-side
         // evaluation of GroupBy+Take that would load all 35k lines into memory.
-        // Step 1: aggregates only (pure SQL)
+        // Step 1: minimal SQL — only COUNT and SUM aggregates to guarantee
+        // no correlated subqueries. Boolean flags (IsExcluded, IsImported)
+        // are computed in-memory from allLinesDtos loaded in Step 2.
         var groupSummaries = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == id)
@@ -215,26 +279,35 @@ public class ImportController : Controller
             .Select(g => new
             {
                 GroupKeyHash = g.Key,
-                Reference = g.OrderBy(l => l.Id).First().Reference ?? string.Empty,
-                PostingDate = g.OrderBy(l => l.Id).First().PostingDate,
                 LineCount = g.Count(),
                 TotalCredit = g.Sum(l => l.CreditAmount ?? 0m),
                 TotalDebit = g.Sum(l => l.DebitAmount ?? 0m),
-                IsExcluded = g.All(l => l.Status == ImportLineStatus.Excluded),
-                IsImported = g.Any(l => l.Status == ImportLineStatus.Imported),
             })
-            .OrderBy(g => g.PostingDate)
-            .ThenBy(g => g.Reference)
             .ToListAsync(cancellationToken);
 
-        // Step 2: load sample lines WITHOUT the heavy SourceJson column.
-        // Use a projection so EF doesn't materialise the full entity blob.
+        // Step 2a: compact flag data — only 3 tiny columns for all lines.
+        // The covering index IX_ImportacaoLinha_FileIdGroupStatus
+        // (ImportFileId, GroupKeyHash, Status) with InnoDB's implicit PK
+        // appended gives MySQL an index-only scan: no clustered-index reads
+        // even for 34 k rows, avoiding the SourceJson JSON column overhead.
         const int maxLinesPerGroup = 20;
-        var allLinesDtos = await _dbContext.ImportLines
+        var lineFlags = await _dbContext.ImportLines
             .AsNoTracking()
             .Where(l => l.ImportFileId == id)
-            .OrderBy(l => l.GroupKeyHash)
-            .ThenBy(l => l.Id)
+            .Select(l => new { l.Id, l.GroupKeyHash, l.Status })
+            .ToListAsync(cancellationToken);
+
+        // Identify the first maxLinesPerGroup row IDs per group in memory.
+        var topLineIds = lineFlags
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty)
+            .SelectMany(g => g.OrderBy(l => l.Id).Take(maxLinesPerGroup).Select(l => l.Id))
+            .ToHashSet();
+
+        // Step 2b: load display columns only for the ~(groups × 20) sample rows
+        // via PK-IN lookup — never more than a few hundred rows regardless of file size.
+        var sampleDisplayLines = await _dbContext.ImportLines
+            .AsNoTracking()
+            .Where(l => topLineIds.Contains(l.Id))
             .Select(l => new
             {
                 l.Id, l.GroupKeyHash, l.Reference, l.AccountCode, l.ContraAccountCode,
@@ -243,11 +316,11 @@ public class ImportController : Controller
             })
             .ToListAsync(cancellationToken);
 
-        var linesByGroup = allLinesDtos
+        var linesByGroup = sampleDisplayLines
             .GroupBy(l => l.GroupKeyHash ?? string.Empty)
             .ToDictionary(
                 g => g.Key,
-                g => g.Take(maxLinesPerGroup).Select(l => new ImportLine
+                g => g.OrderBy(l => l.Id).Select(l => new ImportLine
                 {
                     Id = l.Id, GroupKeyHash = l.GroupKeyHash, Reference = l.Reference,
                     AccountCode = l.AccountCode, ContraAccountCode = l.ContraAccountCode,
@@ -257,18 +330,32 @@ public class ImportController : Controller
                     SapDocEntry = l.SapDocEntry
                 }).ToList());
 
-        var groups = groupSummaries.Select(g => new ImportPreviewGroup
+        // Compute per-group boolean flags from lineFlags (all lines, compact).
+        var allByGroup = lineFlags
+            .GroupBy(l => l.GroupKeyHash ?? string.Empty)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var groups = groupSummaries.Select(g =>
         {
-            GroupKeyHash = g.GroupKeyHash,
-            Reference = g.Reference,
-            PostingDate = g.PostingDate,
-            LineCount = g.LineCount,
-            TotalCredit = g.TotalCredit,
-            TotalDebit = g.TotalDebit,
-            IsExcluded = g.IsExcluded,
-            IsImported = g.IsImported,
-            Lines = linesByGroup.TryGetValue(g.GroupKeyHash, out var lines) ? lines : new()
-        }).ToList();
+            var gAllLines = allByGroup.TryGetValue(g.GroupKeyHash, out var al) ? al : new();
+            var gLines = linesByGroup.TryGetValue(g.GroupKeyHash, out var ls) ? ls : new();
+            var firstLine = gLines.FirstOrDefault();
+            return new ImportPreviewGroup
+            {
+                GroupKeyHash = g.GroupKeyHash,
+                Reference = firstLine?.Reference ?? string.Empty,
+                PostingDate = firstLine?.PostingDate ?? default,
+                LineCount = g.LineCount,
+                TotalCredit = g.TotalCredit,
+                TotalDebit = g.TotalDebit,
+                IsExcluded = gAllLines.Count > 0 && gAllLines.All(l => l.Status == ImportLineStatus.Excluded),
+                IsImported = gAllLines.Any(l => l.Status == ImportLineStatus.Imported),
+                Lines = gLines
+            };
+        })
+        .OrderBy(g => g.PostingDate)
+        .ThenBy(g => g.Reference)
+        .ToList();
 
         // Account validation: try live re-check against SAP chart of accounts.
         // If the SAP session is unavailable, fall back to what was already
@@ -727,6 +814,50 @@ public class ImportController : Controller
         }, cancellationToken);
 
         TempData["Success"] = $"Linha excluida com sucesso. Atencao: se o grupo '{line.Reference}' ficar desbalanceado, o SAP pode rejeitar o lancamento inteiro.";
+        return RedirectToAction(nameof(Preview), new { id });
+    }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ForceReimport(long id, CancellationToken cancellationToken)
+    {
+        var companyDb = _companyContext.CompanyDb;
+        var importFile = await _dbContext.ImportFiles
+            .SingleOrDefaultAsync(f => f.Id == id && f.CompanyDb == companyDb, cancellationToken);
+
+        if (importFile == null)
+        {
+            TempData["Error"] = "Importacao nao encontrada.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (importFile.Status == ImportStatus.Processing)
+        {
+            TempData["Error"] = "Nao e possivel alterar linhas enquanto a importacao esta em processamento.";
+            return RedirectToAction(nameof(Preview), new { id });
+        }
+
+        // Remove stale dispatch records so the processor makes fresh SAP calls.
+        // Without this, the per-file idempotency guard would skip SAP for any group
+        // that was already dispatched in a previous confirm attempt on this same file.
+        await _dbContext.JournalEntryDispatches
+            .Where(d => d.ImportFileId == id)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        var affected = await _dbContext.ImportLines
+            .Where(l => l.ImportFileId == id && l.Status == ImportLineStatus.Duplicated)
+            .ExecuteUpdateAsync(s => s.SetProperty(l => l.Status, ImportLineStatus.Valid), cancellationToken);
+
+        if (affected > 0)
+        {
+            importFile.ValidLines += affected;
+            importFile.DuplicatedLines = Math.Max(0, importFile.DuplicatedLines - affected);
+            importFile.Status = ImportStatus.Validated;
+            _dbContext.ImportFiles.Update(importFile);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            TempData["Success"] = $"{affected} linha(s) liberada(s) para reenvio. Clique em 'Confirmar Importacao' para enviar ao SAP.";
+        }
+
         return RedirectToAction(nameof(Preview), new { id });
     }
 

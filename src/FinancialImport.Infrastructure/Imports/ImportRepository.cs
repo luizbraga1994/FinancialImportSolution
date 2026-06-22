@@ -1,5 +1,6 @@
 using FinancialImport.Application.Imports;
 using FinancialImport.Domain.Entities;
+using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,9 +38,15 @@ public sealed class ImportRepository : IImportRepository
         if (businessKeyHashes.Count == 0)
             return new HashSet<string>();
 
+        // Only lines that were actually sent to SAP (Imported) constitute genuine
+        // duplicates. Lines in other statuses (Valid/Invalid/Excluded/SapError/Duplicated)
+        // were never successfully committed to SAP, so they must not block a fresh upload
+        // from treating the same business key as a new, sendable entry.
         var found = await _dbContext.ImportLines
             .AsNoTracking()
-            .Where(l => l.CompanyDb == companyDb && businessKeyHashes.Contains(l.BusinessKeyHash))
+            .Where(l => l.CompanyDb == companyDb
+                        && businessKeyHashes.Contains(l.BusinessKeyHash)
+                        && l.Status == ImportLineStatus.Imported)
             .Select(l => l.BusinessKeyHash)
             .Distinct()
             .ToListAsync(cancellationToken);

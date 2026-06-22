@@ -45,6 +45,7 @@ public sealed class SapJournalEntryLine
     public string LineMemo { get; set; } = string.Empty;
 
     [JsonPropertyName("BPLID")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? BPLID { get; set; }
 
     [JsonPropertyName("CostingCode")]

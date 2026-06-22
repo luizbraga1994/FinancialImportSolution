@@ -1,5 +1,8 @@
 @{
     ViewData["Title"] = "Importar Arquivo";
+    var duplicateKey = TempData["DuplicateKey"] as string;
+    var duplicateFileName = TempData["DuplicateFileName"] as string;
+    var duplicateStatus = TempData["DuplicateStatus"] as string;
 }
 
 @if (TempData["Error"] != null)
@@ -107,6 +110,41 @@
     </div>
 </div>
 
+@if (!string.IsNullOrEmpty(duplicateKey))
+{
+    <div class="modal fade" id="modalDuplicado" tabindex="-1" aria-labelledby="modalDuplicadoLabel" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold" id="modalDuplicadoLabel">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Arquivo ja importado
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">O arquivo <strong>@duplicateFileName</strong> ja foi importado anteriormente.</p>
+                    <p class="mb-0 text-muted small">Status atual: <span class="fw-semibold">@duplicateStatus</span></p>
+                    <hr class="my-3" />
+                    <p class="mb-0">Deseja continuar e reimportar este arquivo?</p>
+                </div>
+                <div class="modal-footer border-0 pt-0 gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-lg me-1"></i>Nao
+                    </button>
+                    <form asp-action="ConfirmDuplicate" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="key" value="@duplicateKey" />
+                        <input type="hidden" name="fileName" value="@duplicateFileName" />
+                        <button type="submit" class="btn btn-warning" data-loading data-loading-message="Importando...">
+                            <i class="bi bi-arrow-repeat me-1"></i>Sim, reimportar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
     <script>
         const dropzone = document.getElementById('dropzone');
@@ -143,6 +181,16 @@
             if (bytes < 1024) return bytes + ' B';
             if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
             return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        @if (!string.IsNullOrEmpty(duplicateKey))
+        {
+            <text>
+        document.addEventListener('DOMContentLoaded', function () {
+            var modal = new bootstrap.Modal(document.getElementById('modalDuplicado'));
+            modal.show();
+        });
+            </text>
         }
     </script>
 }

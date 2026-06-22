@@ -44,6 +44,10 @@ public sealed class ImportPreviewResult
     public int DuplicatedLines { get; init; }
     public int TotalLines => Lines.Count;
     public string? CorrelationId { get; init; }
+
+    /// <summary>True when this exact file was already imported and AllowDuplicate was false.</summary>
+    public bool IsDuplicateFile { get; init; }
+    public string? ExistingFileStatus { get; init; }
 }
 
 public sealed class ImportConfirmResult
