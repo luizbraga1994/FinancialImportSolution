@@ -126,16 +126,22 @@ public sealed class SettlementService : ISettlementService
         var lines = new List<ReceivableSettlementLine>(parsed.Count);
         int validCount = 0, invalidCount = 0, duplicatedCount = 0;
 
-        foreach (var info in infos)
+        for (var ordinal = 0; ordinal < infos.Count; ordinal++)
         {
+            var info = infos[ordinal];
             var source = info.Source;
             var json = JsonSerializer.Serialize(source);
+
+            // Per-line group key (business key + ordinal) so two payments for the
+            // SAME note never collide and each becomes its own Incoming Payment.
+            var groupKeyHash = _hashService.ComputeHash(
+                SettlementKeyBuilder.BuildGroupKey(info.BusinessKeyHash, ordinal));
 
             var line = new ReceivableSettlementLine
             {
                 LineHash = _hashService.ComputeHash(json),
                 BusinessKeyHash = info.BusinessKeyHash,
-                GroupKeyHash = info.BusinessKeyHash,
+                GroupKeyHash = groupKeyHash,
                 CustomerDoc = source.DocPN,
                 InvoiceSerial = source.NumeroNota,
                 InvoiceSeries = source.Serie,

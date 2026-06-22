@@ -35,6 +35,11 @@ public sealed class SapIncomingPayment
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? BPLID { get; set; }
 
+    /// <summary>Reference from the spreadsheet ("Ref" column) — header UDF.</summary>
+    [JsonPropertyName("U_ReferenciaPgto")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? U_ReferenciaPgto { get; set; }
+
     // ===== Cash (Dinheiro) =====
     [JsonPropertyName("CashAccount")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -462,9 +462,14 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64);
             entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
             entity.HasOne(e => e.SettlementFile).WithMany(f => f.Lines).HasForeignKey(e => e.SettlementFileId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.SettlementFileId, e.BusinessKeyHash }).IsUnique().HasDatabaseName("IX_BaixaLinha_FileId_HashChaveNegocio");
+            // BusinessKeyHash is the per-payment semantic key used for cross-file
+            // dedup lookups (non-unique: a note may legitimately be settled by
+            // several payments that share most fields).
+            entity.HasIndex(e => new { e.SettlementFileId, e.BusinessKeyHash }).HasDatabaseName("IX_BaixaLinha_FileId_HashChaveNegocio");
             entity.HasIndex(e => e.SettlementFileId);
-            entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash }).HasDatabaseName("IX_BaixaLinha_Grupo");
+            // GroupKeyHash carries the line ordinal, so it is unique per file and
+            // guarantees one Incoming Payment per spreadsheet row.
+            entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash }).IsUnique().HasDatabaseName("IX_BaixaLinha_Grupo");
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_BaixaLinha_Status");
             entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash, e.Status }).HasDatabaseName("IX_BaixaLinha_FileIdGroupStatus");
         });

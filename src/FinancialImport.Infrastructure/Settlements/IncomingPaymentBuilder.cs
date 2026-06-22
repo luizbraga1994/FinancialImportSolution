@@ -45,6 +45,7 @@ public sealed class IncomingPaymentBuilder
             Series = seriesOverride,
             JournalRemarks = $"Contas a receber - {line.CardCode}",
             BPLID = line.BplId,
+            U_ReferenciaPgto = string.IsNullOrWhiteSpace(line.Reference) ? null : line.Reference,
             PaymentInvoices =
             {
                 new SapPaymentInvoice
