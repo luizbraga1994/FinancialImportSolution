@@ -69,6 +69,44 @@ public sealed class SapIncomingPaymentService : ISapIncomingPaymentService
         }
     }
 
+    public async Task<IncomingPaymentStatus> GetIncomingPaymentStatusAsync(SapSessionContext session, int docEntry, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("SapServiceLayer");
+            var request = new HttpRequestMessage(HttpMethod.Get, $"IncomingPayments({docEntry})?$select=DocEntry,Cancelled");
+            request.Headers.Add("B1SESSION", session.SessionId);
+            if (!string.IsNullOrWhiteSpace(session.RouteId))
+            {
+                request.Headers.Add("ROUTEID", session.RouteId);
+            }
+
+            var response = await client.SendAsync(request, cancellationToken);
+            var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return IncomingPaymentStatus.SessionExpired();
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return IncomingPaymentStatus.NotFound();
+
+            if (!response.IsSuccessStatusCode)
+                return IncomingPaymentStatus.Failure(ExtractSapError(rawResponse));
+
+            using var doc = JsonDocument.Parse(rawResponse);
+            var cancelled = doc.RootElement.TryGetProperty("Cancelled", out var c)
+                && c.ValueKind == JsonValueKind.String
+                && string.Equals(c.GetString(), "tYES", StringComparison.OrdinalIgnoreCase);
+
+            return cancelled ? IncomingPaymentStatus.CancelledPayment() : IncomingPaymentStatus.Active();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falha ao consultar status do IncomingPayment {DocEntry} em {CompanyDb}.", docEntry, session.CompanyDb);
+            return IncomingPaymentStatus.Failure($"Erro de comunicacao: {ex.Message}");
+        }
+    }
+
     private static string ExtractSapError(string rawResponse)
     {
         try

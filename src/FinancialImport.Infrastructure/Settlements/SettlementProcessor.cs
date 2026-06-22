@@ -103,13 +103,50 @@ public sealed class SettlementProcessor : ISettlementProcessor
             var existingDispatch = await _dbContext.IncomingPaymentDispatches
                 .FirstOrDefaultAsync(d => d.SettlementFileId == file.Id && d.GroupKeyHash == groupKeyHash, cancellationToken);
 
+            // Already dispatched once: verify in SAP whether the payment really
+            // exists and is not cancelled. If it is still active, skip (inform).
+            // If it was cancelled (or no longer exists), fall through to re-launch.
             if (existingDispatch is { Status: IncomingPaymentDispatchStatus.Dispatched })
             {
-                line.Status = SettlementLineStatus.Settled;
-                line.SapDocEntry = existingDispatch.SapDocEntry;
-                line.SapReturnMessage = "Já baixado (idempotente).";
-                settled++;
-                continue;
+                if (!existingDispatch.SapDocEntry.HasValue)
+                {
+                    // Dispatched without a DocEntry is ambiguous — do not risk a
+                    // double payment; keep it as settled and move on.
+                    line.Status = SettlementLineStatus.Settled;
+                    line.SapReturnMessage = "Já baixado (idempotente).";
+                    settled++;
+                    continue;
+                }
+
+                var (status, refreshedSession) = await VerifyExistingPaymentAsync(sapSession, existingDispatch.SapDocEntry.Value, file.CompanyDb, cancellationToken);
+                sapSession = refreshedSession;
+
+                if (status.IsActive)
+                {
+                    line.Status = SettlementLineStatus.Settled;
+                    line.SapDocEntry = existingDispatch.SapDocEntry;
+                    line.SapReturnMessage = $"Pagamento já existe no SAP (DocEntry {existingDispatch.SapDocEntry}).";
+                    settled++;
+                    continue;
+                }
+
+                if (!status.Exists || status.Cancelled)
+                {
+                    _logger.LogInformation(
+                        "Pagamento {DocEntry} cancelado/inexistente no SAP — relançando baixa da nota {GroupKey}.",
+                        existingDispatch.SapDocEntry, existingDispatch.GroupKey);
+                    existingDispatch.SapDocEntry = null;
+                    // fall through to re-launch below
+                }
+                else
+                {
+                    // Could not determine status (transient error) — be safe and skip.
+                    line.Status = SettlementLineStatus.Settled;
+                    line.SapDocEntry = existingDispatch.SapDocEntry;
+                    line.SapReturnMessage = $"Pagamento já registrado (status SAP não confirmado: {status.Error}).";
+                    settled++;
+                    continue;
+                }
             }
 
             var dispatch = existingDispatch ?? new IncomingPaymentDispatch
@@ -176,6 +213,11 @@ public sealed class SettlementProcessor : ISettlementProcessor
                     {
                         sapSession = relogin.Session!;
                         sapResult = await _sapService.CreateIncomingPaymentAsync(sapSession, build.Payload!, cancellationToken);
+                    }
+                    else
+                    {
+                        _logger.LogError("Falha ao reautenticar no SAP para '{CompanyDb}': {Error}", file.CompanyDb, relogin.ErrorMessage);
+                        sapResult = SapResult.Fail($"Falha ao reautenticar no SAP: {relogin.ErrorMessage}");
                     }
                 }
             }
@@ -285,6 +327,32 @@ public sealed class SettlementProcessor : ISettlementProcessor
             throw new InvalidOperationException($"Nao foi possivel conectar ao SAP para '{companyDb}': {loginResult.ErrorMessage}");
 
         return loginResult.Session!;
+    }
+
+    /// <summary>
+    /// Checks an existing Incoming Payment's status in SAP, re-logging in once if
+    /// the session expired. Returns the status and the (possibly refreshed) session.
+    /// </summary>
+    private async Task<(IncomingPaymentStatus Status, SapSessionContext Session)> VerifyExistingPaymentAsync(
+        SapSessionContext session, int docEntry, string companyDb, CancellationToken cancellationToken)
+    {
+        var status = await _sapService.GetIncomingPaymentStatusAsync(session, docEntry, cancellationToken);
+        if (status.IsSessionExpired)
+        {
+            var relogin = await _sapSessionService.SignInCompanyAsync(
+                companyDb, _settings.Get("Sap:UserName") ?? "", _settings.Get("Sap:Password") ?? "", cancellationToken);
+            if (relogin.Success)
+            {
+                session = relogin.Session!;
+                status = await _sapService.GetIncomingPaymentStatusAsync(session, docEntry, cancellationToken);
+            }
+            else
+            {
+                _logger.LogError("Falha ao reautenticar no SAP para '{CompanyDb}': {Error}", companyDb, relogin.ErrorMessage);
+                status = IncomingPaymentStatus.Failure($"Falha ao reautenticar: {relogin.ErrorMessage}");
+            }
+        }
+        return (status, session);
     }
 
     private static int? ExtractDocEntry(string? rawResponse)

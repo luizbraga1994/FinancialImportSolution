@@ -202,12 +202,11 @@ public sealed class SettlementService : ISettlementService
             if (existingFile != null)
             {
                 await _repository.RemoveLinesForFileAsync(existingFile.Id, cancellationToken);
-                if (context.AllowDuplicate)
-                {
-                    await _dbContext.IncomingPaymentDispatches
-                        .Where(d => d.SettlementFileId == existingFile.Id)
-                        .ExecuteDeleteAsync(cancellationToken);
-                }
+
+                // NOTE: dispatch records are intentionally preserved on re-upload.
+                // They anchor the SAP DocEntry so the processor can verify in SAP
+                // whether the payment still exists (skip) or was cancelled
+                // (re-launch), instead of blindly creating a duplicate payment.
 
                 existingFile.UserId = userId;
                 existingFile.OriginalFileName = context.FileName;
