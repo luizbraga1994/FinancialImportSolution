@@ -85,6 +85,9 @@
                 <a href="@Url.Action("Index", "Import")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Import" ? "active" : "")" data-loading data-loading-message="Carregando importação...">
                     <i class="bi bi-upload"></i><span>Importar</span>
                 </a>
+                <a href="@Url.Action("Index", "ReceivableSettlement")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ReceivableSettlement" ? "active" : "")" data-loading data-loading-message="Carregando baixa de notas...">
+                    <i class="bi bi-cash-coin"></i><span>Baixa de Notas de Saída</span>
+                </a>
                 <a href="@Url.Action("Index", "History")" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "History" ? "active" : "")" data-loading data-loading-message="Carregando histórico...">
                     <i class="bi bi-clock-history"></i><span>Historico</span>
                 </a>

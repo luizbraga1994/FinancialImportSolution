@@ -1,0 +1,133 @@
+@using FinancialImport.Domain.Enums
+@model FinancialImport.Web.Controllers.SettlementPreviewViewModel
+@{
+    ViewData["Title"] = "Conferência da Baixa";
+
+    string StatusBadge(SettlementLineStatus s) => s switch
+    {
+        SettlementLineStatus.Valid => "bg-success",
+        SettlementLineStatus.Settled => "bg-primary",
+        SettlementLineStatus.Duplicated => "bg-secondary",
+        SettlementLineStatus.SapError => "bg-danger",
+        SettlementLineStatus.InvoiceNotFound => "bg-warning text-dark",
+        SettlementLineStatus.Invalid => "bg-warning text-dark",
+        SettlementLineStatus.Excluded => "bg-light text-dark border",
+        _ => "bg-light text-dark border"
+    };
+
+    string StatusLabel(SettlementLineStatus s) => s switch
+    {
+        SettlementLineStatus.Settled => "Baixada",
+        SettlementLineStatus.InvoiceNotFound => "Nota não localizada",
+        SettlementLineStatus.SapError => "Erro SAP",
+        _ => s.ToString()
+    };
+
+    var canConfirm = Model.Status is SettlementStatus.Validated or SettlementStatus.PartiallyCompleted or SettlementStatus.Failed
+                     && Model.ValidLines > 0;
+    var canReprocess = Model.Status is SettlementStatus.Completed or SettlementStatus.PartiallyCompleted or SettlementStatus.Failed
+                       && Model.SapErrorLines > 0;
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show"><i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["Error"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show"><i class="bi bi-check-circle-fill me-2"></i>@TempData["Success"]<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-cash-coin me-2"></i>@Model.FileName</h5>
+        <small class="text-muted">Status: <span class="fw-semibold">@Model.Status</span></small>
+    </div>
+    <a asp-action="Index" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Nova baixa</a>
+</div>
+
+<div class="row g-2 mb-3">
+    <div class="col"><div class="card border-0 text-center"><div class="card-body py-2"><div class="h4 mb-0">@Model.TotalLines</div><small class="text-muted">Total</small></div></div></div>
+    <div class="col"><div class="card border-0 text-center"><div class="card-body py-2"><div class="h4 mb-0 text-success">@Model.ValidLines</div><small class="text-muted">Válidas</small></div></div></div>
+    <div class="col"><div class="card border-0 text-center"><div class="card-body py-2"><div class="h4 mb-0 text-primary">@Model.SettledLines</div><small class="text-muted">Baixadas</small></div></div></div>
+    <div class="col"><div class="card border-0 text-center"><div class="card-body py-2"><div class="h4 mb-0 text-warning">@Model.InvalidLines</div><small class="text-muted">Inválidas/Não localizadas</small></div></div></div>
+    <div class="col"><div class="card border-0 text-center"><div class="card-body py-2"><div class="h4 mb-0 text-secondary">@Model.DuplicatedLines</div><small class="text-muted">Duplicadas</small></div></div></div>
+    <div class="col"><div class="card border-0 text-center"><div class="card-body py-2"><div class="h4 mb-0 text-danger">@Model.SapErrorLines</div><small class="text-muted">Erro SAP</small></div></div></div>
+</div>
+
+@if (Model.Errors.Any())
+{
+    <div class="alert alert-warning">
+        <strong>Avisos de validação:</strong>
+        <ul class="mb-0 small">
+            @foreach (var e in Model.Errors.Take(20)) { <li>@e</li> }
+        </ul>
+    </div>
+}
+
+<div class="card border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Status</th>
+                        <th>DocPN</th>
+                        <th>Nº Nota</th>
+                        <th>Série</th>
+                        <th>Modelo</th>
+                        <th>Forma</th>
+                        <th class="text-end">Valor</th>
+                        <th class="text-end">Desconto</th>
+                        <th>Conta</th>
+                        <th>CardCode</th>
+                        <th>DocEntry</th>
+                        <th>Mensagem</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var l in Model.Lines)
+                    {
+                        <tr>
+                            <td><span class="badge @StatusBadge(l.Status)">@StatusLabel(l.Status)</span></td>
+                            <td>@l.CustomerDoc</td>
+                            <td>@l.InvoiceSerial</td>
+                            <td>@l.InvoiceSeries</td>
+                            <td>@l.InvoiceModel</td>
+                            <td>@l.PaymentMeans</td>
+                            <td class="text-end">@l.Amount.ToString("N2")</td>
+                            <td class="text-end">@l.Discount.ToString("N2")</td>
+                            <td>@l.ReceivingAccount</td>
+                            <td>@l.CardCode</td>
+                            <td>@(l.SapDocEntry?.ToString() ?? l.InvoiceDocEntry?.ToString())</td>
+                            <td class="small text-muted">@(l.SapReturnMessage ?? l.ValidationMessage)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-end gap-2 mt-3">
+    @if (canReprocess)
+    {
+        <form asp-action="Reprocess" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.SettlementFileId" />
+            <button type="submit" class="btn btn-outline-primary" data-loading data-loading-message="Reprocessando...">
+                <i class="bi bi-arrow-repeat me-1"></i>Reprocessar com erro
+            </button>
+        </form>
+    }
+    @if (canConfirm)
+    {
+        <form asp-action="Confirm" method="post">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.SettlementFileId" />
+            <button type="submit" class="btn btn-primary px-4" data-loading data-loading-message="Baixando notas no SAP...">
+                <i class="bi bi-check2-circle me-2"></i>Confirmar Baixa (@Model.ValidLines)
+            </button>
+        </form>
+    }
+</div>

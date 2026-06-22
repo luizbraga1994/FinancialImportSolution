@@ -3,6 +3,7 @@ namespace FinancialImport.Domain.Constants;
 public static class PermissionCodes
 {
     public const string ImportarLancamentos = "importar_lancamentos";
+    public const string BaixarNotasSaida = "baixar_notas_saida";
     public const string VisualizarHistorico = "visualizar_historico";
     public const string ReprocessarImportacao = "reprocessar_importacao";
     public const string TrocarCompany = "trocar_company";
@@ -20,6 +21,7 @@ public static class PermissionCodes
     public static readonly IReadOnlyList<string> All = new[]
     {
         ImportarLancamentos,
+        BaixarNotasSaida,
         VisualizarHistorico,
         ReprocessarImportacao,
         TrocarCompany,

@@ -1,0 +1,173 @@
+@{
+    ViewData["Title"] = "Baixa de Notas de Saída";
+    var duplicateKey = TempData["DuplicateKey"] as string;
+    var duplicateFileName = TempData["DuplicateFileName"] as string;
+    var duplicateStatus = TempData["DuplicateStatus"] as string;
+}
+
+@if (TempData["Error"] != null)
+{
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="alert alert-danger alert-dismissible fade show d-flex align-items-center" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>@TempData["Error"]</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    </div>
+}
+@if (TempData["Success"] != null)
+{
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="alert alert-success alert-dismissible fade show d-flex align-items-center" role="alert">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <div>@TempData["Success"]</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-1"><i class="bi bi-cash-coin me-2"></i>Baixa de Notas de Saída</h5>
+                <p class="text-muted small mb-4">Importe a planilha de recebimentos para liquidar notas de saída no SAP (Incoming Payment).</p>
+
+                <form asp-controller="ReceivableSettlement" asp-action="Upload" method="post" enctype="multipart/form-data" data-loading data-loading-message="Enviando arquivo e localizando notas...">
+                    @Html.AntiForgeryToken()
+
+                    <div class="upload-dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+                        <div class="upload-icon">
+                            <i class="bi bi-cloud-arrow-up"></i>
+                        </div>
+                        <h5 class="fw-semibold mb-1">Arraste o arquivo aqui</h5>
+                        <p class="text-muted mb-2">ou clique para selecionar</p>
+                        <span class="badge bg-light text-dark border">.CSV</span>
+                        <span class="badge bg-light text-dark border">.TXT</span>
+                        <span class="badge bg-light text-dark border">.XLSX</span>
+                        <input type="file" id="fileInput" name="file" class="d-none"
+                               accept=".csv,.txt,.xlsx" onchange="handleFileSelect(this)" />
+                    </div>
+
+                    <div id="fileInfo" class="d-none mt-3">
+                        <div class="d-flex align-items-center p-3 bg-light rounded-3">
+                            <div class="file-icon me-3"><i class="bi bi-file-earmark-text"></i></div>
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold" id="fileName"></div>
+                                <div class="text-muted small" id="fileSize"></div>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearFile()">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 text-end">
+                        <button type="submit" class="btn btn-primary px-4" id="submitBtn" disabled>
+                            <i class="bi bi-send me-2"></i>Enviar Arquivo
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card border-0 mt-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2"></i>Colunas esperadas</h6>
+                <p class="text-muted small mb-0">
+                    <strong>Identificação da nota:</strong> DocPN, Nº Nota, Série, CNPJ, Modelo.<br />
+                    <strong>Dados do recebimento:</strong> FormaDePagamento, ContaContabil, Valor, Desconto, Juros,
+                    DataPagamento, QtdParcelas, Bandeira, Ultimo4 DigitosCartao, Ref.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(duplicateKey))
+{
+    <div class="modal fade" id="modalDuplicado" tabindex="-1" aria-modal="true" role="dialog">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Arquivo já enviado
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">O arquivo <strong>@duplicateFileName</strong> já foi enviado anteriormente.</p>
+                    <p class="mb-0 text-muted small">Status atual: <span class="fw-semibold">@duplicateStatus</span></p>
+                    <hr class="my-3" />
+                    <p class="mb-0">Deseja continuar e reenviar este arquivo?</p>
+                </div>
+                <div class="modal-footer border-0 pt-0 gap-2">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-lg me-1"></i>Não
+                    </button>
+                    <form asp-action="ConfirmDuplicate" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="key" value="@duplicateKey" />
+                        <input type="hidden" name="fileName" value="@duplicateFileName" />
+                        <button type="submit" class="btn btn-warning" data-loading data-loading-message="Processando...">
+                            <i class="bi bi-arrow-repeat me-1"></i>Sim, reenviar
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+
+        ['dragenter','dragover'].forEach(e => {
+            dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.add('dragover'); });
+        });
+        ['dragleave','drop'].forEach(e => {
+            dropzone.addEventListener(e, ev => { ev.preventDefault(); dropzone.classList.remove('dragover'); });
+        });
+        dropzone.addEventListener('drop', ev => {
+            fileInput.files = ev.dataTransfer.files;
+            handleFileSelect(fileInput);
+        });
+
+        function handleFileSelect(input) {
+            if (input.files.length > 0) {
+                const f = input.files[0];
+                document.getElementById('fileName').textContent = f.name;
+                document.getElementById('fileSize').textContent = formatSize(f.size);
+                document.getElementById('fileInfo').classList.remove('d-none');
+                document.getElementById('submitBtn').disabled = false;
+                dropzone.classList.add('has-file');
+            }
+        }
+        function clearFile() {
+            fileInput.value = '';
+            document.getElementById('fileInfo').classList.add('d-none');
+            document.getElementById('submitBtn').disabled = true;
+            dropzone.classList.remove('has-file');
+        }
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+
+        @if (!string.IsNullOrEmpty(duplicateKey))
+        {
+            <text>
+        document.addEventListener('DOMContentLoaded', function () {
+            new bootstrap.Modal(document.getElementById('modalDuplicado')).show();
+        });
+            </text>
+        }
+    </script>
+}

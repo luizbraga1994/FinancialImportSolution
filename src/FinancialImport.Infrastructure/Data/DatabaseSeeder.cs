@@ -48,6 +48,7 @@ public sealed class DatabaseSeeder
         var permissions = new (string Code, string Name, string Group)[]
         {
             (PermissionCodes.ImportarLancamentos, "Importar Lancamentos", "Importacao"),
+            (PermissionCodes.BaixarNotasSaida, "Baixar Notas de Saida", "Importacao"),
             (PermissionCodes.VisualizarHistorico, "Visualizar Historico", "Importacao"),
             (PermissionCodes.ReprocessarImportacao, "Reprocessar Importacao", "Importacao"),
             (PermissionCodes.TrocarCompany, "Trocar Company", "Empresa"),
@@ -116,6 +117,7 @@ public sealed class DatabaseSeeder
             var operatorPermissions = await _dbContext.Permissions
                 .Where(p => p.IsActive && (
                     p.Code == PermissionCodes.ImportarLancamentos ||
+                    p.Code == PermissionCodes.BaixarNotasSaida ||
                     p.Code == PermissionCodes.VisualizarHistorico ||
                     p.Code == PermissionCodes.TrocarCompany ||
                     p.Code == PermissionCodes.VisualizarFiliais))
