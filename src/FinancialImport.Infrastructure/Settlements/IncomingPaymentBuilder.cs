@@ -1,6 +1,5 @@
-using System.Globalization;
-using System.Text;
 using FinancialImport.Application.Models;
+using FinancialImport.Application.Settlements;
 using FinancialImport.Domain.Entities;
 
 namespace FinancialImport.Infrastructure.Settlements;
@@ -61,7 +60,7 @@ public sealed class IncomingPaymentBuilder
             }
         };
 
-        var means = ClassifyPaymentMeans(line.PaymentMeans);
+        var means = PaymentMeansClassifier.Classify(line.PaymentMeans);
         switch (means)
         {
             case PaymentMeans.Cash:
@@ -82,12 +81,21 @@ public sealed class IncomingPaymentBuilder
                         $"Bandeira '{line.CardBrand}' não mapeada para um cartão do SAP.");
                 }
 
+                // For cards the receiving account comes from the brand mapping;
+                // ContaContabil is optional and only used as a fallback.
+                var creditAcct = !string.IsNullOrWhiteSpace(cardMapping.CreditAccount)
+                    ? cardMapping.CreditAccount
+                    : line.ReceivingAccount;
+                if (string.IsNullOrWhiteSpace(creditAcct))
+                {
+                    return IncomingPaymentBuildResult.Failure(
+                        $"Conta do cartão não definida para a bandeira '{line.CardBrand}': configure a conta no mapeamento da bandeira ou informe ContaContabil.");
+                }
+
                 payload.PaymentCreditCards.Add(new SapPaymentCreditCard
                 {
                     CreditCard = cardMapping.SapCreditCardCode,
-                    CreditAcct = string.IsNullOrWhiteSpace(cardMapping.CreditAccount)
-                        ? line.ReceivingAccount
-                        : cardMapping.CreditAccount,
+                    CreditAcct = creditAcct,
                     CreditCardNumber = line.CardLastDigits,
                     VoucherNum = line.VoucherNum,
                     PaymentMethodCode = cardMapping.PaymentMethodCode,
@@ -104,36 +112,6 @@ public sealed class IncomingPaymentBuilder
 
         return IncomingPaymentBuildResult.Ok(payload, net);
     }
-
-    public static PaymentMeans ClassifyPaymentMeans(string? raw)
-    {
-        var norm = RemoveAccents(raw ?? string.Empty).Trim().ToLowerInvariant();
-        if (norm.Length == 0) return PaymentMeans.Unknown;
-        if (norm.Contains("dinheiro") || norm.Contains("cash") || norm.Contains("especie")) return PaymentMeans.Cash;
-        if (norm.Contains("transfer")) return PaymentMeans.Transfer;
-        if (norm.Contains("cartao") || norm.Contains("card")) return PaymentMeans.Card;
-        return PaymentMeans.Unknown;
-    }
-
-    private static string RemoveAccents(string text)
-    {
-        var normalized = text.Normalize(NormalizationForm.FormD);
-        var sb = new StringBuilder(normalized.Length);
-        foreach (var c in normalized)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
-                sb.Append(c);
-        }
-        return sb.ToString().Normalize(NormalizationForm.FormC);
-    }
-}
-
-public enum PaymentMeans
-{
-    Unknown = 0,
-    Cash = 1,
-    Transfer = 2,
-    Card = 3
 }
 
 public sealed class IncomingPaymentBuildResult

@@ -1,4 +1,5 @@
 using FinancialImport.Application.Settlements;
+using FinancialImport.Application.Validators;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Infrastructure.Settlements;
 using FluentAssertions;
@@ -141,5 +142,87 @@ public class IncomingPaymentBuilderTests
         card.NumOfPayments.Should().Be(5);
         card.VoucherNum.Should().Be("69226610914");
         card.CreditSum.Should().Be(360.48m);
+    }
+
+    [Fact]
+    public void Card_payment_uses_mapping_account_when_conta_contabil_is_blank()
+    {
+        // ContaContabil is optional for cards: the account comes from the brand mapping.
+        var line = ResolvedLine("CartaoD", 458.68m);
+        line.ReceivingAccount = string.Empty;
+        line.CardBrand = "ELODEBITO";
+
+        var mapping = new CardBrandMapping
+        {
+            BrandName = "ELODEBITO",
+            SapCreditCardCode = 6,
+            PaymentMethodCode = 1,
+            CreditAccount = "112020010003",
+            IsActive = true
+        };
+
+        var result = new IncomingPaymentBuilder().Build(line, mapping, 15);
+
+        result.IsValid.Should().BeTrue();
+        result.Payload!.PaymentCreditCards[0].CreditAcct.Should().Be("112020010003");
+    }
+
+    [Fact]
+    public void Card_payment_fails_when_no_account_anywhere()
+    {
+        var line = ResolvedLine("CartaoC", 100m);
+        line.ReceivingAccount = string.Empty;
+        line.CardBrand = "ELOCREDITO";
+
+        var mapping = new CardBrandMapping
+        {
+            BrandName = "ELOCREDITO",
+            SapCreditCardCode = 3,
+            PaymentMethodCode = 2,
+            CreditAccount = null,
+            IsActive = true
+        };
+
+        var result = new IncomingPaymentBuilder().Build(line, mapping, 15);
+
+        result.IsValid.Should().BeFalse();
+        result.Error.Should().Contain("Conta do cartão");
+    }
+}
+
+public class SettlementLancamentoValidatorTests
+{
+    private static SettlementLancamento BaseLine() => new()
+    {
+        DocPN = "100.692.536-84",
+        NumeroNota = "692261",
+        Modelo = "NFS-e",
+        Valor = 110m,
+        DataPagamento = new DateTime(2026, 6, 22)
+    };
+
+    [Fact]
+    public void Card_line_without_conta_contabil_is_valid()
+    {
+        var line = BaseLine();
+        line.FormaPagamento = "CartaoC";
+        line.ContaContabil = string.Empty;
+
+        var result = new SettlementLancamentoValidator().Validate(line);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Non_card_line_without_conta_contabil_is_invalid()
+    {
+        var line = BaseLine();
+        line.FormaPagamento = "Dinheiro";
+        line.ContaContabil = string.Empty;
+
+        var result = new SettlementLancamentoValidator().Validate(line);
+
+        result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.PropertyName == nameof(SettlementLancamento.ContaContabil));
     }
 }

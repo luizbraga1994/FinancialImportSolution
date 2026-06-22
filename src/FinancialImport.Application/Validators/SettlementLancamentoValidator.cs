@@ -19,8 +19,15 @@ public sealed class SettlementLancamentoValidator : AbstractValidator<Settlement
         RuleFor(x => x.FormaPagamento)
             .NotEmpty().WithMessage("Forma de pagamento e obrigatoria.");
 
+        // For card payments (CartaoC/CartaoD) the receiving account comes from
+        // the card brand mapping in SAP, so ContaContabil is optional. For the
+        // other means it is required.
         RuleFor(x => x.ContaContabil)
-            .NotEmpty().WithMessage("Conta contabil de recebimento e obrigatoria.");
+            .NotEmpty().WithMessage("Conta contabil de recebimento e obrigatoria.")
+            .When(x => PaymentMeansClassifier.Classify(x.FormaPagamento) != PaymentMeans.Card);
+
+        RuleFor(x => x.QtdParcelas)
+            .GreaterThanOrEqualTo(0).WithMessage("Quantidade de parcelas nao pode ser negativa.");
 
         RuleFor(x => x.Valor)
             .GreaterThan(0).WithMessage("Valor deve ser maior que zero.");
