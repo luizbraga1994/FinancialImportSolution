@@ -28,6 +28,10 @@ public sealed class AppDbContext : DbContext
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<JournalEntryDispatch> JournalEntryDispatches => Set<JournalEntryDispatch>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<ReceivableSettlementFile> ReceivableSettlementFiles => Set<ReceivableSettlementFile>();
+    public DbSet<ReceivableSettlementLine> ReceivableSettlementLines => Set<ReceivableSettlementLine>();
+    public DbSet<IncomingPaymentDispatch> IncomingPaymentDispatches => Set<IncomingPaymentDispatch>();
+    public DbSet<CardBrandMapping> CardBrandMappings => Set<CardBrandMapping>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -389,6 +393,122 @@ public sealed class AppDbContext : DbContext
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_LancamentoSapDispatch_Status");
             entity.HasIndex(e => e.ImportFileId).HasDatabaseName("IX_LancamentoSapDispatch_Arquivo");
         });
+
+        // ===== Receivable settlement ("Baixa de Notas de Saída") =====
+        modelBuilder.Entity<ReceivableSettlementFile>(entity =>
+        {
+            entity.ToTable("BaixaArquivo");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.UserId).HasColumnName("UsuarioId").IsRequired();
+            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.OriginalFileName).HasColumnName("NomeArquivoOriginal").HasMaxLength(200).IsRequired();
+            entity.Property(e => e.FileHash).HasColumnName("HashArquivo").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.LayoutDetected).HasColumnName("LayoutDetectado").HasMaxLength(80).IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(e => e.TotalLines).HasColumnName("QuantidadeLinhas").IsRequired();
+            entity.Property(e => e.ValidLines).HasColumnName("QuantidadeValidas").IsRequired();
+            entity.Property(e => e.InvalidLines).HasColumnName("QuantidadeInvalidas").IsRequired();
+            entity.Property(e => e.SettledLines).HasColumnName("QuantidadeBaixadas").IsRequired();
+            entity.Property(e => e.DuplicatedLines).HasColumnName("QuantidadeDuplicadas").IsRequired();
+            entity.Property(e => e.LinesWithError).HasColumnName("QuantidadeComErro").IsRequired();
+            entity.Property(e => e.ImportedAt).HasColumnName("DataImportacao").IsRequired();
+            entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
+            entity.Property(e => e.ProcessingStartedAtUtc).HasColumnName("ProcessamentoInicioUtc");
+            entity.Property(e => e.ProcessingCompletedAtUtc).HasColumnName("ProcessamentoFimUtc");
+            entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
+            entity.Property(e => e.RowVersion).HasColumnName("Versao").IsConcurrencyToken();
+            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(e => new { e.CompanyDb, e.FileHash }).IsUnique();
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.CompanyDb);
+            entity.HasIndex(e => e.Status).HasDatabaseName("IX_BaixaArquivo_Status");
+            entity.HasIndex(e => e.CorrelationId).HasDatabaseName("IX_BaixaArquivo_CorrelationId");
+        });
+
+        modelBuilder.Entity<ReceivableSettlementLine>(entity =>
+        {
+            entity.ToTable("BaixaLinha");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.SettlementFileId).HasColumnName("BaixaArquivoId").IsRequired();
+            entity.Property(e => e.LineHash).HasColumnName("HashLinha").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.BusinessKeyHash).HasColumnName("HashChaveNegocio").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.CustomerDoc).HasColumnName("DocPN").HasMaxLength(40).IsRequired();
+            entity.Property(e => e.InvoiceSerial).HasColumnName("NumeroNota").HasMaxLength(40).IsRequired();
+            entity.Property(e => e.InvoiceSeries).HasColumnName("Serie").HasMaxLength(40);
+            entity.Property(e => e.BranchTaxId).HasColumnName("CnpjFilial").HasMaxLength(20);
+            entity.Property(e => e.InvoiceModel).HasColumnName("Modelo").HasMaxLength(40).IsRequired();
+            entity.Property(e => e.PaymentMeans).HasColumnName("FormaPagamento").HasMaxLength(30).IsRequired();
+            entity.Property(e => e.ReceivingAccount).HasColumnName("ContaContabil").HasMaxLength(30).IsRequired();
+            entity.Property(e => e.Amount).HasColumnName("Valor").HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.Discount).HasColumnName("Desconto").HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.Interest).HasColumnName("Juros").HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.PaymentDate).HasColumnName("DataPagamento").IsRequired();
+            entity.Property(e => e.Installments).HasColumnName("QtdParcelas").IsRequired();
+            entity.Property(e => e.CardBrand).HasColumnName("Bandeira").HasMaxLength(40);
+            entity.Property(e => e.CardLastDigits).HasColumnName("Ultimo4Cartao").HasMaxLength(10);
+            entity.Property(e => e.Reference).HasColumnName("Referencia").HasMaxLength(120).IsRequired();
+            entity.Property(e => e.CardCode).HasColumnName("CardCode").HasMaxLength(30);
+            entity.Property(e => e.InvoiceDocEntry).HasColumnName("DocEntryFatura");
+            entity.Property(e => e.VoucherNum).HasColumnName("VoucherNum").HasMaxLength(60);
+            entity.Property(e => e.BplId).HasColumnName("BPLId");
+            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").HasConversion<string>().HasMaxLength(40).IsRequired();
+            entity.Property(e => e.ValidationMessage).HasColumnName("MensagemValidacao").HasMaxLength(400);
+            entity.Property(e => e.SapReturnMessage).HasColumnName("MensagemRetornoSap").HasMaxLength(400);
+            entity.Property(e => e.SapDocEntry).HasColumnName("DocEntrySap");
+            entity.Property(e => e.SourceJson).HasColumnName("JsonOrigem").HasColumnType("json");
+            entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64);
+            entity.Property(e => e.UpdatedAtUtc).HasColumnName("AtualizadoEmUtc");
+            entity.HasOne(e => e.SettlementFile).WithMany(f => f.Lines).HasForeignKey(e => e.SettlementFileId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.SettlementFileId, e.BusinessKeyHash }).IsUnique().HasDatabaseName("IX_BaixaLinha_FileId_HashChaveNegocio");
+            entity.HasIndex(e => e.SettlementFileId);
+            entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash }).HasDatabaseName("IX_BaixaLinha_Grupo");
+            entity.HasIndex(e => e.Status).HasDatabaseName("IX_BaixaLinha_Status");
+            entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash, e.Status }).HasDatabaseName("IX_BaixaLinha_FileIdGroupStatus");
+        });
+
+        modelBuilder.Entity<IncomingPaymentDispatch>(entity =>
+        {
+            entity.ToTable("BaixaSapDispatch");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.SettlementFileId).HasColumnName("BaixaArquivoId").IsRequired();
+            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.GroupKeyHash).HasColumnName("HashChaveGrupo").HasMaxLength(64).IsRequired();
+            entity.Property(e => e.GroupKey).HasColumnName("ChaveGrupo").HasMaxLength(400).IsRequired();
+            entity.Property(e => e.Status).HasColumnName("Status").HasConversion<string>().HasMaxLength(30).IsRequired();
+            entity.Property(e => e.AttemptCount).HasColumnName("QuantidadeTentativas").IsRequired();
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("CriadoEmUtc").IsRequired();
+            entity.Property(e => e.DispatchedAtUtc).HasColumnName("EnviadoEmUtc");
+            entity.Property(e => e.LastAttemptAtUtc).HasColumnName("UltimaTentativaUtc");
+            entity.Property(e => e.SapDocEntry).HasColumnName("DocEntrySap");
+            entity.Property(e => e.SapResponseSummary).HasColumnName("RespostaSap").HasMaxLength(2000);
+            entity.Property(e => e.LastError).HasColumnName("UltimoErro").HasMaxLength(2000);
+            entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
+            entity.HasOne(e => e.SettlementFile)
+                .WithMany(f => f.Dispatches)
+                .HasForeignKey(e => e.SettlementFileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash }).IsUnique().HasDatabaseName("IX_BaixaSapDispatch_FileId_GroupKeyHash");
+            entity.HasIndex(e => e.Status).HasDatabaseName("IX_BaixaSapDispatch_Status");
+            entity.HasIndex(e => e.SettlementFileId).HasDatabaseName("IX_BaixaSapDispatch_Arquivo");
+        });
+
+        modelBuilder.Entity<CardBrandMapping>(entity =>
+        {
+            entity.ToTable("MapeamentoBandeiraCartao");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("Id");
+            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
+            entity.Property(e => e.BrandName).HasColumnName("Bandeira").HasMaxLength(40).IsRequired();
+            entity.Property(e => e.SapCreditCardCode).HasColumnName("CodigoCartaoSap").IsRequired();
+            entity.Property(e => e.PaymentMethodCode).HasColumnName("CodigoMeioPagamento").IsRequired();
+            entity.Property(e => e.CreditAccount).HasColumnName("ContaCartao").HasMaxLength(30);
+            entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
+            entity.HasIndex(e => new { e.CompanyDb, e.BrandName }).IsUnique();
+        });
     }
 
     /// <summary>
@@ -428,6 +548,15 @@ public sealed class AppDbContext : DbContext
                 case JournalEntryDispatch dispatch when entry.State == EntityState.Added:
                     if (dispatch.CreatedAtUtc == default) dispatch.CreatedAtUtc = nowUtc;
                     break;
+                case ReceivableSettlementFile settlement when entry.State is EntityState.Added or EntityState.Modified:
+                    settlement.UpdatedAtUtc = nowUtc;
+                    break;
+                case ReceivableSettlementLine settlementLine when entry.State is EntityState.Added or EntityState.Modified:
+                    settlementLine.UpdatedAtUtc = nowUtc;
+                    break;
+                case IncomingPaymentDispatch paymentDispatch when entry.State == EntityState.Added:
+                    if (paymentDispatch.CreatedAtUtc == default) paymentDispatch.CreatedAtUtc = nowUtc;
+                    break;
                 case SystemLog log when entry.State == EntityState.Added:
                     if (log.OccurredAt == default) log.OccurredAt = nowUtc;
                     break;
@@ -452,6 +581,16 @@ public sealed class AppDbContext : DbContext
             else if (entry.Entity is ImportFile file)
             {
                 file.OriginalFileName = Truncate(file.OriginalFileName, 200) ?? string.Empty;
+            }
+            else if (entry.Entity is ReceivableSettlementLine settlementLine)
+            {
+                settlementLine.ValidationMessage = Truncate(settlementLine.ValidationMessage, 400);
+                settlementLine.SapReturnMessage  = Truncate(settlementLine.SapReturnMessage, 400);
+                settlementLine.Reference         = Truncate(settlementLine.Reference, 120) ?? string.Empty;
+            }
+            else if (entry.Entity is ReceivableSettlementFile settlementFile)
+            {
+                settlementFile.OriginalFileName = Truncate(settlementFile.OriginalFileName, 200) ?? string.Empty;
             }
         }
     }
