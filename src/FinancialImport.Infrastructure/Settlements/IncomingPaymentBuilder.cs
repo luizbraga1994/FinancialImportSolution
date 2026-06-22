@@ -13,7 +13,7 @@ namespace FinancialImport.Infrastructure.Settlements;
 /// Mapping (confirmed from real SAP payloads):
 ///   Dinheiro      -> CashAccount/CashSum
 ///   Transferência -> TransferAccount/TransferSum/TransferDate
-///   CartaoC/D     -> PaymentCreditCards (requires a CardBrandMapping)
+///   CartaoC/D     -> PaymentCreditCards (card resolved from OCRC/OCRP via HANA)
 /// Discount goes into the invoice line (SumApplied = Valor - Desconto,
 /// TotalDiscount = Desconto). Interest (Juros) is not posted in this version.
 /// </summary>
@@ -21,7 +21,7 @@ public sealed class IncomingPaymentBuilder
 {
     public IncomingPaymentBuildResult Build(
         ReceivableSettlementLine line,
-        CardBrandMapping? cardMapping,
+        CardPaymentInfo? card,
         int? seriesOverride)
     {
         if (string.IsNullOrWhiteSpace(line.CardCode) || !line.InvoiceDocEntry.HasValue)
@@ -75,30 +75,30 @@ public sealed class IncomingPaymentBuilder
                 break;
 
             case PaymentMeans.Card:
-                if (cardMapping == null)
+                if (card == null)
                 {
                     return IncomingPaymentBuildResult.Failure(
-                        $"Bandeira '{line.CardBrand}' não mapeada para um cartão do SAP.");
+                        $"Bandeira '{line.CardBrand}' não encontrada no cadastro de cartões do SAP (OCRC).");
                 }
 
-                // For cards the receiving account comes from the brand mapping;
+                // For cards the receiving account comes from OCRC (AcctCode);
                 // ContaContabil is optional and only used as a fallback.
-                var creditAcct = !string.IsNullOrWhiteSpace(cardMapping.CreditAccount)
-                    ? cardMapping.CreditAccount
+                var creditAcct = !string.IsNullOrWhiteSpace(card.CreditAcct)
+                    ? card.CreditAcct
                     : line.ReceivingAccount;
                 if (string.IsNullOrWhiteSpace(creditAcct))
                 {
                     return IncomingPaymentBuildResult.Failure(
-                        $"Conta do cartão não definida para a bandeira '{line.CardBrand}': configure a conta no mapeamento da bandeira ou informe ContaContabil.");
+                        $"Conta do cartão não definida para a bandeira '{line.CardBrand}' (sem AcctCode na OCRC e sem ContaContabil).");
                 }
 
                 payload.PaymentCreditCards.Add(new SapPaymentCreditCard
                 {
-                    CreditCard = cardMapping.SapCreditCardCode,
+                    CreditCard = card.CreditCard,
                     CreditAcct = creditAcct,
                     CreditCardNumber = line.CardLastDigits,
                     VoucherNum = line.VoucherNum,
-                    PaymentMethodCode = cardMapping.PaymentMethodCode,
+                    PaymentMethodCode = card.PaymentMethodCode,
                     NumOfPayments = line.Installments > 0 ? line.Installments : 1,
                     FirstPaymentDue = line.PaymentDate,
                     CreditSum = net

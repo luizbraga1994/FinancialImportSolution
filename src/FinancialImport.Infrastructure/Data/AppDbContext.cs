@@ -31,7 +31,6 @@ public sealed class AppDbContext : DbContext
     public DbSet<ReceivableSettlementFile> ReceivableSettlementFiles => Set<ReceivableSettlementFile>();
     public DbSet<ReceivableSettlementLine> ReceivableSettlementLines => Set<ReceivableSettlementLine>();
     public DbSet<IncomingPaymentDispatch> IncomingPaymentDispatches => Set<IncomingPaymentDispatch>();
-    public DbSet<CardBrandMapping> CardBrandMappings => Set<CardBrandMapping>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -499,20 +498,6 @@ public sealed class AppDbContext : DbContext
             entity.HasIndex(e => new { e.SettlementFileId, e.GroupKeyHash }).IsUnique().HasDatabaseName("IX_BaixaSapDispatch_FileId_GroupKeyHash");
             entity.HasIndex(e => e.Status).HasDatabaseName("IX_BaixaSapDispatch_Status");
             entity.HasIndex(e => e.SettlementFileId).HasDatabaseName("IX_BaixaSapDispatch_Arquivo");
-        });
-
-        modelBuilder.Entity<CardBrandMapping>(entity =>
-        {
-            entity.ToTable("MapeamentoBandeiraCartao");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("Id");
-            entity.Property(e => e.CompanyDb).HasColumnName("CompanyDb").HasMaxLength(50).IsRequired();
-            entity.Property(e => e.BrandName).HasColumnName("Bandeira").HasMaxLength(40).IsRequired();
-            entity.Property(e => e.SapCreditCardCode).HasColumnName("CodigoCartaoSap").IsRequired();
-            entity.Property(e => e.PaymentMethodCode).HasColumnName("CodigoMeioPagamento").IsRequired();
-            entity.Property(e => e.CreditAccount).HasColumnName("ContaCartao").HasMaxLength(30);
-            entity.Property(e => e.IsActive).HasColumnName("Ativo").IsRequired();
-            entity.HasIndex(e => new { e.CompanyDb, e.BrandName }).IsUnique();
         });
     }
 

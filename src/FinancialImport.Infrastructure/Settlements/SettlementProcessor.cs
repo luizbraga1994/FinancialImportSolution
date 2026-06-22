@@ -27,6 +27,7 @@ public sealed class SettlementProcessor : ISettlementProcessor
     private readonly ISapSessionStore _sapSessionStore;
     private readonly ISapCompanySessionService _sapSessionService;
     private readonly ISapIncomingPaymentService _sapService;
+    private readonly ISapCardCatalogService _cardCatalog;
     private readonly IncomingPaymentBuilder _builder;
     private readonly IUserContext _userContext;
     private readonly ISystemSettingsService _settings;
@@ -39,6 +40,7 @@ public sealed class SettlementProcessor : ISettlementProcessor
         ISapSessionStore sapSessionStore,
         ISapCompanySessionService sapSessionService,
         ISapIncomingPaymentService sapService,
+        ISapCardCatalogService cardCatalog,
         IncomingPaymentBuilder builder,
         IUserContext userContext,
         ISystemSettingsService settings,
@@ -50,6 +52,7 @@ public sealed class SettlementProcessor : ISettlementProcessor
         _sapSessionStore = sapSessionStore;
         _sapSessionService = sapSessionService;
         _sapService = sapService;
+        _cardCatalog = cardCatalog;
         _builder = builder;
         _userContext = userContext;
         _settings = settings;
@@ -77,9 +80,19 @@ public sealed class SettlementProcessor : ISettlementProcessor
             .OrderBy(l => l.Id)
             .ToList();
 
-        var cardMappings = await _dbContext.CardBrandMappings
-            .Where(m => m.CompanyDb == file.CompanyDb && m.IsActive)
-            .ToListAsync(cancellationToken);
+        // Card brand catalog (OCRC + OCRP) resolved once from HANA. Best-effort:
+        // a HANA failure leaves the catalog empty, so only card lines are affected
+        // (cash/transfer keep working).
+        SapCardCatalog cardCatalog;
+        try
+        {
+            cardCatalog = await _cardCatalog.GetCardCatalogAsync(file.CompanyDb, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Falha ao carregar catálogo de cartões (OCRC/OCRP) para {CompanyDb}.", file.CompanyDb);
+            cardCatalog = new SapCardCatalog();
+        }
 
         int? series = int.TryParse(_settings.Get("Settlement:IncomingPaymentSeries"), out var s) ? s : null;
 
@@ -183,12 +196,10 @@ public sealed class SettlementProcessor : ISettlementProcessor
                 continue;
             }
 
-            // Build the payload (resolve the card mapping for card means).
-            var cardMapping = !string.IsNullOrWhiteSpace(line.CardBrand)
-                ? cardMappings.FirstOrDefault(m => m.BrandName.Equals(line.CardBrand, StringComparison.OrdinalIgnoreCase))
-                : null;
+            // Build the payload (resolve the card brand from the OCRC/OCRP catalog).
+            var card = cardCatalog.Resolve(line.CardBrand, line.Installments);
 
-            var build = _builder.Build(line, cardMapping, series);
+            var build = _builder.Build(line, card, series);
             if (!build.IsValid)
             {
                 dispatch.Status = IncomingPaymentDispatchStatus.Failed;

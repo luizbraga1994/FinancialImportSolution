@@ -1,3 +1,4 @@
+using FinancialImport.Application.Models;
 using FinancialImport.Application.Settlements;
 using FinancialImport.Application.Validators;
 using FinancialImport.Domain.Entities;
@@ -102,7 +103,7 @@ public class IncomingPaymentBuilderTests
     }
 
     [Fact]
-    public void Card_payment_without_mapping_fails()
+    public void Card_payment_without_catalog_match_fails()
     {
         var line = ResolvedLine("CartaoC", 360.48m);
         line.CardBrand = "ELOCREDITO";
@@ -110,11 +111,11 @@ public class IncomingPaymentBuilderTests
         var result = new IncomingPaymentBuilder().Build(line, null, 15);
 
         result.IsValid.Should().BeFalse();
-        result.Error.Should().Contain("não mapeada");
+        result.Error.Should().Contain("OCRC");
     }
 
     [Fact]
-    public void Card_payment_with_mapping_builds_credit_card_section()
+    public void Card_payment_with_catalog_builds_credit_card_section()
     {
         var line = ResolvedLine("CartaoC", 360.48m);
         line.CardBrand = "ELOCREDITO";
@@ -122,46 +123,33 @@ public class IncomingPaymentBuilderTests
         line.Installments = 5;
         line.VoucherNum = "69226610914";
 
-        var mapping = new CardBrandMapping
-        {
-            BrandName = "ELOCREDITO",
-            SapCreditCardCode = 3,
-            PaymentMethodCode = 2,
-            CreditAccount = "112020010003",
-            IsActive = true
-        };
+        var card = new CardPaymentInfo { CreditCard = 3, CreditAcct = "112020010003", PaymentMethodCode = 2 };
 
-        var result = new IncomingPaymentBuilder().Build(line, mapping, 15);
+        var result = new IncomingPaymentBuilder().Build(line, card, 15);
 
         result.IsValid.Should().BeTrue();
         result.Payload!.PaymentCreditCards.Should().ContainSingle();
-        var card = result.Payload.PaymentCreditCards[0];
-        card.CreditCard.Should().Be(3);
-        card.CreditAcct.Should().Be("112020010003");
-        card.CreditCardNumber.Should().Be("1234");
-        card.NumOfPayments.Should().Be(5);
-        card.VoucherNum.Should().Be("69226610914");
-        card.CreditSum.Should().Be(360.48m);
+        var cc = result.Payload.PaymentCreditCards[0];
+        cc.CreditCard.Should().Be(3);
+        cc.CreditAcct.Should().Be("112020010003");
+        cc.CreditCardNumber.Should().Be("1234");
+        cc.PaymentMethodCode.Should().Be(2);
+        cc.NumOfPayments.Should().Be(5);
+        cc.VoucherNum.Should().Be("69226610914");
+        cc.CreditSum.Should().Be(360.48m);
     }
 
     [Fact]
-    public void Card_payment_uses_mapping_account_when_conta_contabil_is_blank()
+    public void Card_payment_uses_catalog_account_when_conta_contabil_is_blank()
     {
-        // ContaContabil is optional for cards: the account comes from the brand mapping.
+        // ContaContabil is optional for cards: the account comes from OCRC (AcctCode).
         var line = ResolvedLine("CartaoD", 458.68m);
         line.ReceivingAccount = string.Empty;
         line.CardBrand = "ELODEBITO";
 
-        var mapping = new CardBrandMapping
-        {
-            BrandName = "ELODEBITO",
-            SapCreditCardCode = 6,
-            PaymentMethodCode = 1,
-            CreditAccount = "112020010003",
-            IsActive = true
-        };
+        var card = new CardPaymentInfo { CreditCard = 6, CreditAcct = "112020010003", PaymentMethodCode = 1 };
 
-        var result = new IncomingPaymentBuilder().Build(line, mapping, 15);
+        var result = new IncomingPaymentBuilder().Build(line, card, 15);
 
         result.IsValid.Should().BeTrue();
         result.Payload!.PaymentCreditCards[0].CreditAcct.Should().Be("112020010003");
@@ -174,19 +162,52 @@ public class IncomingPaymentBuilderTests
         line.ReceivingAccount = string.Empty;
         line.CardBrand = "ELOCREDITO";
 
-        var mapping = new CardBrandMapping
-        {
-            BrandName = "ELOCREDITO",
-            SapCreditCardCode = 3,
-            PaymentMethodCode = 2,
-            CreditAccount = null,
-            IsActive = true
-        };
+        var card = new CardPaymentInfo { CreditCard = 3, CreditAcct = null, PaymentMethodCode = 2 };
 
-        var result = new IncomingPaymentBuilder().Build(line, mapping, 15);
+        var result = new IncomingPaymentBuilder().Build(line, card, 15);
 
         result.IsValid.Should().BeFalse();
         result.Error.Should().Contain("Conta do cartão");
+    }
+}
+
+public class SapCardCatalogTests
+{
+    private static SapCardCatalog Catalog() => new()
+    {
+        Brands = new Dictionary<string, CardBrandInfo>
+        {
+            ["ELOCREDITO"] = new() { CreditCard = 3, AcctCode = "112020010003" },
+            ["ELODEBITO"] = new() { CreditCard = 6, AcctCode = "112020010003" }
+        },
+        SinglePaymentMethodCode = 1,
+        InstallmentMethodCode = 2
+    };
+
+    [Fact]
+    public void Resolve_uses_installment_method_when_more_than_one_parcel()
+    {
+        var info = Catalog().Resolve("ELOCREDITO", installments: 5);
+
+        info.Should().NotBeNull();
+        info!.CreditCard.Should().Be(3);
+        info.CreditAcct.Should().Be("112020010003");
+        info.PaymentMethodCode.Should().Be(2);
+    }
+
+    [Fact]
+    public void Resolve_uses_single_method_for_one_or_zero_parcels()
+    {
+        Catalog().Resolve("ELODEBITO", installments: 1)!.PaymentMethodCode.Should().Be(1);
+        Catalog().Resolve("ELODEBITO", installments: 0)!.PaymentMethodCode.Should().Be(1);
+    }
+
+    [Fact]
+    public void Resolve_is_case_insensitive_and_returns_null_for_unknown_brand()
+    {
+        Catalog().Resolve("elocredito", 2).Should().NotBeNull();
+        Catalog().Resolve("AMEX", 1).Should().BeNull();
+        Catalog().Resolve(null, 1).Should().BeNull();
     }
 }
 
