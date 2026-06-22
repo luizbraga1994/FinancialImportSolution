@@ -24,11 +24,23 @@ public sealed class HanaOptions
     /// </summary>
     public string BuildConnectionString()
     {
+        return BuildConnectionString(null);
+    }
+
+    /// <summary>
+    /// Monta a connection string para o SAP HANA, opcionalmente apontando o
+    /// schema atual (CS) para o banco da empresa informado. Útil para consultar
+    /// objetos (OINV, CRD7, ONFM) no contexto da empresa selecionada.
+    /// </summary>
+    public string BuildConnectionString(string? schemaOverride)
+    {
         var serverAddr = !string.IsNullOrWhiteSpace(Port) && !Server.Contains(':')
             ? $"{Server}:{Port}"
             : Server;
 
-        return $"Server={serverAddr};UserID={UserID};Password={Password};CS={Database}" +
+        var schema = string.IsNullOrWhiteSpace(schemaOverride) ? Database : schemaOverride;
+
+        return $"Server={serverAddr};UserID={UserID};Password={Password};CS={schema}" +
                $";Pooling=true;MaxPoolSize={MaxPoolSize};MinPoolSize={MinPoolSize}" +
                $";Connection Timeout={ConnectionTimeout};CommandTimeout={CommandTimeout}";
     }

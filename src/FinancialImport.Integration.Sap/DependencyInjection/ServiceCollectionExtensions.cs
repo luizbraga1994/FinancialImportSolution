@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<ISapCompanySessionService, SapCompanySessionService>();
         services.AddScoped<ISapJournalEntryService, SapJournalEntryService>();
+        services.AddScoped<ISapIncomingPaymentService, SapIncomingPaymentService>();
         services.AddSingleton<ISapChartOfAccountsService, SapChartOfAccountsService>();
         services.AddSingleton<ISapBusinessPartnerService, SapBusinessPartnerService>();
 

@@ -12,6 +12,7 @@ public static class ServiceCollectionExtensions
     {
         services.Configure<HanaOptions>(configuration.GetSection("HanaDbConnection"));
         services.AddScoped<ISapCompanyDiscoveryService, SapCompanyDiscoveryService>();
+        services.AddScoped<ISapOpenInvoiceService, SapOpenInvoiceService>();
         return services;
     }
 }
