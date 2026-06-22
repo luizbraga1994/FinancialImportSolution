@@ -1,6 +1,8 @@
 using FinancialImport.Application.Imports;
 using FinancialImport.Application.Layouts;
 using FinancialImport.Application.Layouts.Parsers;
+using FinancialImport.Application.Settlements;
+using FinancialImport.Application.Settlements.Parsers;
 using FinancialImport.Application.Validators;
 using FinancialImport.Shared.Correlation;
 using FluentValidation;
@@ -26,8 +28,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILayoutImportParser, Layout2Parser>();
         services.AddScoped<IImportLayoutResolver, ImportLayoutResolver>();
 
+        // --- Settlement (Baixa de Notas de Saída) parser ---
+        services.AddScoped<ISettlementParser, SettlementSpreadsheetParser>();
+
         // --- Validation ---
         services.AddScoped<IValidator<LancamentoContabilImportado>, LancamentoContabilImportadoValidator>();
+        services.AddScoped<IValidator<SettlementLancamento>, SettlementLancamentoValidator>();
 
         return services;
     }

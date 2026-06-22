@@ -32,6 +32,9 @@ public sealed class OpenInvoiceMatch
     public string? SeriesStr { get; set; }
     public int Model { get; set; }
 
+    /// <summary>Branch (OINV.BPLId) used as BPLID on the Incoming Payment.</summary>
+    public int? BplId { get; set; }
+
     /// <summary>OINV.Serial || OINV.DocNum — used as the card VoucherNum.</summary>
     public string VoucherNum { get; set; } = string.Empty;
 }

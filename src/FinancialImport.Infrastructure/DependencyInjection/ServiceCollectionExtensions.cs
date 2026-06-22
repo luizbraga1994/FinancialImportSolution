@@ -7,6 +7,7 @@ using FinancialImport.Application.Outbox;
 using FinancialImport.Application.Sap;
 using FinancialImport.Application.Security;
 using FinancialImport.Application.Settings;
+using FinancialImport.Application.Settlements;
 using FinancialImport.Infrastructure.Data;
 using FinancialImport.Infrastructure.Hashing;
 using FinancialImport.Infrastructure.Imports;
@@ -19,6 +20,7 @@ using FinancialImport.Infrastructure.Observability;
 using FinancialImport.Infrastructure.Sap;
 using FinancialImport.Infrastructure.Security;
 using FinancialImport.Infrastructure.Settings;
+using FinancialImport.Infrastructure.Settlements;
 using FinancialImport.Infrastructure.Workers;
 using FinancialImport.Integration.Sap.Options;
 using FinancialImport.Shared.Abstractions;
@@ -90,6 +92,12 @@ public static class ServiceCollectionExtensions
         services.AddScoped<JournalEntryBuilder>();
         services.AddScoped<IImportProcessor, ImportProcessor>();
         services.AddScoped<IImportService, ImportService>();
+
+        // --- Settlement (Baixa de Notas de Saída) pipeline ---
+        services.AddScoped<ISettlementRepository, SettlementRepository>();
+        services.AddScoped<IncomingPaymentBuilder>();
+        services.AddScoped<ISettlementProcessor, SettlementProcessor>();
+        services.AddScoped<ISettlementService, SettlementService>();
 
         services.AddSingleton<JwtTokenService>();
         services.AddScoped<DatabaseSeeder>();

@@ -20,7 +20,7 @@ public sealed class SapOpenInvoiceService : ISapOpenInvoiceService
     // model name (ONFM.NfmName), normalising dashes/casing on the model.
     private const string Sql = @"
         SELECT T0.""DocEntry"", T0.""CardCode"", T0.""Serial"", T0.""SeriesStr"", T0.""Model"",
-               T0.""Serial"" || T0.""DocNum"" AS ""VoucherNum""
+               T0.""BPLId"", T0.""Serial"" || T0.""DocNum"" AS ""VoucherNum""
         FROM OINV T0
         INNER JOIN CRD7 T1 ON T1.""CardCode"" = T0.""CardCode"" AND COALESCE(T1.""TaxId4"", T1.""TaxId0"", '') <> ''
         INNER JOIN ONFM T2 ON T0.""Model"" = T2.""AbsEntry""
@@ -74,7 +74,8 @@ public sealed class SapOpenInvoiceService : ISapOpenInvoiceService
                 Serial = reader.IsDBNull(2) ? string.Empty : Convert.ToString(reader.GetValue(2)) ?? string.Empty,
                 SeriesStr = reader.IsDBNull(3) ? null : reader.GetString(3),
                 Model = reader.IsDBNull(4) ? 0 : Convert.ToInt32(reader.GetValue(4)),
-                VoucherNum = reader.IsDBNull(5) ? string.Empty : Convert.ToString(reader.GetValue(5)) ?? string.Empty
+                BplId = reader.IsDBNull(5) ? null : Convert.ToInt32(reader.GetValue(5)),
+                VoucherNum = reader.IsDBNull(6) ? string.Empty : Convert.ToString(reader.GetValue(6)) ?? string.Empty
             });
         }
 
