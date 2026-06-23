@@ -16,6 +16,9 @@ public sealed class SettlementLancamentoValidator : AbstractValidator<Settlement
         RuleFor(x => x.Modelo)
             .NotEmpty().WithMessage("Modelo da nota e obrigatorio.");
 
+        RuleFor(x => x.DataDocumento)
+            .NotEqual(DateTime.MinValue).WithMessage("Data do documento e obrigatoria.");
+
         RuleFor(x => x.FormaPagamento)
             .NotEmpty().WithMessage("Forma de pagamento e obrigatoria.");
 

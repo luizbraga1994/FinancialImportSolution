@@ -18,6 +18,9 @@ public sealed class OpenInvoiceQuery
 
     /// <summary>Fiscal model name ("Modelo", e.g. NFS-e) — matched against ONFM.NfmName.</summary>
     public string Model { get; set; } = string.Empty;
+
+    /// <summary>Document date ("DataDocumento") — matched against OINV.TaxDate (optional).</summary>
+    public DateTime? DocumentDate { get; set; }
 }
 
 /// <summary>

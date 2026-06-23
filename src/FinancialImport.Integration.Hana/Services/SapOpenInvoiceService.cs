@@ -29,6 +29,11 @@ public sealed class SapOpenInvoiceService : ISapOpenInvoiceService
           AND IFNULL(T0.""SeriesStr"", '') = ?
           AND Lower(Replace(T2.""NfmName"", '-', '')) = Lower(Replace(?, '-', ''))";
 
+    // Optional extra filter on the document date (OINV.TaxDate). Appended only
+    // when the settlement line provides DataDocumento.
+    private const string TaxDateClause = @"
+          AND TO_VARCHAR(T0.""TaxDate"", 'YYYYMMDD') = ?";
+
     private readonly HanaOptions _options;
     private readonly ILogger<SapOpenInvoiceService> _logger;
 
@@ -55,14 +60,18 @@ public sealed class SapOpenInvoiceService : ISapOpenInvoiceService
         connection.ConnectionString = connectionString;
         await connection.OpenAsync(cancellationToken);
 
+        var hasDocumentDate = query.DocumentDate.HasValue && query.DocumentDate.Value != DateTime.MinValue;
+
         await using var command = connection.CreateCommand();
-        command.CommandText = Sql;
+        command.CommandText = hasDocumentDate ? Sql + TaxDateClause : Sql;
         command.CommandTimeout = _options.CommandTimeout;
 
         AddParameter(command, query.CustomerDoc?.Trim() ?? string.Empty);
         AddParameter(command, query.Serial?.Trim() ?? string.Empty);
         AddParameter(command, query.Series?.Trim() ?? string.Empty);
         AddParameter(command, query.Model?.Trim() ?? string.Empty);
+        if (hasDocumentDate)
+            AddParameter(command, query.DocumentDate!.Value.ToString("yyyyMMdd"));
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))

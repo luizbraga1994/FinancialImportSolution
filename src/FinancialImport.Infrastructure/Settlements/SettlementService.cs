@@ -147,6 +147,7 @@ public sealed class SettlementService : ISettlementService
                 InvoiceSeries = source.Serie,
                 BranchTaxId = source.CnpjFilial,
                 InvoiceModel = source.Modelo,
+                DocumentDate = source.DataDocumento != DateTime.MinValue ? source.DataDocumento : DateTime.Today,
                 PaymentMeans = source.FormaPagamento,
                 ReceivingAccount = source.ContaContabil,
                 Amount = source.Valor,
@@ -298,7 +299,8 @@ public sealed class SettlementService : ISettlementService
                 CustomerDoc = source.DocPN,
                 Serial = source.NumeroNota,
                 Series = source.Serie,
-                Model = source.Modelo
+                Model = source.Modelo,
+                DocumentDate = source.DataDocumento != DateTime.MinValue ? source.DataDocumento : null
             }, cancellationToken);
 
             if (match == null)

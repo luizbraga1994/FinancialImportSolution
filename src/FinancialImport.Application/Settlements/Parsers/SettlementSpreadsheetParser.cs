@@ -16,6 +16,7 @@ public sealed class SettlementSpreadsheetParser : ISettlementParser
     private static readonly string[] SerieAliases = { "Serie", "Série", "Series", "SeriesStr" };
     private static readonly string[] CnpjAliases = { "CNPJ", "CNPJ Filial", "CnpjFilial", "VATRegNum" };
     private static readonly string[] ModeloAliases = { "Modelo", "Model", "Modelo Nota", "ModeloNota" };
+    private static readonly string[] DataDocAliases = { "DataDocumento", "Data Documento", "DocumentDate", "Data Doc", "DtDocumento" };
     private static readonly string[] FormaAliases = { "FormaDePagamento", "Forma de Pagamento", "FormaPagamento", "Forma", "PaymentMeans" };
     private static readonly string[] ContaAliases = { "ContaContabil", "Conta Contabil", "Conta Contábil", "Conta", "AccountCode" };
     private static readonly string[] ValorAliases = { "Valor", "Value", "Amount", "ValorPago" };
@@ -44,6 +45,7 @@ public sealed class SettlementSpreadsheetParser : ISettlementParser
         var serieCol = FindColumn(context.Headers, SerieAliases);
         var cnpjCol = FindColumn(context.Headers, CnpjAliases);
         var modeloCol = FindColumn(context.Headers, ModeloAliases);
+        var dataDocCol = FindColumn(context.Headers, DataDocAliases);
         var formaCol = FindColumn(context.Headers, FormaAliases);
         var contaCol = FindColumn(context.Headers, ContaAliases);
         var valorCol = FindColumn(context.Headers, ValorAliases);
@@ -78,6 +80,7 @@ public sealed class SettlementSpreadsheetParser : ISettlementParser
                 Serie = serieCol != null ? row.Get(serieCol) : null,
                 CnpjFilial = cnpjCol != null ? row.Get(cnpjCol) : null,
                 Modelo = modeloCol != null ? row.GetRequired(modeloCol) : string.Empty,
+                DataDocumento = dataDocCol != null ? row.GetDate(dataDocCol) : DateTime.MinValue,
                 FormaPagamento = formaCol != null ? row.GetRequired(formaCol) : string.Empty,
                 ContaContabil = contaCol != null ? row.GetRequired(contaCol) : string.Empty,
                 Valor = valorCol != null ? row.GetDecimal(valorCol) : 0m,

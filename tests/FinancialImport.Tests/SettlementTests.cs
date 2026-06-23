@@ -16,6 +16,7 @@ public class SettlementKeyBuilderTests
         NumeroNota = "692261",
         Serie = null,
         Modelo = "NFS-e",
+        DataDocumento = new DateTime(2026, 6, 19),
         FormaPagamento = forma,
         ContaContabil = conta,
         Valor = valor,
@@ -218,6 +219,7 @@ public class SettlementLancamentoValidatorTests
         DocPN = "100.692.536-84",
         NumeroNota = "692261",
         Modelo = "NFS-e",
+        DataDocumento = new DateTime(2026, 6, 19),
         Valor = 110m,
         DataPagamento = new DateTime(2026, 6, 22)
     };

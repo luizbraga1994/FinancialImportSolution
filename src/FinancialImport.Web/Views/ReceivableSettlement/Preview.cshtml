@@ -76,6 +76,7 @@
                         <th>Nº Nota</th>
                         <th>Série</th>
                         <th>Modelo</th>
+                        <th>Dt. Documento</th>
                         <th>Forma</th>
                         <th class="text-end">Valor</th>
                         <th class="text-end">Desconto</th>
@@ -94,6 +95,7 @@
                             <td>@l.InvoiceSerial</td>
                             <td>@l.InvoiceSeries</td>
                             <td>@l.InvoiceModel</td>
+                            <td>@l.DocumentDate.ToString("dd/MM/yyyy")</td>
                             <td>@l.PaymentMeans</td>
                             <td class="text-end">@l.Amount.ToString("N2")</td>
                             <td class="text-end">@l.Discount.ToString("N2")</td>

@@ -14,6 +14,9 @@ public sealed class SettlementLancamento
     public string? CnpjFilial { get; set; }
     public string Modelo { get; set; } = string.Empty;
 
+    /// <summary>Data do documento ("DataDocumento") — casada com OINV.TaxDate.</summary>
+    public DateTime DataDocumento { get; set; }
+
     // Payment data
     public string FormaPagamento { get; set; } = string.Empty;
     public string ContaContabil { get; set; } = string.Empty;

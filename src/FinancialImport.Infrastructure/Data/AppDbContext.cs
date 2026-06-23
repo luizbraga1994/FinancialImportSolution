@@ -438,6 +438,7 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.InvoiceSeries).HasColumnName("Serie").HasMaxLength(40);
             entity.Property(e => e.BranchTaxId).HasColumnName("CnpjFilial").HasMaxLength(20);
             entity.Property(e => e.InvoiceModel).HasColumnName("Modelo").HasMaxLength(40).IsRequired();
+            entity.Property(e => e.DocumentDate).HasColumnName("DataDocumento").IsRequired();
             entity.Property(e => e.PaymentMeans).HasColumnName("FormaPagamento").HasMaxLength(30).IsRequired();
             entity.Property(e => e.ReceivingAccount).HasColumnName("ContaContabil").HasMaxLength(30).IsRequired();
             entity.Property(e => e.Amount).HasColumnName("Valor").HasColumnType("decimal(18,2)").IsRequired();

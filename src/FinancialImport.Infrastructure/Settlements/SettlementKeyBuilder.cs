@@ -27,6 +27,7 @@ public static class SettlementKeyBuilder
         Append(sb, Normalize(line.NumeroNota));
         Append(sb, Normalize(line.Serie));
         Append(sb, Normalize(line.Modelo));
+        Append(sb, line.DataDocumento.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         Append(sb, Normalize(line.FormaPagamento));
         Append(sb, Normalize(line.ContaContabil));
         Append(sb, line.Valor.ToString("0.00", CultureInfo.InvariantCulture));

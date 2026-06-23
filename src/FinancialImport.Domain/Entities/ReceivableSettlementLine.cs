@@ -38,6 +38,9 @@ public sealed class ReceivableSettlementLine
     /// <summary>Fiscal model name ("Modelo" -> ONFM.NfmName, e.g. NFS-e).</summary>
     public string InvoiceModel { get; set; } = string.Empty;
 
+    /// <summary>Document date ("DataDocumento") matched against OINV.TaxDate.</summary>
+    public DateTime DocumentDate { get; set; }
+
     // ===== Payment data (from the spreadsheet) =====
 
     /// <summary>Payment means: Dinheiro, Transferência, CartaoC, CartaoD.</summary>
