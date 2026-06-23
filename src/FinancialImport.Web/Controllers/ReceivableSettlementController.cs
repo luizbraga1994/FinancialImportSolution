@@ -4,6 +4,7 @@ using FinancialImport.Application.Settlements;
 using FinancialImport.Domain.Entities;
 using FinancialImport.Domain.Enums;
 using FinancialImport.Infrastructure.Data;
+using FinancialImport.Infrastructure.Settlements;
 using FinancialImport.Shared.Imports;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -61,6 +62,19 @@ public class ReceivableSettlementController : Controller
             TempData["Error"] = "Nenhuma empresa selecionada. Selecione uma empresa antes de baixar notas.";
         }
         return View();
+    }
+
+    public IActionResult Instructions()
+    {
+        return View();
+    }
+
+    [HttpGet]
+    public IActionResult DownloadTemplate()
+    {
+        var bytes = SettlementTemplateBuilder.Build();
+        const string contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        return File(bytes, contentType, "modelo-baixa-notas-saida.xlsx");
     }
 
     [HttpPost]

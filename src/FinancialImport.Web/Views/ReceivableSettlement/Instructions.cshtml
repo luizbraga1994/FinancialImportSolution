@@ -1,0 +1,85 @@
+@{
+    ViewData["Title"] = "Instruções da Baixa de Notas de Saída";
+}
+
+<div class="mb-4 d-flex justify-content-between align-items-start">
+    <div>
+        <a asp-action="Index" class="btn btn-light btn-sm mb-3">
+            <i class="bi bi-arrow-left me-1"></i> Voltar
+        </a>
+        <h5 class="fw-bold mb-1">Instruções da Baixa de Notas de Saída</h5>
+        <p class="text-muted mb-0" style="font-size: 0.85rem;">
+            Guia para liquidar notas de saída no SAP Business One via Incoming Payment
+        </p>
+    </div>
+    <a asp-action="DownloadTemplate" class="btn btn-outline-primary btn-sm" data-loading data-download data-loading-message="Baixando modelo...">
+        <i class="bi bi-file-earmark-excel me-1"></i> Baixar modelo
+    </a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-house me-2"></i>Visão geral</h6>
+        <p class="mb-0 small text-muted">
+            Importe a planilha de recebimentos. Para cada linha, o sistema localiza a fatura em aberto no SAP
+            (por <strong>DocPN + Nº Nota + Série + Modelo + DataDocumento</strong>) e, ao confirmar, cria um
+            <strong>Incoming Payment</strong> que liquida a nota. Uma mesma nota pode ter vários pagamentos
+            (parciais ou em formas diferentes) — cada linha vira um pagamento.
+        </p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-table me-2"></i>Colunas</h6>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead class="table-light">
+                    <tr><th>Coluna</th><th>Descrição</th><th>Uso</th></tr>
+                </thead>
+                <tbody class="small">
+                    <tr><td>DocPN</td><td>Documento do cliente (CPF/CNPJ) — localiza a fatura.</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>Nº Nota</td><td>Número da nota fiscal (OINV.Serial).</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>Serie</td><td>Série da nota. Pode ficar em branco.</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                    <tr><td>DataDocumento</td><td>Data do documento da nota (OINV.TaxDate), dd/MM/yyyy.</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>CNPJ</td><td>CNPJ da filial emissora.</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                    <tr><td>Modelo</td><td>Modelo fiscal (ex.: NFS-e).</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>FormaDePagamento</td><td>Dinheiro, Transferência, CartaoC ou CartaoD.</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>ContaContabil</td><td>Conta de recebimento. <strong>Opcional para cartão</strong> (vem da OCRC).</td><td><span class="badge bg-warning text-dark">Condicional</span></td></tr>
+                    <tr><td>Valor</td><td>Valor bruto da nota a baixar.</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>Desconto</td><td>Recebido = Valor − Desconto; desconto registrado na fatura.</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                    <tr><td>Juros</td><td>Juros recebidos (não lançado nesta versão).</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                    <tr><td>DataPagamento</td><td>Data do recebimento, dd/MM/yyyy.</td><td><span class="badge bg-danger">Obrigatório</span></td></tr>
+                    <tr><td>QtdParcelas</td><td>Parcelas (cartão). &gt; 1 = parcelado.</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                    <tr><td>Bandeira</td><td>Bandeira do cartão (ex.: ELOCREDITO) — deve existir na OCRC.</td><td><span class="badge bg-warning text-dark">Condicional</span></td></tr>
+                    <tr><td>Ultimo4 DigitosCartao</td><td>Últimos 4 dígitos do cartão.</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                    <tr><td>Ref</td><td>Referência do recebimento (campo U_ReferenciaPgto).</td><td><span class="badge bg-secondary">Opcional</span></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-credit-card me-2"></i>Formas de pagamento</h6>
+        <ul class="small mb-0">
+            <li><strong>Dinheiro</strong> → recebido na <em>ContaContabil</em> informada (CashAccount).</li>
+            <li><strong>Transferência</strong> → recebido na <em>ContaContabil</em> informada (TransferAccount).</li>
+            <li><strong>CartaoC / CartaoD</strong> → a conta e o código do cartão vêm do cadastro do SAP (OCRC),
+                casando pela <em>Bandeira</em>; o método (à vista/parcelado) vem da OCRP conforme <em>QtdParcelas</em>.
+                A <em>ContaContabil</em> não é necessária para cartão.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-arrow-repeat me-2"></i>Reprocessamento e duplicidade</h6>
+        <p class="small mb-0 text-muted">
+            Ao reprocessar/reenviar, se a baixa já existir no SAP e <strong>não estiver cancelada</strong>, a linha é
+            ignorada (informada como já existente). Se o pagamento foi <strong>cancelado</strong> no SAP, a baixa é
+            <strong>relançada</strong> automaticamente.
+        </p>
+    </div>
+</div>
