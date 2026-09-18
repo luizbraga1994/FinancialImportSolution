@@ -13,12 +13,13 @@ public sealed class LancamentoContabilImportadoValidator : AbstractValidator<Lan
         RuleFor(x => x.ContaContabil)
             .NotEmpty().WithMessage("Conta contabil e obrigatoria.");
 
-        RuleFor(x => x.ContaContrapartida)
-            .NotEmpty().WithMessage("Conta contrapartida e obrigatoria.");
-
+        // Contrapartida is OPTIONAL: the single-account layout (SAP "Lançamento
+        // Contábil Manual" style) has one account per line and no counterpart.
+        // When a counterpart IS provided (two-account layout), it must differ
+        // from the main account.
         RuleFor(x => x.ContaContabil)
             .NotEqual(x => x.ContaContrapartida)
-            .When(x => !string.IsNullOrWhiteSpace(x.ContaContabil))
+            .When(x => !string.IsNullOrWhiteSpace(x.ContaContrapartida))
             .WithMessage("Conta contabil e contrapartida nao podem ser iguais.");
 
         RuleFor(x => x.Valor)

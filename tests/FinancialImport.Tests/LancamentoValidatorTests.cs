@@ -47,6 +47,26 @@ public class LancamentoValidatorTests
     }
 
     [Fact]
+    public void Accepts_single_account_line_without_contrapartida()
+    {
+        // Single-account layout (SAP "Lançamento Contábil Manual"): no counterpart.
+        var result = _validator.Validate(new LancamentoContabilImportado
+        {
+            Referencia = "EDITORA - HOTMART",
+            ContaContabil = "111030040005",
+            ContaContrapartida = "",
+            DataLancamento = new DateTime(2026, 7, 16),
+            DataVencimento = new DateTime(2026, 7, 16),
+            DataDocumento = new DateTime(2026, 7, 16),
+            Valor = 10m,
+            ValorCredito = 10m,
+            HistoricoLinha = "Tarifa Hotmart"
+        });
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Fact]
     public void Rejects_missing_historico()
     {
         var result = _validator.Validate(new LancamentoContabilImportado
