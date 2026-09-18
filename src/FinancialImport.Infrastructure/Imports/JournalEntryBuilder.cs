@@ -73,6 +73,31 @@ public sealed class JournalEntryBuilder
             var creditAmount = line.CreditAmount ?? 0m;
             var memo = Truncate(line.LineMemo, _options.LineMemoMaxLength);
 
+            // Single-account line (SAP "Lançamento Contábil Manual" style): when the
+            // row has no counterpart account, it maps DIRECTLY to ONE SAP journal
+            // line on its own account, with the Debit/Credit exactly as provided.
+            // The journal balances by the sum of all rows in the group. This keeps
+            // the two-account layouts (contra populated) working unchanged.
+            if (string.IsNullOrWhiteSpace(line.ContraAccountCode))
+            {
+                var d = debitAmount;
+                var c = creditAmount;
+                if (d == 0m && c == 0m && line.Amount > 0m)
+                    d = line.Amount;
+
+                var singleLine = new SapJournalEntryLine
+                {
+                    Debit = d,
+                    Credit = c,
+                    LineMemo = memo,
+                    BPLID = bplId,
+                    CostingCode = line.CostingCode
+                };
+                ApplyCode(singleLine, line.AccountCode, accountCodes);
+                (d > 0m ? debitLines : creditLines).Add(singleLine);
+                continue;
+            }
+
             if (alreadyBalanced)
             {
                 // Pre-balanced detailed input. Column names map DIRECTLY

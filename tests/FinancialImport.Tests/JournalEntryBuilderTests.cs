@@ -148,6 +148,34 @@ public class JournalEntryBuilderTests
             l.LineMemo.Length.Should().BeLessThanOrEqualTo(15));
     }
 
+    [Fact]
+    public void Build_single_account_lines_map_one_to_one_without_contra()
+    {
+        // SAP "Lançamento Contábil Manual" style: each row has a single account
+        // (no contra) and its own debit/credit. Each row → exactly ONE SAP line
+        // on its own account; the group balances by the sum of the rows.
+        var builder = Create();
+        var lines = new List<ImportLine>
+        {
+            Line(debit: 0m,   credit: 10m, account: "111030040005", contra: ""),
+            Line(debit: 10m,  credit: 0m,  account: "411020010004", contra: ""),
+            Line(debit: 0m,   credit: 12m, account: "411020010004", contra: ""),
+            Line(debit: 12m,  credit: 0m,  account: "111030040005", contra: "")
+        };
+
+        var result = builder.Build("key", "hash", lines, bplId: 1);
+
+        // 4 rows → 4 SAP lines (no contra generated).
+        result.Payload.JournalEntryLines.Should().HaveCount(4);
+        result.TotalDebit.Should().Be(22m);
+        result.TotalCredit.Should().Be(22m);
+        result.IsBalanced.Should().BeTrue();
+        // Each SAP line sits on the row's own account.
+        result.Payload.JournalEntryLines.Should().OnlyContain(l => l.AccountCode == "111030040005" || l.AccountCode == "411020010004");
+        result.Payload.JournalEntryLines.Should().Contain(l => l.AccountCode == "411020010004" && l.Debit == 10m);
+        result.Payload.JournalEntryLines.Should().Contain(l => l.AccountCode == "111030040005" && l.Credit == 10m);
+    }
+
     private static ImportLine Line(decimal debit, decimal credit, string account, string contra)
         => new()
         {
