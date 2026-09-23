@@ -127,7 +127,15 @@ public static class MigrationBaseline
     // can never destroy data or conflict with existing rows.
     private static readonly (string Table, string Column, string Definition)[] RequiredBaseColumns =
     {
+        // Permissoes: full column set the Permission entity maps. Legacy databases
+        // may be missing any of the non-key columns (Grupo, Ativo were both absent
+        // on at least one production DB). Added idempotently and safely for existing
+        // rows: text columns nullable, the required bool with a NOT NULL default.
+        ("Permissoes", "Codigo", "varchar(80) NULL"),
+        ("Permissoes", "Nome", "varchar(120) NULL"),
+        ("Permissoes", "Descricao", "varchar(200) NULL"),
         ("Permissoes", "Grupo", "varchar(80) NULL"),
+        ("Permissoes", "Ativo", "tinyint(1) NOT NULL DEFAULT 1"),
     };
 
     private static async Task EnsureBaseColumnsAsync(DbConnection c, ILogger logger, CancellationToken ct)
