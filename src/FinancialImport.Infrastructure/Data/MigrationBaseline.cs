@@ -79,6 +79,14 @@ public static class MigrationBaseline
         // "Unknown column 'Grupo' in 'field list'" when Permissoes predates the column.
         await EnsureBaseColumnsAsync(connection, logger, cancellationToken);
 
+        // Legacy/foreign schemas may carry EXTRA columns the current model does not map
+        // (e.g. a 'Modulo' column on Permissoes from an older product version). If such a
+        // column is NOT NULL without a default, the seeder's INSERT — which never mentions
+        // it — fails with "Field '<x>' doesn't have a default value". Relax every such
+        // unknown required column to NULL so the omitted-column insert succeeds. Only
+        // columns absent from the model are touched; real model columns keep their shape.
+        await RelaxUnknownRequiredColumnsAsync(connection, logger, cancellationToken);
+
         await EnsureHistoryTableAsync(connection, cancellationToken);
 
         // If InitialCreate is already tracked, the history is healthy — normal flow.
@@ -260,6 +268,53 @@ public static class MigrationBaseline
                 logger.LogWarning(
                     "Baseline: coluna '{Table}.{Column}' estava NOT NULL mas o modelo permite NULL — relaxada para NULL.",
                     table, column);
+            }
+        }
+    }
+
+    /// <summary>
+    /// For every permission-cluster table, relaxes to NULL any column that is NOT NULL,
+    /// has no default, is not an auto-increment key, and is NOT part of the EF model.
+    /// Such "orphan" required columns (left over from an older/foreign schema) otherwise
+    /// break the seeder's INSERT, which only lists model columns. Relaxing NOT NULL to
+    /// NULL never conflicts with existing data.
+    /// </summary>
+    private static async Task RelaxUnknownRequiredColumnsAsync(DbConnection c, ILogger logger, CancellationToken ct)
+    {
+        foreach (var table in BaseColumnSpecs.Select(s => s.Table).Distinct())
+        {
+            if (!await TableExistsAsync(c, table, ct))
+                continue;
+
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Id" };
+            foreach (var spec in BaseColumnSpecs.Where(s => s.Table == table))
+                known.Add(spec.Column);
+
+            // Collect first (a reader must be closed before issuing ALTER on the same connection).
+            var orphans = new List<(string Name, string Type)>();
+            await using (var cmd = c.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT COLUMN_NAME, COLUMN_TYPE FROM information_schema.COLUMNS " +
+                    "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @t " +
+                    "AND IS_NULLABLE = 'NO' AND COLUMN_DEFAULT IS NULL " +
+                    "AND EXTRA NOT LIKE '%auto_increment%';";
+                AddParam(cmd, "@t", table);
+                await using var reader = await cmd.ExecuteReaderAsync(ct);
+                while (await reader.ReadAsync(ct))
+                {
+                    var name = reader.GetString(0);
+                    if (!known.Contains(name))
+                        orphans.Add((name, reader.GetString(1)));
+                }
+            }
+
+            foreach (var (name, type) in orphans)
+            {
+                await ExecuteAsync(c, $"ALTER TABLE `{table}` MODIFY COLUMN `{name}` {type} NULL;", ct);
+                logger.LogWarning(
+                    "Baseline: coluna '{Table}.{Column}' é NOT NULL sem default e não pertence ao modelo — relaxada para NULL para não bloquear o seeder.",
+                    table, name);
             }
         }
     }
