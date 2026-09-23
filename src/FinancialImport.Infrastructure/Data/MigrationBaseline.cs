@@ -64,6 +64,13 @@ public static class MigrationBaseline
         if (!await TableExistsAsync(connection, "Usuarios", cancellationToken))
             return;
 
+        // Recreate base tables the seeder needs that may have been dropped manually
+        // while the migration history still marks InitialCreate as applied (so EF will
+        // NOT recreate them). Idempotent via CREATE TABLE IF NOT EXISTS. FKs to Usuarios
+        // are intentionally omitted to avoid the bigint-vs-bigint-unsigned mismatch some
+        // legacy Usuarios tables have; EF does not require DB-level FKs to operate.
+        await EnsureBaseTablesAsync(connection, logger, cancellationToken);
+
         // Reconcile individual base columns that legacy databases (created outside EF,
         // or from an older dump) may be missing but the current model maps. These are
         // additive, nullable, and idempotent — safe to run on every startup, and they
@@ -137,6 +144,71 @@ public static class MigrationBaseline
         ("Permissoes", "Grupo", "varchar(80) NULL"),
         ("Permissoes", "Ativo", "tinyint(1) NOT NULL DEFAULT 1"),
     };
+
+    // Base tables the seeder depends on, with the DDL to recreate them if they were
+    // dropped. Order matters only for readability — no FKs are declared so they can be
+    // created in any order. Columns/types/indexes mirror the InitialCreate migration.
+    private static readonly (string Table, string CreateSql)[] RequiredBaseTables =
+    {
+        ("Perfis",
+            "CREATE TABLE IF NOT EXISTS `Perfis` (" +
+            "`Id` bigint NOT NULL AUTO_INCREMENT, " +
+            "`Nome` varchar(80) NOT NULL, " +
+            "`Descricao` varchar(200) NULL, " +
+            "`Ativo` tinyint(1) NOT NULL DEFAULT 1, " +
+            "CONSTRAINT `PK_Perfis` PRIMARY KEY (`Id`), " +
+            "UNIQUE KEY `IX_Perfis_Nome` (`Nome`)) CHARACTER SET=utf8mb4;"),
+
+        ("Permissoes",
+            "CREATE TABLE IF NOT EXISTS `Permissoes` (" +
+            "`Id` bigint NOT NULL AUTO_INCREMENT, " +
+            "`Codigo` varchar(80) NOT NULL, " +
+            "`Nome` varchar(120) NOT NULL, " +
+            "`Descricao` varchar(200) NULL, " +
+            "`Grupo` varchar(80) NULL, " +
+            "`Ativo` tinyint(1) NOT NULL DEFAULT 1, " +
+            "CONSTRAINT `PK_Permissoes` PRIMARY KEY (`Id`), " +
+            "UNIQUE KEY `IX_Permissoes_Codigo` (`Codigo`)) CHARACTER SET=utf8mb4;"),
+
+        ("UsuarioPerfil",
+            "CREATE TABLE IF NOT EXISTS `UsuarioPerfil` (" +
+            "`Id` bigint NOT NULL AUTO_INCREMENT, " +
+            "`UsuarioId` bigint NOT NULL, " +
+            "`PerfilId` bigint NOT NULL, " +
+            "CONSTRAINT `PK_UsuarioPerfil` PRIMARY KEY (`Id`), " +
+            "UNIQUE KEY `IX_UsuarioPerfil_UsuarioId_PerfilId` (`UsuarioId`, `PerfilId`)) CHARACTER SET=utf8mb4;"),
+
+        ("PerfilPermissao",
+            "CREATE TABLE IF NOT EXISTS `PerfilPermissao` (" +
+            "`Id` bigint NOT NULL AUTO_INCREMENT, " +
+            "`PerfilId` bigint NOT NULL, " +
+            "`PermissaoId` bigint NOT NULL, " +
+            "CONSTRAINT `PK_PerfilPermissao` PRIMARY KEY (`Id`), " +
+            "UNIQUE KEY `IX_PerfilPermissao_PerfilId_PermissaoId` (`PerfilId`, `PermissaoId`)) CHARACTER SET=utf8mb4;"),
+
+        ("UsuarioEmpresaPermitida",
+            "CREATE TABLE IF NOT EXISTS `UsuarioEmpresaPermitida` (" +
+            "`Id` bigint NOT NULL AUTO_INCREMENT, " +
+            "`UsuarioId` bigint NOT NULL, " +
+            "`CompanyDb` varchar(50) NOT NULL, " +
+            "`Ativo` tinyint(1) NOT NULL DEFAULT 1, " +
+            "CONSTRAINT `PK_UsuarioEmpresaPermitida` PRIMARY KEY (`Id`), " +
+            "UNIQUE KEY `IX_UsuarioEmpresaPermitida_UsuarioId_CompanyDb` (`UsuarioId`, `CompanyDb`)) CHARACTER SET=utf8mb4;"),
+    };
+
+    private static async Task EnsureBaseTablesAsync(DbConnection c, ILogger logger, CancellationToken ct)
+    {
+        foreach (var (table, createSql) in RequiredBaseTables)
+        {
+            if (await TableExistsAsync(c, table, ct))
+                continue;
+
+            await ExecuteAsync(c, createSql, ct);
+            logger.LogWarning(
+                "Baseline: tabela ausente '{Table}' recriada (o seeder depende dela; o histórico já marcava InitialCreate como aplicado).",
+                table);
+        }
+    }
 
     private static async Task EnsureBaseColumnsAsync(DbConnection c, ILogger logger, CancellationToken ct)
     {
