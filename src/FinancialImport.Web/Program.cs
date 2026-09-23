@@ -81,6 +81,12 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
+        // Self-heal: se o schema base já existe mas o __EFMigrationsHistory está
+        // vazio/desatualizado (banco criado fora do EF, restaurado, ou meia-aplicado),
+        // reconcilia o histórico antes de migrar para evitar o erro
+        // "Table 'usuarios' already exists".
+        await MigrationBaseline.EnsureBaselineAsync(db, logger);
+
         var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
         if (pending.Count > 0)
         {
