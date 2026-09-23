@@ -79,6 +79,36 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
+    // ── DIAGNÓSTICO DE CONEXÃO ────────────────────────────────────────────────
+    // Mostra, a partir da conexão REAL do app, qual servidor/porta/banco ele está
+    // usando e se a tabela Usuarios que ele enxerga tem a coluna Login. Serve para
+    // provar, sem achismo, contra qual banco o app fala. Nunca imprime a senha.
+    try
+    {
+        var conn = db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync();
+        await using var diag = conn.CreateCommand();
+        diag.CommandText =
+            "SELECT @@hostname, @@port, DATABASE(), @@lower_case_table_names, " +
+            "(SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Usuarios' AND COLUMN_NAME = 'Login'), " +
+            "(SELECT COUNT(*) FROM information_schema.TABLES  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Usuarios'), " +
+            "(SELECT COUNT(*) FROM `__EFMigrationsHistory`);";
+        await using var r = await diag.ExecuteReaderAsync();
+        if (await r.ReadAsync())
+        {
+            logger.LogWarning(
+                "DIAGNÓSTICO CONEXÃO → DataSource={DataSource} | hostname={Hostname} port={Port} database={Database} lctn={Lctn} | UsuariosExiste={UsuariosExiste} UsuariosTemLogin={TemLogin} | MigrationsHistory={History}",
+                conn.DataSource, r.GetValue(0), r.GetValue(1), r.GetValue(2), r.GetValue(3),
+                r.GetValue(5), r.GetValue(4), r.GetValue(6));
+        }
+    }
+    catch (Exception diagEx)
+    {
+        logger.LogError(diagEx, "DIAGNÓSTICO CONEXÃO falhou.");
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     try
     {
         // Self-heal: se o schema base já existe mas o __EFMigrationsHistory está
