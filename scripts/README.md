@@ -15,7 +15,16 @@ Scripts SQL de apoio para o banco MySQL do FinancialImport.
   `InitialCreate`). O script preserva os dados reais, recria apenas as tabelas
   novas do módulo de Baixa e marca as migrations antigas como aplicadas, para
   que o EF aplique só as 4 migrations da Baixa no próximo startup. Leia o
-  cabeçalho do arquivo antes de executar.
+  cabeçalho do arquivo antes de executar. As 4 tabelas do módulo de Baixa são
+  `BaixaArquivo`, `BaixaLinha`, `BaixaSapDispatch` e `MapeamentoBandeiraCartao`
+  — **não** confunda esta última com a tabela BASE `MapeamentoFilialSap`, que
+  pertence à `InitialCreate` e nunca deve ser dropada pela reconciliação.
+
+- **`recuperar-mapeamentofilialsap.sql`** — recria a tabela BASE
+  `MapeamentoFilialSap` caso ela tenha sido apagada por engano (uma versão
+  anterior do `reconciliar-baixa-migrations.sql` dropava `mapeamentofilialsap`
+  em vez de `MapeamentoBandeiraCartao`). Restaura a consistência entre o schema
+  e o `__EFMigrationsHistory`. Leia o cabeçalho antes de executar.
 
 ## Contexto (migrations)
 

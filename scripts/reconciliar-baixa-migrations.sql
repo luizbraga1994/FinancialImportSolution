@@ -19,7 +19,7 @@
 --   3. Zera qualquer marca das migrations da Baixa (20260622%) e garante as 9
 --      migrations ANTIGAS marcadas como aplicadas (schema base já existente).
 --   Ao subir a app, o EF aplica só as 4 migrations da Baixa (cria as tabelas,
---   ajusta índices, remove a mapeamentofilialsap e adiciona DataDocumento),
+--   ajusta índices, cria/remove a MapeamentoBandeiraCartao e adiciona DataDocumento),
 --   deixando schema + histórico (13) no estado final correto.
 --
 --   Serve tanto para o caso "histórico vazio" quanto para o caso
@@ -35,11 +35,13 @@
 -- =============================================================================
 
 -- 1) Remove as tabelas novas da Baixa (sem dados) para o EF recriá-las do zero.
+--    ATENCAO: sao as 4 tabelas do modulo de Baixa. NAO inclua `MapeamentoFilialSap`
+--    aqui — essa e uma tabela BASE (criada pela InitialCreate) e nao pertence a Baixa.
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `baixalinha`;
 DROP TABLE IF EXISTS `baixasapdispatch`;
 DROP TABLE IF EXISTS `baixaarquivo`;
-DROP TABLE IF EXISTS `mapeamentofilialsap`;
+DROP TABLE IF EXISTS `MapeamentoBandeiraCartao`;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- 2) Garante a tabela de histórico do EF Core.
