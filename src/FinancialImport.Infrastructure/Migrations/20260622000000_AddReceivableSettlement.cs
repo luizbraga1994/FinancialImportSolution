@@ -41,12 +41,9 @@ public partial class AddReceivableSettlement : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_BaixaArquivo", x => x.Id);
-                table.ForeignKey(
-                    name: "FK_BaixaArquivo_Usuarios_UsuarioId",
-                    column: x => x.UsuarioId,
-                    principalTable: "Usuarios",
-                    principalColumn: "Id",
-                    onDelete: ReferentialAction.Restrict);
+                // Sem FK para Usuarios de propósito: bancos legados podem ter
+                // Usuarios.Id como bigint UNSIGNED e uma FK com sinal falha no
+                // CREATE TABLE ("incompatible"). UsuarioId fica como coluna simples.
             });
 
         // ===== BaixaLinha (settlement line) =====

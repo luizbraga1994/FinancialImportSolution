@@ -46,7 +46,10 @@ public sealed class ReceivableSettlementFile
     /// <summary>Optional version marker for optimistic concurrency control.</summary>
     public int RowVersion { get; set; }
 
-    public User? User { get; set; }
+    // Note: no navigation/FK to User on purpose — the settlement schema stays
+    // independent of the base Usuarios table's exact column type. Some legacy
+    // databases define Usuarios.Id as bigint UNSIGNED, which makes a signed FK
+    // fail with "incompatible" at CREATE TABLE. UserId is kept as a plain column.
     public ICollection<ReceivableSettlementLine> Lines { get; set; } = new List<ReceivableSettlementLine>();
     public ICollection<IncomingPaymentDispatch> Dispatches { get; set; } = new List<IncomingPaymentDispatch>();
 }

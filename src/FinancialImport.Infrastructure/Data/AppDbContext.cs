@@ -417,7 +417,9 @@ public sealed class AppDbContext : DbContext
             entity.Property(e => e.ProcessingCompletedAtUtc).HasColumnName("ProcessamentoFimUtc");
             entity.Property(e => e.CorrelationId).HasColumnName("CorrelationId").HasMaxLength(60);
             entity.Property(e => e.RowVersion).HasColumnName("Versao").IsConcurrencyToken();
-            entity.HasOne(e => e.User).WithMany().HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+            // No FK to Usuarios on purpose (UserId stays a plain column): some
+            // legacy DBs define Usuarios.Id as bigint UNSIGNED and a signed FK
+            // fails at CREATE TABLE. The index on UserId is still useful.
             entity.HasIndex(e => new { e.CompanyDb, e.FileHash }).IsUnique();
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.CompanyDb);
