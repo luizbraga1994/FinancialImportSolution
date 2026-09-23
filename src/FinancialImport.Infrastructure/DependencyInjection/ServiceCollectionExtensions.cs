@@ -58,11 +58,20 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConfigureOptions<LayoutParsingOptions>, DbConfigureLayoutOptions>();
         services.AddSingleton<IConfigureOptions<OutboxOptions>, DbConfigureOutboxOptions>();
 
-        var connectionString = configuration.GetConnectionString("DefaultConnection");
+        // Read a DEDICATED connection key, never the generic "DefaultConnection".
+        // On shared servers another app (e.g. PortalFiscalHub) may set a machine-wide
+        // environment variable ConnectionStrings__DefaultConnection, which — because
+        // environment variables outrank appsettings — would silently hijack THIS app's
+        // connection and point it at the wrong database. Using our own key isolates us
+        // from that collision. "DefaultConnection" is kept only as a last-resort fallback
+        // for backward compatibility when the dedicated key is not provided.
+        var connectionString = configuration.GetConnectionString("FinancialImport");
+        if (string.IsNullOrWhiteSpace(connectionString))
+            connectionString = configuration.GetConnectionString("DefaultConnection");
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(
-                "ConnectionStrings:DefaultConnection nao configurado em appsettings.json.");
+                "ConnectionStrings:FinancialImport nao configurado em appsettings.json.");
         }
 
         services.AddDbContext<AppDbContext>(options =>
