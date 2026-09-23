@@ -64,6 +64,14 @@ public static class MigrationBaseline
         if (!await TableExistsAsync(connection, "Usuarios", cancellationToken))
             return;
 
+        // Reconcile individual base columns that legacy databases (created outside EF,
+        // or from an older dump) may be missing but the current model maps. These are
+        // additive, nullable, and idempotent — safe to run on every startup, and they
+        // run against the SAME connection the seeder uses, so whatever database the app
+        // is actually pointed at gets the column. This fixes the seeder crashing with
+        // "Unknown column 'Grupo' in 'field list'" when Permissoes predates the column.
+        await EnsureBaseColumnsAsync(connection, logger, cancellationToken);
+
         await EnsureHistoryTableAsync(connection, cancellationToken);
 
         // If InitialCreate is already tracked, the history is healthy — normal flow.
@@ -112,6 +120,41 @@ public static class MigrationBaseline
         }
 
         logger.LogInformation("Baseline concluído. As migrations restantes serão aplicadas a seguir.");
+    }
+
+    // Base-table columns the current model maps that some legacy databases lack.
+    // (table, column, DDL definition). Kept additive and nullable so applying them
+    // can never destroy data or conflict with existing rows.
+    private static readonly (string Table, string Column, string Definition)[] RequiredBaseColumns =
+    {
+        ("Permissoes", "Grupo", "varchar(80) NULL"),
+    };
+
+    private static async Task EnsureBaseColumnsAsync(DbConnection c, ILogger logger, CancellationToken ct)
+    {
+        foreach (var (table, column, definition) in RequiredBaseColumns)
+        {
+            if (!await TableExistsAsync(c, table, ct))
+                continue;
+            if (await ColumnExistsAsync(c, table, column, ct))
+                continue;
+
+            await ExecuteAsync(c, $"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition};", ct);
+            logger.LogWarning(
+                "Baseline: coluna ausente '{Table}.{Column}' criada ({Definition}) para alinhar o schema ao modelo.",
+                table, column, definition);
+        }
+    }
+
+    private static async Task<bool> ColumnExistsAsync(DbConnection c, string table, string column, CancellationToken ct)
+    {
+        await using var cmd = c.CreateCommand();
+        cmd.CommandText =
+            "SELECT COUNT(*) FROM information_schema.COLUMNS " +
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @t AND COLUMN_NAME = @c;";
+        AddParam(cmd, "@t", table);
+        AddParam(cmd, "@c", column);
+        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct)) > 0;
     }
 
     private static async Task<bool> TableExistsAsync(DbConnection c, string table, CancellationToken ct)
