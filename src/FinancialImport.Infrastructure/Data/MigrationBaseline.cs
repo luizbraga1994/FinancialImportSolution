@@ -129,20 +129,35 @@ public static class MigrationBaseline
         logger.LogInformation("Baseline concluído. As migrations restantes serão aplicadas a seguir.");
     }
 
-    // Base-table columns the current model maps that some legacy databases lack.
-    // (table, column, DDL definition). Kept additive and nullable so applying them
-    // can never destroy data or conflict with existing rows.
-    private static readonly (string Table, string Column, string Definition)[] RequiredBaseColumns =
+    // Full non-key column spec for the permission-cluster base tables, mirroring the
+    // EF model (AppDbContext). Each entry: table, column, SQL type, and whether the
+    // MODEL treats it as nullable. Reconciliation is twofold and always data-safe:
+    //   • column missing        → ADD it (text as NULL; bool/bigint NOT NULL DEFAULT);
+    //   • column NOT NULL in DB  → but nullable in the model → MODIFY to NULL (relax).
+    // We never tighten NULL→NOT NULL and never change types, so no existing row can
+    // conflict. The relax step fixes the seeder crashing with "Column '<x>' cannot be
+    // null" when a legacy table declared an optional column (Descricao/Grupo) NOT NULL.
+    private static readonly (string Table, string Column, string SqlType, bool ModelNullable)[] BaseColumnSpecs =
     {
-        // Permissoes: full column set the Permission entity maps. Legacy databases
-        // may be missing any of the non-key columns (Grupo, Ativo were both absent
-        // on at least one production DB). Added idempotently and safely for existing
-        // rows: text columns nullable, the required bool with a NOT NULL default.
-        ("Permissoes", "Codigo", "varchar(80) NULL"),
-        ("Permissoes", "Nome", "varchar(120) NULL"),
-        ("Permissoes", "Descricao", "varchar(200) NULL"),
-        ("Permissoes", "Grupo", "varchar(80) NULL"),
-        ("Permissoes", "Ativo", "tinyint(1) NOT NULL DEFAULT 1"),
+        ("Perfis",                  "Nome",       "varchar(80)",  false),
+        ("Perfis",                  "Descricao",  "varchar(200)", true),
+        ("Perfis",                  "Ativo",      "tinyint(1)",   false),
+
+        ("Permissoes",              "Codigo",     "varchar(80)",  false),
+        ("Permissoes",              "Nome",       "varchar(120)", false),
+        ("Permissoes",              "Descricao",  "varchar(200)", true),
+        ("Permissoes",              "Grupo",      "varchar(80)",  true),
+        ("Permissoes",              "Ativo",      "tinyint(1)",   false),
+
+        ("UsuarioPerfil",           "UsuarioId",  "bigint",       false),
+        ("UsuarioPerfil",           "PerfilId",   "bigint",       false),
+
+        ("PerfilPermissao",         "PerfilId",   "bigint",       false),
+        ("PerfilPermissao",         "PermissaoId","bigint",       false),
+
+        ("UsuarioEmpresaPermitida", "UsuarioId",  "bigint",       false),
+        ("UsuarioEmpresaPermitida", "CompanyDb",  "varchar(50)",  false),
+        ("UsuarioEmpresaPermitida", "Ativo",      "tinyint(1)",   false),
     };
 
     // Base tables the seeder depends on, with the DDL to recreate them if they were
@@ -212,29 +227,59 @@ public static class MigrationBaseline
 
     private static async Task EnsureBaseColumnsAsync(DbConnection c, ILogger logger, CancellationToken ct)
     {
-        foreach (var (table, column, definition) in RequiredBaseColumns)
+        foreach (var (table, column, sqlType, modelNullable) in BaseColumnSpecs)
         {
             if (!await TableExistsAsync(c, table, ct))
                 continue;
-            if (await ColumnExistsAsync(c, table, column, ct))
-                continue;
 
-            await ExecuteAsync(c, $"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition};", ct);
-            logger.LogWarning(
-                "Baseline: coluna ausente '{Table}.{Column}' criada ({Definition}) para alinhar o schema ao modelo.",
-                table, column, definition);
+            // null = column absent; true = exists & nullable; false = exists & NOT NULL.
+            var isNullable = await GetColumnNullabilityAsync(c, table, column, ct);
+
+            if (isNullable is null)
+            {
+                // Missing column. Add it in a way that is always safe for existing rows
+                // and any unique index: text columns as NULL (multiple NULLs are allowed,
+                // and the seeder supplies real values on insert); numeric/bool columns
+                // NOT NULL with a default so pre-existing rows get a value.
+                var addClause = sqlType.StartsWith("varchar", StringComparison.OrdinalIgnoreCase)
+                    ? "NULL"
+                    : sqlType.StartsWith("tinyint", StringComparison.OrdinalIgnoreCase)
+                        ? "NOT NULL DEFAULT 1"
+                        : "NOT NULL DEFAULT 0";
+                await ExecuteAsync(c, $"ALTER TABLE `{table}` ADD COLUMN `{column}` {sqlType} {addClause};", ct);
+                logger.LogWarning(
+                    "Baseline: coluna ausente '{Table}.{Column}' criada ({Type} {Clause}) para alinhar ao modelo.",
+                    table, column, sqlType, addClause);
+            }
+            else if (modelNullable && isNullable == false)
+            {
+                // Column is stricter than the model (NOT NULL where the model allows NULL).
+                // The seeder omits it and sends NULL, so relax it. Relaxing never conflicts
+                // with existing data.
+                await ExecuteAsync(c, $"ALTER TABLE `{table}` MODIFY COLUMN `{column}` {sqlType} NULL;", ct);
+                logger.LogWarning(
+                    "Baseline: coluna '{Table}.{Column}' estava NOT NULL mas o modelo permite NULL — relaxada para NULL.",
+                    table, column);
+            }
         }
     }
 
-    private static async Task<bool> ColumnExistsAsync(DbConnection c, string table, string column, CancellationToken ct)
+    /// <summary>
+    /// Returns null when the column does not exist, true when it exists and is nullable,
+    /// false when it exists and is NOT NULL.
+    /// </summary>
+    private static async Task<bool?> GetColumnNullabilityAsync(DbConnection c, string table, string column, CancellationToken ct)
     {
         await using var cmd = c.CreateCommand();
         cmd.CommandText =
-            "SELECT COUNT(*) FROM information_schema.COLUMNS " +
+            "SELECT IS_NULLABLE FROM information_schema.COLUMNS " +
             "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = @t AND COLUMN_NAME = @c;";
         AddParam(cmd, "@t", table);
         AddParam(cmd, "@c", column);
-        return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct)) > 0;
+        var result = await cmd.ExecuteScalarAsync(ct);
+        if (result is null || result is DBNull)
+            return null;
+        return string.Equals(result.ToString(), "YES", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<bool> TableExistsAsync(DbConnection c, string table, CancellationToken ct)
