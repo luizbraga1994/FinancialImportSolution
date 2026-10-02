@@ -16,6 +16,12 @@ using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Carrega configuração a partir de variáveis de ambiente com o prefixo
+// "FinancialImport_", isolando este app das variáveis genéricas (sem prefixo) de
+// outros sistemas no mesmo servidor (ex.: ConnectionStrings__DefaultConnection do
+// PortalFiscalHub). O prefixo é removido ao ler. Adicionado por último = maior precedência.
+builder.Configuration.AddEnvironmentVariables(prefix: "FinancialImport_");
+
 builder.Host.UseSerilog((context, services, configuration) =>
     configuration
         .ReadFrom.Configuration(context.Configuration)
